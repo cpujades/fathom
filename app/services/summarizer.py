@@ -34,14 +34,17 @@ def summarize_transcript(
         default_headers=headers or None,
     )
 
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": transcript},
-        ],
-        temperature=0.2,
-    )
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": transcript},
+            ],
+            temperature=0.2,
+        )
+    except Exception as exc:
+        raise SummarizationError("Failed to call OpenRouter.") from exc
 
     content: Any = response.choices[0].message.content if response.choices else None
     if not isinstance(content, str) or not content.strip():

@@ -7,7 +7,7 @@ from fastapi import APIRouter
 from fastapi.responses import FileResponse
 
 from app.core.config import get_settings
-from app.core.errors import NotFoundError
+from app.core.errors import InvalidRequestError, NotFoundError
 from app.pipeline import run_pipeline
 from app.schemas.errors import ErrorResponse
 from app.schemas.summaries import SummarizeRequest, SummarizeResponse
@@ -68,9 +68,14 @@ def summarize(request: SummarizeRequest) -> SummarizeResponse:
 def get_pdf(summary_id: str) -> FileResponse:
     validate_summary_id(summary_id)
     settings = get_settings()
-    output_dir = pathlib.Path(settings.output_dir)
-    pdf_path = output_dir / f"{summary_id}.pdf"
-    if not pdf_path.exists():
+    output_dir = pathlib.Path(settings.output_dir).resolve()
+    pdf_path = (output_dir / f"{summary_id}.pdf").resolve()
+
+    # Defense-in-depth: ensure user input can't escape OUTPUT_DIR even if validation changes.
+    if not pdf_path.is_relative_to(output_dir):
+        raise InvalidRequestError("Invalid summary id")
+
+    if not pdf_path.is_file():
         raise NotFoundError("PDF not found.")
 
     return FileResponse(pdf_path, media_type="application/pdf", filename=pdf_path.name)

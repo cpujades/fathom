@@ -21,12 +21,14 @@ repos:
         args: ["--fix"]
       - id: ruff-format
 
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.19.0
+  - repo: local
     hooks:
       - id: mypy
-        args: ["--config-file=pyproject.toml"]
-        files: ^app/
+        name: mypy (uv)
+        entry: uv run mypy app
+        language: system
+        pass_filenames: false
+        always_run: true
 
   - repo: local
     hooks:

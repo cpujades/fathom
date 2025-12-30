@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pathlib
+import tempfile
 from dataclasses import dataclass
 
 from app.core.config import Settings
@@ -20,8 +21,10 @@ class PipelineResult:
 def run_pipeline(summary_id: str, url: str, settings: Settings) -> PipelineResult:
     output_dir = pathlib.Path(settings.output_dir)
 
-    audio_path = download_audio(url, str(output_dir))
-    transcript = transcribe_file(audio_path, settings.deepgram_api_key)
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        audio_path = download_audio(url, tmp_dir)
+        transcript = transcribe_file(audio_path, settings.deepgram_api_key)
+
     markdown = summarize_transcript(
         transcript,
         settings.openrouter_api_key,
