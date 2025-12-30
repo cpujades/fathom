@@ -63,5 +63,4 @@ check_untyped_defs = true
 strict_equality = true
 pretty = true
 
-ignore_missing_imports = true
 disable_error_code = ["import-untyped"]
