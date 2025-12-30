@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import pathlib
 import uuid
 
@@ -72,7 +73,12 @@ def get_pdf(summary_id: str) -> FileResponse:
     pdf_path = (output_dir / f"{summary_id}.pdf").resolve()
 
     # Defense-in-depth: ensure user input can't escape OUTPUT_DIR even if validation changes.
-    if not pdf_path.is_relative_to(output_dir):
+    try:
+        within_output_dir = os.path.commonpath([str(output_dir), str(pdf_path)]) == str(output_dir)
+    except ValueError:
+        within_output_dir = False
+
+    if not within_output_dir:
         raise InvalidRequestError("Invalid summary id")
 
     if not pdf_path.is_file():
