@@ -1,0 +1,10 @@
+{
+  "release-type": "python",
+  "packages": {
+    ".": {
+      "package-name": "fathom",
+      "changelog-path": "CHANGELOG.md"
+    }
+  },
+  "extra-files": ["pyproject.toml"]
+}
