@@ -1,4 +1,4 @@
-name: Checks
+name: ✅ PR checks (quality gate)
 
 on:
   pull_request:
@@ -6,7 +6,8 @@ on:
     branches: ["main"]
 
 jobs:
-  lint-typecheck:
+  pre-commit:
+    name: 🧹 Pre-commit (lint + typecheck)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

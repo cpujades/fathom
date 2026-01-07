@@ -1,0 +1,66 @@
+name: 🔒 Release PR (update uv.lock)
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  update-uv-lock:
+    # Only run for Release Please PR branches
+    if: startsWith(github.head_ref, 'release-please--') && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    env:
+      HEAD_REF: ${{ github.head_ref }}
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          # Use a PAT so we can push commits back to the PR branch.
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          ref: ${{ github.head_ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Update uv.lock
+        run: uv lock
+
+      - name: Commit and push uv.lock (if changed)
+        run: |
+          set -euo pipefail
+
+          branch="$HEAD_REF"
+          # Defense-in-depth: ensure we only ever push to a sane ref name.
+          # This prevents any chance of script injection via branch names.
+          if [[ -z "$branch" ]] || [[ "$branch" != release-please--* ]]; then
+            echo "Unexpected HEAD_REF: '$branch'"
+            exit 1
+          fi
+          if [[ "$branch" =~ [^A-Za-z0-9._/\-] ]]; then
+            echo "Unsafe characters in HEAD_REF: '$branch'"
+            exit 1
+          fi
+
+          # `git diff` only detects changes to tracked files. If `uv lock` creates a new
+          # untracked `uv.lock`, `git diff --quiet` would incorrectly report "no changes".
+          # `git status --porcelain` covers both tracked modifications and untracked files.
+          if [[ -z "$(git status --porcelain -- uv.lock)" ]]; then
+            echo "uv.lock unchanged; nothing to commit."
+            exit 0
+          fi
+
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+
+          git add uv.lock
+          git commit -m "chore(release): update uv.lock"
+          git push origin "HEAD:$branch"
