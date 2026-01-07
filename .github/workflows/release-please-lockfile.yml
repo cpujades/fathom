@@ -9,8 +9,10 @@ permissions:
 jobs:
   update-uv-lock:
     # Only run for Release Please PR branches
-    if: startsWith(github.head_ref, 'release-please--')
+    if: startsWith(github.head_ref, 'release-please--') && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    env:
+      HEAD_REF: ${{ github.head_ref }}
     steps:
       - name: Checkout PR branch
         uses: actions/checkout@v4
@@ -34,6 +36,20 @@ jobs:
 
       - name: Commit and push uv.lock (if changed)
         run: |
+          set -euo pipefail
+
+          branch="$HEAD_REF"
+          # Defense-in-depth: ensure we only ever push to a sane ref name.
+          # This prevents any chance of script injection via branch names.
+          if [[ -z "$branch" ]] || [[ "$branch" != release-please--* ]]; then
+            echo "Unexpected HEAD_REF: '$branch'"
+            exit 1
+          fi
+          if [[ "$branch" =~ [^A-Za-z0-9._/\-] ]]; then
+            echo "Unsafe characters in HEAD_REF: '$branch'"
+            exit 1
+          fi
+
           if git diff --quiet -- uv.lock; then
             echo "uv.lock unchanged; nothing to commit."
             exit 0
@@ -44,4 +60,4 @@ jobs:
 
           git add uv.lock
           git commit -m "chore(release): update uv.lock"
-          git push origin HEAD:${{ github.head_ref }}
+          git push origin "HEAD:$branch"
