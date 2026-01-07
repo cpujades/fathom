@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/cpujades/fathom/compare/v0.2.0...v0.2.1) (2026-01-07)
+
+
+### Bug Fixes
+
+* **release:** move include-component-in-tag to package config ([#8](https://github.com/cpujades/fathom/issues/8)) ([18eb18a](https://github.com/cpujades/fathom/commit/18eb18ac5241db6294f7f890da5098848764eaa6))
+
 ## [0.2.0](https://github.com/cpujades/fathom/compare/fathom-v0.1.0...fathom-v0.2.0) (2026-01-05)
 
 
