@@ -1,10 +1,10 @@
 {
   "release-type": "python",
-  "include-component-in-tag": false,
   "packages": {
     ".": {
       "package-name": "fathom",
-      "changelog-path": "CHANGELOG.md"
+      "changelog-path": "CHANGELOG.md",
+      "include-component-in-tag": false
     }
   },
   "extra-files": ["pyproject.toml"]
