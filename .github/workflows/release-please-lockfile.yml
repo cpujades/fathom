@@ -50,7 +50,10 @@ jobs:
             exit 1
           fi
 
-          if git diff --quiet -- uv.lock; then
+          # `git diff` only detects changes to tracked files. If `uv lock` creates a new
+          # untracked `uv.lock`, `git diff --quiet` would incorrectly report "no changes".
+          # `git status --porcelain` covers both tracked modifications and untracked files.
+          if [[ -z "$(git status --porcelain -- uv.lock)" ]]; then
             echo "uv.lock unchanged; nothing to commit."
             exit 0
           fi
