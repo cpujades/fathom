@@ -1,0 +1,41 @@
+name: 🗄️ Supabase (prod) — deploy migrations
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+concurrency:
+  group: supabase-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: 🚀 Deploy migrations to prod
+    runs-on: ubuntu-latest
+    environment: prod
+
+    env:
+      # Prefer storing SUPABASE_ACCESS_TOKEN at repo-level, and the project-specific values
+      # (SUPABASE_PROJECT_REF, SUPABASE_DB_PASSWORD) in the GitHub "prod" Environment.
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Link Supabase project (prod)
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Deploy migrations (prod)
+        run: |
+          supabase db push --dry-run
+          supabase db push

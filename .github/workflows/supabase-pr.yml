@@ -1,0 +1,32 @@
+name: 🗄️ Supabase (PR) — migrations + lint
+
+on:
+  pull_request:
+    paths:
+      - "supabase/**"
+      - ".github/workflows/supabase-*.yml"
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: 🧪 Validate DB migrations (local)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      # We only need Postgres for migrations/linting.
+      - name: Start local database
+        run: supabase db start
+
+      - name: Apply migrations
+        run: supabase migration up --local
+
+      - name: Lint database schema
+        run: supabase db lint --local --fail-on warning
