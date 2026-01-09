@@ -1,32 +1,46 @@
-name: 🗄️ Supabase (PR) — migrations + lint
+name: 🗄️ Supabase (PR) — validate migrations
 
 on:
   pull_request:
-    paths:
-      - "supabase/**"
-      - ".github/workflows/supabase-*.yml"
   workflow_dispatch:
 
 jobs:
   validate:
-    name: 🧪 Validate DB migrations (local)
+    name: 🧪 Validate Supabase DB migrations (local)
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Detect Supabase changes
+        id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            supabase:
+              - 'supabase/**'
+              - '.github/workflows/supabase-*.yml'
+
+      - name: No Supabase changes (skip)
+        if: steps.changes.outputs.supabase != 'true'
+        run: echo "No changes under supabase/** — skipping DB validation."
+
       - name: Set up Supabase CLI
+        if: steps.changes.outputs.supabase == 'true'
         uses: supabase/setup-cli@v1
         with:
           version: latest
 
       # We only need Postgres for migrations/linting.
       - name: Start local database
+        if: steps.changes.outputs.supabase == 'true'
         run: supabase db start
 
       - name: Apply migrations
+        if: steps.changes.outputs.supabase == 'true'
         run: supabase migration up --local
 
       - name: Lint database schema
+        if: steps.changes.outputs.supabase == 'true'
         run: supabase db lint --local --fail-on warning
