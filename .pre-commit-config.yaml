@@ -25,10 +25,10 @@ repos:
     hooks:
       - id: mypy
         name: mypy (uv)
-        entry: uv run mypy app
+        entry: uv run mypy
         language: system
-        pass_filenames: false
-        always_run: true
+        types: [python]
+        files: ^app/
 
   - repo: local
     hooks:
@@ -36,6 +36,6 @@ repos:
         name: ty (informational)
         entry: bash scripts/ty_check.sh
         language: system
-        pass_filenames: false
-        always_run: true
+        types: [python]
+        files: ^app/
         verbose: true

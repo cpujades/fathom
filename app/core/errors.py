@@ -20,3 +20,18 @@ class NotFoundError(AppError):
 class ExternalServiceError(AppError):
     status_code = 502
     code = "external_service_error"
+
+
+class ConfigurationError(AppError):
+    status_code = 500
+    code = "configuration_error"
+
+
+class AuthenticationError(AppError):
+    status_code = 401
+    code = "unauthorized"
+
+
+class NotReadyError(AppError):
+    status_code = 503
+    code = "not_ready"
