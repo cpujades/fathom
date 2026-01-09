@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.2](https://github.com/cpujades/fathom/compare/v0.2.1...v0.2.2) (2026-01-09)
+
+
+### CI
+
+* **release:** customize release-please version bumping and harden supabase deploy workflows ([#10](https://github.com/cpujades/fathom/issues/10)) ([0cba58a](https://github.com/cpujades/fathom/commit/0cba58a9a4ad17339e8d9f80c09b44ceb24c81e2))
+* **supabase:** add PR checks and staging/prod migration deploy workflows ([#9](https://github.com/cpujades/fathom/issues/9)) ([52ef420](https://github.com/cpujades/fathom/commit/52ef42058fa89c7e7bb73ad827ca28e5138659c2))
+* **supabase:** always report PR check status and skip when unchanged ([#12](https://github.com/cpujades/fathom/issues/12)) ([b973d02](https://github.com/cpujades/fathom/commit/b973d02e8ad4292d7bc5d5cc8ee8306e5273bfe5))
+
 ## [0.2.1](https://github.com/cpujades/fathom/compare/v0.2.0...v0.2.1) (2026-01-07)
 
 
