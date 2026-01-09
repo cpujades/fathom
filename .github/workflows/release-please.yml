@@ -12,9 +12,72 @@ jobs:
   release-please:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute next release version (custom bump rules)
+        id: bump
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Determine commit range since last release tag (vX.Y.Z).
+          last_tag="$(git describe --tags --match "v[0-9]*.[0-9]*.[0-9]*" --abbrev=0 2>/dev/null || true)"
+          if [[ -n "$last_tag" ]]; then
+            range="$last_tag..HEAD"
+          else
+            range="HEAD"
+          fi
+
+          # If there are no commits since the last tag, nothing to release.
+          if [[ -n "$last_tag" ]] && [[ -z "$(git rev-list "$range")" ]]; then
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Read current version from Release Please manifest.
+          current="$(python - <<'PY'
+          import json
+          with open(".release-please-manifest.json", "r", encoding="utf-8") as f:
+              m = json.load(f)
+          print(m["."])
+          PY
+          )"
+
+          # Collect commit messages in the range.
+          msgs="$(git log --format=%B "$range")"
+
+          bump="patch"
+          if echo "$msgs" | grep -Eq 'BREAKING CHANGE:|^[a-zA-Z]+(\([^)]+\))?!:'; then
+            bump="major"
+          elif echo "$msgs" | grep -Eq '^feat(\([^)]+\))?:'; then
+            bump="minor"
+          fi
+
+          python - <<'PY' "$current" "$bump" >> "$GITHUB_OUTPUT"
+          import sys
+          cur, bump = sys.argv[1], sys.argv[2]
+          major, minor, patch = map(int, cur.split("."))
+          if bump == "major":
+            major += 1
+            minor = 0
+            patch = 0
+          elif bump == "minor":
+            minor += 1
+            patch = 0
+          else:
+            patch += 1
+          print("should_release=true")
+          print(f"release_as={major}.{minor}.{patch}")
+          PY
+
       - name: Release Please
         uses: googleapis/release-please-action@v4.4.0
+        if: ${{ steps.bump.outputs.should_release == 'true' }}
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+          release-as: ${{ steps.bump.outputs.release_as }}

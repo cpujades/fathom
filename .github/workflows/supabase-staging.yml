@@ -39,4 +39,4 @@ jobs:
       - name: Deploy migrations (staging)
         run: |
           supabase db push --dry-run
-          supabase db push
+          supabase --yes db push

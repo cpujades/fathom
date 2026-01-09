@@ -38,4 +38,4 @@ jobs:
       - name: Deploy migrations (prod)
         run: |
           supabase db push --dry-run
-          supabase db push
+          supabase --yes db push
