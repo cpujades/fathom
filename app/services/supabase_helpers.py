@@ -41,9 +41,12 @@ STORAGE_RATE_LIMIT_CODES = frozenset({"SlowDown"})
 
 # ---------------------------------------------------------------------------
 # PostgREST error codes
-# RLS failures typically return code "42501" (insufficient_privilege).
+# https://docs.postgrest.org/en/v12/references/errors.html
 # ---------------------------------------------------------------------------
-POSTGREST_FORBIDDEN_CODES = frozenset({"42501", "PGRST301"})
+# Group 3 - JWT errors (authentication failures, not authorization)
+POSTGREST_AUTH_CODES = frozenset({"PGRST301", "PGRST302"})
+# RLS failures: 42501 = insufficient_privilege (PostgreSQL)
+POSTGREST_FORBIDDEN_CODES = frozenset({"42501"})
 
 
 def raise_for_auth_error(exc: AuthApiError, fallback_message: str) -> NoReturn:
@@ -79,6 +82,8 @@ def raise_for_postgrest_error(exc: APIError, fallback_message: str) -> NoReturn:
     """Convert PostgREST APIError to the appropriate AppError subclass and raise."""
     code = getattr(exc, "code", None) or ""
 
+    if code in POSTGREST_AUTH_CODES:
+        raise AuthenticationError("Database authentication failed.") from exc
     if code in POSTGREST_FORBIDDEN_CODES:
         raise ForbiddenError("Access denied to database resource.") from exc
 
