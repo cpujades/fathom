@@ -6,6 +6,9 @@ on:
       - "v*.*.*"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: supabase-prod
   cancel-in-progress: false
