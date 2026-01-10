@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/cpujades/fathom/compare/v0.3.0...v0.3.1) (2026-01-10)
+
+
+### CI
+
+* **actions:** modernize CodeQL scanning and enable Dependabot for actions ([#18](https://github.com/cpujades/fathom/issues/18)) ([b923b08](https://github.com/cpujades/fathom/commit/b923b08e766c521135b4e953b74f15bd1e0786a8))
+
 ## [0.3.0](https://github.com/cpujades/fathom/compare/v0.2.2...v0.3.0) (2026-01-10)
 
 
