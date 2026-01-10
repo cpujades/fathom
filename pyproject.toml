@@ -1,6 +1,6 @@
 [project]
 name = "fathom"
-version = "0.2.2"
+version = "0.3.0"
 description = "Podcast-to-PDF MVP service"
 readme = "README.md"
 # Why: some compiled dependencies (e.g. pydantic-core via PyO3) may not support Python 3.14 yet.
