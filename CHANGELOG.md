@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0](https://github.com/cpujades/fathom/compare/v0.2.2...v0.3.0) (2026-01-10)
+
+
+### Features
+
+* **api:** add endpoints, supabase service, and custom errors ([2ee769d](https://github.com/cpujades/fathom/commit/2ee769dff9d535e30b8bb7c726aa04b56c06b3f1))
+
+
+### CI
+
+* enforce Conventional Commit PR titles ([#17](https://github.com/cpujades/fathom/issues/17)) ([13fde73](https://github.com/cpujades/fathom/commit/13fde7352857c6419ac624d9bff3ee6777702d97))
+
 ## [0.2.2](https://github.com/cpujades/fathom/compare/v0.2.1...v0.2.2) (2026-01-09)
 
 
