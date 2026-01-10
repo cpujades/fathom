@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.2](https://github.com/cpujades/fathom/compare/v0.3.1...v0.3.2) (2026-01-10)
+
+
+### CI
+
+* **security:** consolidate CodeQL scan into a single configuration ([#21](https://github.com/cpujades/fathom/issues/21)) ([61b1c84](https://github.com/cpujades/fathom/commit/61b1c847a8e3c70cbf4495d1ff0dfbfd992c571b))
+
+
+### Chores
+
+* **deps:** bump the github-actions group with 4 updates ([#20](https://github.com/cpujades/fathom/issues/20)) ([4526d56](https://github.com/cpujades/fathom/commit/4526d56b930078a2d2e212e5cda709de87721cdf))
+
 ## [0.3.1](https://github.com/cpujades/fathom/compare/v0.3.0...v0.3.1) (2026-01-10)
 
 
