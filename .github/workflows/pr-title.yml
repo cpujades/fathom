@@ -1,0 +1,35 @@
+name: 🧾 PR title (Conventional Commits)
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, ready_for_review, converted_to_draft]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  semantic-pr-title:
+    name: 🧾 Validate PR title
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate PR title
+        uses: amannn/action-semantic-pull-request@v5.5.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # The PR title must be a Conventional Commit, e.g.
+          #   feat(api): add endpoints
+          #   fix(auth): map JWT errors to 401
+          types: |
+            feat
+            fix
+            perf
+            refactor
+            docs
+            test
+            build
+            ci
+            style
+            chore
+            revert
+          requireScope: false
