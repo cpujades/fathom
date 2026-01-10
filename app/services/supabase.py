@@ -1,29 +1,42 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any, cast
+from typing import Any
+
+from postgrest import APIError
+from storage3.exceptions import StorageApiError
 
 from app.core.config import Settings
 from app.core.errors import ConfigurationError, ExternalServiceError, NotFoundError
 from supabase import Client, ClientOptions, create_client
 
 
-def _first_row(value: Any, *, empty_message: str) -> dict[str, Any]:
+def _first_row(
+    value: Any,
+    *,
+    error_message: str,
+    not_found_message: str | None = None,
+) -> dict[str, Any]:
     """
-    Supabase client response typing is broad (JSON unions). We validate at runtime
-    and narrow for type-checkers.
+    Narrow Supabase responses:
+    - Malformed structure -> ExternalServiceError(error_message)
+    - Empty result:
+        - If not_found_message is provided -> NotFoundError(not_found_message)
+        - Otherwise -> ExternalServiceError(error_message)
     """
-
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
-        raise ExternalServiceError(empty_message)
+        raise ExternalServiceError(error_message)
+
     if not value:
-        raise ExternalServiceError(empty_message)
+        if not_found_message is not None:
+            raise NotFoundError(not_found_message)
+        raise ExternalServiceError(error_message)
 
     row = value[0]
     if not isinstance(row, Mapping):
-        raise ExternalServiceError(empty_message)
+        raise ExternalServiceError(error_message)
 
-    return cast(dict[str, Any], dict(row))
+    return dict(row)
 
 
 def create_supabase_admin_client(settings: Settings) -> Client:
@@ -51,10 +64,10 @@ def create_supabase_user_client(settings: Settings, access_token: str) -> Client
 def create_job(client: Client, *, url: str, user_id: str) -> dict[str, Any]:
     try:
         response = client.table("jobs").insert({"url": url, "user_id": user_id}).execute()
-    except Exception as exc:
+    except APIError as exc:
         raise ExternalServiceError("Failed to create job.") from exc
 
-    return _first_row(response.data, empty_message="Failed to create job.")
+    return _first_row(response.data, error_message="Failed to create job.")
 
 
 def fetch_job(client: Client, job_id: str) -> dict[str, Any]:
@@ -66,13 +79,14 @@ def fetch_job(client: Client, job_id: str) -> dict[str, Any]:
             .limit(1)
             .execute()
         )
-    except Exception as exc:
+    except APIError as exc:
         raise ExternalServiceError("Failed to fetch job.") from exc
 
-    try:
-        return _first_row(response.data, empty_message="Job not found.")
-    except ExternalServiceError as exc:
-        raise NotFoundError("Job not found.") from exc
+    return _first_row(
+        response.data,
+        error_message="Supabase returned an unexpected jobs shape.",
+        not_found_message="Job not found.",
+    )
 
 
 def fetch_summary(client: Client, summary_id: str) -> dict[str, Any]:
@@ -84,13 +98,14 @@ def fetch_summary(client: Client, summary_id: str) -> dict[str, Any]:
             .limit(1)
             .execute()
         )
-    except Exception as exc:
+    except APIError as exc:
         raise ExternalServiceError("Failed to fetch summary.") from exc
 
-    try:
-        return _first_row(response.data, empty_message="Summary not found.")
-    except ExternalServiceError as exc:
-        raise NotFoundError("Summary not found.") from exc
+    return _first_row(
+        response.data,
+        error_message="Supabase returned an unexpected summaries shape.",
+        not_found_message="Summary not found.",
+    )
 
 
 def create_pdf_signed_url(
@@ -107,7 +122,7 @@ def create_pdf_signed_url(
 
     try:
         response = client.storage.from_(bucket).create_signed_url(object_key, ttl_seconds)
-    except Exception as exc:
+    except StorageApiError as exc:
         raise ExternalServiceError("Failed to sign PDF URL.") from exc
 
     signed_url = response.get("signedURL") or response.get("signed_url")
@@ -135,5 +150,5 @@ def upload_pdf(
             pdf_bytes,
             {"content-type": "application/pdf", "upsert": "true"},
         )
-    except Exception as exc:
+    except StorageApiError as exc:
         raise ExternalServiceError("Failed to upload PDF.") from exc
