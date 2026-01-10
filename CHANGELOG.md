@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.3](https://github.com/cpujades/fathom/compare/v0.3.2...v0.3.3) (2026-01-10)
+
+
+### CI
+
+* **actions:** set explicit workflow token permissions ([#23](https://github.com/cpujades/fathom/issues/23)) ([4a2f348](https://github.com/cpujades/fathom/commit/4a2f34835773cf8a3150def02235b628749da4e2))
+
 ## [0.3.2](https://github.com/cpujades/fathom/compare/v0.3.1...v0.3.2) (2026-01-10)
 
 
