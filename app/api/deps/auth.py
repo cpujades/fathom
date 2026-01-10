@@ -5,10 +5,12 @@ from typing import Annotated
 
 from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from supabase_auth.errors import AuthApiError
 
 from app.core.config import Settings, get_settings
-from app.core.errors import AuthenticationError, ExternalServiceError
+from app.core.errors import AppError, AuthenticationError, ExternalServiceError
 from app.services.supabase import create_supabase_user_client
+from app.services.supabase_helpers import raise_for_auth_error
 
 security = HTTPBearer(auto_error=False)
 
@@ -31,10 +33,13 @@ def get_auth_context(
     try:
         supabase = create_supabase_user_client(settings, access_token)
         user = supabase.auth.get_user()
-    except AuthenticationError:
+    except AuthApiError as exc:
+        raise_for_auth_error(exc, "Invalid or expired auth token.")
+    except AppError:
+        # Let app errors (ConfigurationError, etc.) bubble up with correct status codes.
         raise
     except Exception as exc:
-        # In practice Supabase may return different error types; we keep the surface stable.
+        # Unexpected errors (network issues, timeouts, etc.)
         raise ExternalServiceError("Failed to validate auth token.") from exc
 
     user_id = getattr(user, "id", None) or getattr(getattr(user, "user", None), "id", None)
