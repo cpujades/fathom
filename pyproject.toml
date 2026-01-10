@@ -16,6 +16,7 @@ dependencies = [
   "markdown==3.10",
   "weasyprint==67.0",
   "pydantic==2.12.5",
+  "supabase==2.27.1",
 ]
 
 [dependency-groups]

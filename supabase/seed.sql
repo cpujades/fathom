@@ -13,10 +13,15 @@ values (
   'deepgram'
 );
 
+-- Example "user id" for local-only seed data (not tied to auth.users)
+-- Note: for real requests, `user_id` must match `auth.uid()` (via RLS).
+select '00000000-0000-0000-0000-000000000001'::uuid as example_user_id;
+
 -- Example summary referencing the transcript
-insert into public.summaries (id, transcript_id, prompt_key, summary_model, summary_markdown, pdf_object_key)
+insert into public.summaries (id, user_id, transcript_id, prompt_key, summary_model, summary_markdown, pdf_object_key)
 select
   gen_random_uuid(),
+  '00000000-0000-0000-0000-000000000001'::uuid,
   t.id,
   'default',
   'openai/gpt-4.1-mini',
@@ -28,8 +33,9 @@ from public.transcripts t
 where t.url_hash = 'example_url_hash';
 
 -- Example job referencing the summary
-insert into public.jobs (status, url, summary_id)
+insert into public.jobs (user_id, status, url, summary_id)
 select
+  '00000000-0000-0000-0000-000000000001'::uuid,
   'succeeded',
   'https://example.com/video',
   s.id

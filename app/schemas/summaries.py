@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from uuid import UUID
+
 from pydantic import BaseModel, HttpUrl
 
 
@@ -6,6 +10,10 @@ class SummarizeRequest(BaseModel):
 
 
 class SummarizeResponse(BaseModel):
-    summary_id: str
+    job_id: UUID
+
+
+class SummaryResponse(BaseModel):
+    summary_id: UUID
     markdown: str
-    pdf_url: str
+    pdf_url: str | None
