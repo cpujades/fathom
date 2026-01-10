@@ -21,12 +21,11 @@ uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 
 ## Request flow (high level)
 
-- **HTTP layer**: `app/api/router.py`
- - `POST /summarize` creates a job row and returns a `job_id`.
- - `GET /jobs/{job_id}` returns job status (and `summary_id` when ready).
- - `GET /summaries/{summary_id}` returns the summary and a signed `pdf_url` when available.
+- **HTTP layer**: `app/api/routes.py`
+  - `POST /summarize` generates a `summary_id` and calls `app/pipeline.py:run_pipeline()`.
+  - `GET /summaries/{summary_id}.pdf` serves the generated PDF from `OUTPUT_DIR`.
 - **Orchestration**: `app/pipeline.py`
- - Used by a separate worker process: downloads audio → transcribes → summarizes → renders PDF bytes → uploads to Supabase Storage.
+  - Downloads audio → transcribes → summarizes → writes `.md` + `.pdf` artifacts.
 - **Integrations**: `app/services/*`
   - `downloader.py` (yt-dlp), `transcriber.py` (Deepgram), `summarizer.py` (OpenRouter via OpenAI SDK), `pdf.py` (WeasyPrint).
 
@@ -41,15 +40,11 @@ cp env.example .env
 - **Required**
   - `DEEPGRAM_API_KEY`
   - `OPENROUTER_API_KEY`
-  - `SUPABASE_URL`
-  - `SUPABASE_PUBLISHABLE_KEY`
-  - `SUPABASE_SECRET_KEY`
 - **Optional**
   - `OPENROUTER_MODEL` (default: `openai/gpt-4.1-mini`)
   - `OPENROUTER_SITE_URL` (sent as `HTTP-Referer` header; recommended by OpenRouter)
   - `OPENROUTER_APP_NAME` (sent as `X-Title` header; default: `fathom`)
-  - `SUPABASE_BUCKET` (default: `fathom`)
-  - `SUPABASE_SIGNED_URL_TTL_SECONDS` (default: `3600`)
+  - `OUTPUT_DIR` (default: `./data`)
 
 Use `env.example` as the source of truth for local `.env` setup. Do not commit secrets.
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import cast
+import pathlib
 
 from markdown import markdown
 
@@ -11,7 +11,7 @@ class PDFError(ExternalServiceError):
     pass
 
 
-def markdown_to_pdf_bytes(markdown_text: str) -> bytes:
+def markdown_to_pdf(markdown_text: str, output_path: pathlib.Path) -> pathlib.Path:
     try:
         from weasyprint import HTML
     except Exception as exc:
@@ -49,5 +49,6 @@ def markdown_to_pdf_bytes(markdown_text: str) -> bytes:
     </html>
     """
 
-    # WeasyPrint returns PDF bytes, but its type stubs may expose `Any`.
-    return cast(bytes, HTML(string=html).write_pdf())
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    HTML(string=html).write_pdf(str(output_path))
+    return output_path
