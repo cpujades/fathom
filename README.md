@@ -16,6 +16,7 @@ Fathom helps you explore long-form audio faster by turning podcasts into searcha
 - WeasyPrint system dependencies (for PDF export)
 
 ### Install
+
 ```bash
 # Option A (recommended): uv + a supported interpreter
 # If you use pyenv:
@@ -46,27 +47,44 @@ uv run pre-commit run --all-files
 ```
 
 ### Configure
+
 ```bash
 cp env.example .env
 ```
+
 Fill in:
 - `DEEPGRAM_API_KEY`
 - `OPENROUTER_API_KEY`
 - `OPENROUTER_MODEL` (e.g. `openai/gpt-4.1-mini` or `google/gemini-3-flash-preview`)
 
 ### Run
+
 ```bash
 uvicorn app.main:app --reload
 ```
 
 ### Use
+
 ```bash
 curl -X POST http://127.0.0.1:8000/summarize \
+  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"url": "https://www.youtube.com/watch?v=VIDEO_ID"}'
 ```
 
-The response includes a `pdf_url` you can open in the browser.
+This returns a `job_id`. Poll:
+
+```bash
+curl http://127.0.0.1:8000/jobs/$JOB_ID \
+  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN"
+```
+
+When the job succeeds, it will include a `summary_id`. Fetch the summary (includes a signed `pdf_url` if the PDF is ready):
+
+```bash
+curl http://127.0.0.1:8000/summaries/$SUMMARY_ID \
+  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN"
+```
 
 ## Versioning & releases
 This repo uses **Release Please** on `main`. If you use **Conventional Commits** (e.g. `feat: ...`, `fix: ...`), it will open a release PR that:
@@ -76,6 +94,7 @@ This repo uses **Release Please** on `main`. If you use **Conventional Commits**
 
 ### Error format
 Errors use a consistent shape:
+
 ```json
 {
   "error": {
