@@ -4,7 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 
 from app.api.deps.auth import AuthContext, get_auth_context
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.schemas.errors import ErrorResponse
 from app.schemas.summaries import SummarizeRequest, SummarizeResponse, SummaryResponse
 from app.services.supabase import (
@@ -31,8 +31,8 @@ router = APIRouter()
 def summarize(
     request: SummarizeRequest,
     auth: Annotated[AuthContext, Depends(get_auth_context)],
+    settings: Annotated[Settings, Depends(get_settings)],
 ) -> SummarizeResponse:
-    settings = get_settings()
     client = create_supabase_user_client(settings, auth.access_token)
     job = create_job(client, url=str(request.url), user_id=auth.user_id)
 
@@ -53,8 +53,8 @@ def summarize(
 def get_summary(
     summary_id: UUID,
     auth: Annotated[AuthContext, Depends(get_auth_context)],
+    settings: Annotated[Settings, Depends(get_settings)],
 ) -> SummaryResponse:
-    settings = get_settings()
     user_client = create_supabase_user_client(settings, auth.access_token)
     summary = fetch_summary(user_client, str(summary_id))
     admin_client = create_supabase_admin_client(settings)

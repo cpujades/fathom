@@ -1,31 +1,57 @@
-import os
-from dataclasses import dataclass
+from __future__ import annotations
+
+from functools import lru_cache
+
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-@dataclass(frozen=True)
-class Settings:
-    deepgram_api_key: str
-    openrouter_api_key: str
-    openrouter_model: str
-    openrouter_site_url: str | None
-    openrouter_app_name: str | None
-    supabase_url: str
-    supabase_publishable_key: str
-    supabase_secret_key: str
-    supabase_bucket: str
-    supabase_signed_url_ttl_seconds: int
-
-
-def get_settings() -> Settings:
-    return Settings(
-        deepgram_api_key=os.getenv("DEEPGRAM_API_KEY", "").strip(),
-        openrouter_api_key=os.getenv("OPENROUTER_API_KEY", "").strip(),
-        openrouter_model=os.getenv("OPENROUTER_MODEL", "openai/gpt-4.1-mini").strip(),
-        openrouter_site_url=os.getenv("OPENROUTER_SITE_URL", "").strip() or None,
-        openrouter_app_name=os.getenv("OPENROUTER_APP_NAME", "fathom").strip() or None,
-        supabase_url=os.getenv("SUPABASE_URL", "").strip(),
-        supabase_publishable_key=os.getenv("SUPABASE_PUBLISHABLE_KEY", "").strip(),
-        supabase_secret_key=os.getenv("SUPABASE_SECRET_KEY", "").strip(),
-        supabase_bucket=os.getenv("SUPABASE_BUCKET", "fathom").strip(),
-        supabase_signed_url_ttl_seconds=int(os.getenv("SUPABASE_SIGNED_URL_TTL_SECONDS", "3600")),
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
     )
+
+    deepgram_api_key: str = Field(..., validation_alias="DEEPGRAM_API_KEY")
+    openrouter_api_key: str = Field(..., validation_alias="OPENROUTER_API_KEY")
+    openrouter_model: str = Field(default="openai/gpt-4.1-mini", validation_alias="OPENROUTER_MODEL")
+    openrouter_site_url: str | None = Field(default=None, validation_alias="OPENROUTER_SITE_URL")
+    openrouter_app_name: str | None = Field(default="fathom", validation_alias="OPENROUTER_APP_NAME")
+
+    supabase_url: str = Field(..., validation_alias="SUPABASE_URL")
+    supabase_publishable_key: str = Field(..., validation_alias="SUPABASE_PUBLISHABLE_KEY")
+    supabase_secret_key: str = Field(..., validation_alias="SUPABASE_SECRET_KEY")
+    supabase_bucket: str = Field(default="fathom", validation_alias="SUPABASE_BUCKET")
+    supabase_signed_url_ttl_seconds: int = Field(default=3600, validation_alias="SUPABASE_SIGNED_URL_TTL_SECONDS")
+
+    @field_validator(
+        "deepgram_api_key",
+        "openrouter_api_key",
+        "openrouter_model",
+        "supabase_url",
+        "supabase_publishable_key",
+        "supabase_secret_key",
+        "supabase_bucket",
+        mode="before",
+    )
+    @classmethod
+    def _strip_required_strings(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip()
+        return value
+
+    @field_validator("openrouter_site_url", "openrouter_app_name", mode="before")
+    @classmethod
+    def _normalize_optional_strings(cls, value: object) -> object:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            stripped = value.strip()
+            return stripped or None
+        return value
+
+
+@lru_cache(maxsize=1)
+def get_settings() -> Settings:
+    return Settings()
