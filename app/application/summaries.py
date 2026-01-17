@@ -4,14 +4,11 @@ from uuid import UUID
 
 from app.api.deps.auth import AuthContext
 from app.core.config import Settings
+from app.crud.supabase.jobs import create_job
+from app.crud.supabase.storage_objects import create_pdf_signed_url
+from app.crud.supabase.summaries import fetch_summary
 from app.schemas.summaries import SummarizeRequest, SummarizeResponse, SummaryResponse
-from app.services.supabase import (
-    create_job,
-    create_pdf_signed_url,
-    create_supabase_admin_client,
-    create_supabase_user_client,
-    fetch_summary,
-)
+from app.services.supabase import create_supabase_admin_client, create_supabase_user_client
 
 
 async def create_summary_job(

@@ -1,4 +1,4 @@
-"""Helpers for Supabase error handling and response parsing."""
+"""Supabase helpers for error handling and response parsing."""
 
 from __future__ import annotations
 
