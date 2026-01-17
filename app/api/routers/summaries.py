@@ -28,13 +28,13 @@ router = APIRouter()
         502: {"model": ErrorResponse, "description": "Upstream provider failed."},
     },
 )
-def summarize(
+async def summarize(
     request: SummarizeRequest,
     auth: Annotated[AuthContext, Depends(get_auth_context)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> SummarizeResponse:
-    client = create_supabase_user_client(settings, auth.access_token)
-    job = create_job(client, url=str(request.url), user_id=auth.user_id)
+    client = await create_supabase_user_client(settings, auth.access_token)
+    job = await create_job(client, url=str(request.url), user_id=auth.user_id)
 
     return SummarizeResponse(job_id=job["id"])
 
@@ -50,15 +50,15 @@ def summarize(
         502: {"model": ErrorResponse, "description": "Upstream provider failed."},
     },
 )
-def get_summary(
+async def get_summary(
     summary_id: UUID,
     auth: Annotated[AuthContext, Depends(get_auth_context)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> SummaryResponse:
-    user_client = create_supabase_user_client(settings, auth.access_token)
-    summary = fetch_summary(user_client, str(summary_id))
-    admin_client = create_supabase_admin_client(settings)
-    pdf_url = create_pdf_signed_url(
+    user_client = await create_supabase_user_client(settings, auth.access_token)
+    summary = await fetch_summary(user_client, str(summary_id))
+    admin_client = await create_supabase_admin_client(settings)
+    pdf_url = await create_pdf_signed_url(
         admin_client,
         settings.supabase_bucket,
         summary.get("pdf_object_key"),
