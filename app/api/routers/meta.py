@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import time
 from importlib.metadata import PackageNotFoundError, version
+from typing import Annotated
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.core.errors import NotReadyError
 from app.schemas.meta import HealthResponse, ReadyResponse, StatusResponse
 from app.services.supabase import create_supabase_admin_client
@@ -21,9 +22,7 @@ def health() -> HealthResponse:
 
 
 @router.get("/ready", response_model=ReadyResponse)
-def ready() -> ReadyResponse:
-    settings = get_settings()
-
+def ready(settings: Annotated[Settings, Depends(get_settings)]) -> ReadyResponse:
     # Minimal readiness checks: configuration present + Supabase reachable.
     if not settings.supabase_url or not settings.supabase_publishable_key or not settings.supabase_secret_key:
         raise NotReadyError("Supabase is not configured.")

@@ -4,7 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 
 from app.api.deps.auth import AuthContext, get_auth_context
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.schemas.errors import ErrorResponse
 from app.schemas.jobs import JobStatusResponse
 from app.services.supabase import create_supabase_user_client, fetch_job
@@ -26,8 +26,8 @@ router = APIRouter(prefix="/jobs")
 def get_job(
     job_id: UUID,
     auth: Annotated[AuthContext, Depends(get_auth_context)],
+    settings: Annotated[Settings, Depends(get_settings)],
 ) -> JobStatusResponse:
-    settings = get_settings()
     client = create_supabase_user_client(settings, auth.access_token)
     job = fetch_job(client, str(job_id))
 
