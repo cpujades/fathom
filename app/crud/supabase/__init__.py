@@ -1,0 +1,1 @@
+"""Supabase CRUD implementations."""

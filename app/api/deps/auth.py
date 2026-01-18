@@ -10,7 +10,7 @@ from supabase_auth.errors import AuthApiError
 from app.core.config import Settings, get_settings
 from app.core.errors import AppError, AuthenticationError, ExternalServiceError
 from app.services.supabase import create_supabase_user_client
-from app.services.supabase_helpers import raise_for_auth_error
+from app.services.supabase.helpers import raise_for_auth_error
 
 security = HTTPBearer(auto_error=False)
 
