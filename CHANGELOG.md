@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.4.0](https://github.com/cpujades/fathom/compare/v0.3.3...v0.4.0) (2026-01-18)
+
+
+### Features
+
+* **security:** tighten RLS and storage access ([#32](https://github.com/cpujades/fathom/issues/32)) ([159bb4d](https://github.com/cpujades/fathom/commit/159bb4d0bcd426dffd1c29f93a574f2cebbe1315))
+
+
+### Refactoring
+
+* **application:** move endpoint orchestration out of routers ([#28](https://github.com/cpujades/fathom/issues/28)) ([8cc843b](https://github.com/cpujades/fathom/commit/8cc843b9f9894dd267b6e9b06d0617455bd573b9))
+* **async:** use async Supabase client and endpoints ([#27](https://github.com/cpujades/fathom/issues/27)) ([dd76df2](https://github.com/cpujades/fathom/commit/dd76df26da43bc181c883d6083f445f352a9af0a))
+* **crud:** split Supabase CRUD and helpers ([#29](https://github.com/cpujades/fathom/issues/29)) ([82fdd9a](https://github.com/cpujades/fathom/commit/82fdd9a6bf3bf021198b33728ad60d47087ef462))
+* **settings:** adopt pydantic-settings with cached DI ([#26](https://github.com/cpujades/fathom/issues/26)) ([1830038](https://github.com/cpujades/fathom/commit/1830038badda72cb69cb20383ca1a253a640dc88))
+
+
+### Chores
+
+* **deps:** bump filelock in the uv group across 1 directory ([#31](https://github.com/cpujades/fathom/issues/31)) ([c246747](https://github.com/cpujades/fathom/commit/c246747d3da724cf1f6c34c346bba185bf8c4664))
+* **deps:** bump virtualenv in the uv group across 1 directory ([#25](https://github.com/cpujades/fathom/issues/25)) ([5d0a4fd](https://github.com/cpujades/fathom/commit/5d0a4fdf3ee794ff01c4a681a39b714e56f1cc95))
+
 ## [0.3.3](https://github.com/cpujades/fathom/compare/v0.3.2...v0.3.3) (2026-01-10)
 
 
