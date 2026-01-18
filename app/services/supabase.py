@@ -14,33 +14,33 @@ from app.services.supabase_helpers import (
     raise_for_postgrest_error,
     raise_for_storage_error,
 )
-from supabase import Client, ClientOptions, create_client
+from supabase import AsyncClient, AsyncClientOptions, create_async_client
 
 # ---------------------------------------------------------------------------
 # Client factories
 # ---------------------------------------------------------------------------
 
 
-def create_supabase_admin_client(settings: Settings) -> Client:
+async def create_supabase_admin_client(settings: Settings) -> AsyncClient:
     """Create a Supabase client with admin (service role) credentials."""
     if not settings.supabase_url or not settings.supabase_secret_key:
         raise ConfigurationError("Supabase admin client is not configured.")
 
-    return create_client(settings.supabase_url, settings.supabase_secret_key)
+    return await create_async_client(settings.supabase_url, settings.supabase_secret_key)
 
 
-def create_supabase_user_client(settings: Settings, access_token: str) -> Client:
+async def create_supabase_user_client(settings: Settings, access_token: str) -> AsyncClient:
     """Create a Supabase client scoped to a user's JWT for RLS."""
     if not settings.supabase_url or not settings.supabase_publishable_key:
         raise ConfigurationError("Supabase user client is not configured.")
 
-    options = ClientOptions(
+    options = AsyncClientOptions(
         headers={
             "Authorization": f"Bearer {access_token}",
             "apikey": settings.supabase_publishable_key,
         }
     )
-    return create_client(settings.supabase_url, settings.supabase_publishable_key, options)
+    return await create_async_client(settings.supabase_url, settings.supabase_publishable_key, options)
 
 
 # ---------------------------------------------------------------------------
@@ -48,20 +48,20 @@ def create_supabase_user_client(settings: Settings, access_token: str) -> Client
 # ---------------------------------------------------------------------------
 
 
-def create_job(client: Client, *, url: str, user_id: str) -> dict[str, Any]:
+async def create_job(client: AsyncClient, *, url: str, user_id: str) -> dict[str, Any]:
     """Insert a new job row and return it."""
     try:
-        response = client.table("jobs").insert({"url": url, "user_id": user_id}).execute()
+        response = await client.table("jobs").insert({"url": url, "user_id": user_id}).execute()
     except APIError as exc:
         raise_for_postgrest_error(exc, "Failed to create job.")
 
     return first_row(response.data, error_message="Failed to create job.")
 
 
-def fetch_job(client: Client, job_id: str) -> dict[str, Any]:
+async def fetch_job(client: AsyncClient, job_id: str) -> dict[str, Any]:
     """Fetch a job by ID."""
     try:
-        response = (
+        response = await (
             client.table("jobs")
             .select("id,status,summary_id,error_code,error_message")
             .eq("id", job_id)
@@ -83,10 +83,10 @@ def fetch_job(client: Client, job_id: str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def fetch_summary(client: Client, summary_id: str) -> dict[str, Any]:
+async def fetch_summary(client: AsyncClient, summary_id: str) -> dict[str, Any]:
     """Fetch a summary by ID."""
     try:
-        response = (
+        response = await (
             client.table("summaries")
             .select("id,summary_markdown,pdf_object_key")
             .eq("id", summary_id)
@@ -108,8 +108,8 @@ def fetch_summary(client: Client, summary_id: str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def create_pdf_signed_url(
-    client: Client,
+async def create_pdf_signed_url(
+    client: AsyncClient,
     bucket: str,
     object_key: str | None,
     ttl_seconds: int,
@@ -122,7 +122,7 @@ def create_pdf_signed_url(
         raise ConfigurationError("Supabase bucket is not configured.")
 
     try:
-        response = client.storage.from_(bucket).create_signed_url(object_key, ttl_seconds)
+        response = await client.storage.from_(bucket).create_signed_url(object_key, ttl_seconds)
     except StorageApiError as exc:
         raise_for_storage_error(exc, "Failed to sign PDF URL.")
 
@@ -133,8 +133,8 @@ def create_pdf_signed_url(
     return signed_url
 
 
-def upload_pdf(
-    client: Client,
+async def upload_pdf(
+    client: AsyncClient,
     *,
     bucket: str,
     object_key: str,
@@ -147,7 +147,7 @@ def upload_pdf(
         raise ExternalServiceError("PDF object key is missing.")
 
     try:
-        client.storage.from_(bucket).upload(
+        await client.storage.from_(bucket).upload(
             object_key,
             pdf_bytes,
             {"content-type": "application/pdf", "upsert": "true"},

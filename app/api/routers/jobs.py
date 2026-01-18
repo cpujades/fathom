@@ -23,13 +23,13 @@ router = APIRouter(prefix="/jobs")
         502: {"model": ErrorResponse, "description": "Upstream provider failed."},
     },
 )
-def get_job(
+async def get_job(
     job_id: UUID,
     auth: Annotated[AuthContext, Depends(get_auth_context)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> JobStatusResponse:
-    client = create_supabase_user_client(settings, auth.access_token)
-    job = fetch_job(client, str(job_id))
+    client = await create_supabase_user_client(settings, auth.access_token)
+    job = await fetch_job(client, str(job_id))
 
     return JobStatusResponse(
         job_id=job["id"],

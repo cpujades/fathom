@@ -21,7 +21,7 @@ class AuthContext:
     user_id: str
 
 
-def get_auth_context(
+async def get_auth_context(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(security)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> AuthContext:
@@ -31,8 +31,8 @@ def get_auth_context(
     access_token = credentials.credentials
 
     try:
-        supabase = create_supabase_user_client(settings, access_token)
-        user = supabase.auth.get_user()
+        supabase = await create_supabase_user_client(settings, access_token)
+        user = await supabase.auth.get_user()
     except AuthApiError as exc:
         raise_for_auth_error(exc, "Invalid or expired auth token.")
     except AppError:

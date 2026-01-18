@@ -17,20 +17,20 @@ _START_TIME = time.monotonic()
 
 
 @router.get("/health", response_model=HealthResponse)
-def health() -> HealthResponse:
+async def health() -> HealthResponse:
     return HealthResponse(status="ok")
 
 
 @router.get("/ready", response_model=ReadyResponse)
-def ready(settings: Annotated[Settings, Depends(get_settings)]) -> ReadyResponse:
+async def ready(settings: Annotated[Settings, Depends(get_settings)]) -> ReadyResponse:
     # Minimal readiness checks: configuration present + Supabase reachable.
     if not settings.supabase_url or not settings.supabase_publishable_key or not settings.supabase_secret_key:
         raise NotReadyError("Supabase is not configured.")
 
-    client = create_supabase_admin_client(settings)
+    client = await create_supabase_admin_client(settings)
     # Lightweight query to ensure PostgREST is reachable.
     try:
-        client.table("jobs").select("id").limit(1).execute()
+        await client.table("jobs").select("id").limit(1).execute()
     except Exception as exc:
         raise NotReadyError("Supabase is not reachable.") from exc
 
@@ -38,7 +38,7 @@ def ready(settings: Annotated[Settings, Depends(get_settings)]) -> ReadyResponse
 
 
 @router.get("/status", response_model=StatusResponse)
-def status() -> StatusResponse:
+async def status() -> StatusResponse:
     try:
         app_version = version("fathom")
     except PackageNotFoundError:
