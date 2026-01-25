@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     supabase_secret_key: str = Field(..., validation_alias="SUPABASE_SECRET_KEY")
     supabase_bucket: str = Field(default="fathom", validation_alias="SUPABASE_BUCKET")
     supabase_signed_url_ttl_seconds: int = Field(default=3600, validation_alias="SUPABASE_SIGNED_URL_TTL_SECONDS")
+    worker_poll_interval_seconds: int = Field(default=2, validation_alias="WORKER_POLL_INTERVAL_SECONDS")
+    worker_idle_sleep_seconds: int = Field(default=5, validation_alias="WORKER_IDLE_SLEEP_SECONDS")
+    worker_max_attempts: int = Field(default=3, validation_alias="WORKER_MAX_ATTEMPTS")
+    worker_backoff_base_seconds: int = Field(default=5, validation_alias="WORKER_BACKOFF_BASE_SECONDS")
+    worker_stale_after_seconds: int = Field(default=900, validation_alias="WORKER_STALE_AFTER_SECONDS")
 
     @field_validator(
         "deepgram_api_key",

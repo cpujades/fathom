@@ -63,6 +63,13 @@ Fill in:
 uvicorn app.main:app --reload
 ```
 
+### Worker
+Run the background worker in a separate process:
+
+```bash
+python -m app.worker
+```
+
 ### Use
 
 ```bash

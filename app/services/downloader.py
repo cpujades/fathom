@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pathlib
 import uuid
+from dataclasses import dataclass
 
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError as YtDlpDownloadError
@@ -13,7 +14,13 @@ class DownloadError(ExternalServiceError):
     pass
 
 
-def download_audio(url: str, output_dir: str) -> pathlib.Path:
+@dataclass(frozen=True)
+class DownloadResult:
+    path: pathlib.Path
+    video_id: str | None
+
+
+def download_audio(url: str, output_dir: str) -> DownloadResult:
     output_path = pathlib.Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
@@ -43,4 +50,8 @@ def download_audio(url: str, output_dir: str) -> pathlib.Path:
     if not matches:
         raise DownloadError("Download finished but the audio file was not found on disk.")
 
-    return matches[0]
+    video_id = info.get("id") if isinstance(info, dict) else None
+    if not isinstance(video_id, str):
+        video_id = None
+
+    return DownloadResult(path=matches[0], video_id=video_id)
