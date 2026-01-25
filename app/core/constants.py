@@ -3,3 +3,5 @@ SYSTEM_PROMPT = (
     "Keep it concise and actionable. Use headings for: Summary, Key Points, Action Items. "
     "If you are unsure about a detail, say so rather than guessing."
 )
+
+SUMMARY_PROMPT_KEY_DEFAULT = "default"

@@ -19,8 +19,8 @@ class PipelineResult:
 
 def run_pipeline(summary_id: str, url: str, settings: Settings) -> PipelineResult:
     with tempfile.TemporaryDirectory() as tmp_dir:
-        audio_path = download_audio(url, tmp_dir)
-        transcript = transcribe_file(audio_path, settings.deepgram_api_key)
+        download_result = download_audio(url, tmp_dir)
+        transcript = transcribe_file(download_result.path, settings.deepgram_api_key)
 
     markdown = summarize_transcript(
         transcript,
