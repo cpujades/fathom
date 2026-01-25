@@ -24,6 +24,21 @@ class Settings(BaseSettings):
     supabase_secret_key: str = Field(..., validation_alias="SUPABASE_SECRET_KEY")
     supabase_bucket: str = Field(default="fathom", validation_alias="SUPABASE_BUCKET")
     supabase_signed_url_ttl_seconds: int = Field(default=3600, validation_alias="SUPABASE_SIGNED_URL_TTL_SECONDS")
+    cors_allow_origins: list[str] = Field(default_factory=list, validation_alias="CORS_ALLOW_ORIGINS")
+    rate_limit_requests: int = Field(default=0, validation_alias="RATE_LIMIT_REQUESTS")
+    rate_limit_window_seconds: int = Field(default=60, validation_alias="RATE_LIMIT_WINDOW_SECONDS")
+    max_request_bytes: int = Field(default=64000, validation_alias="MAX_REQUEST_BYTES")
+    max_duration_seconds: int = Field(default=14400, validation_alias="MAX_DURATION_SECONDS")
+    youtube_allow_hosts: list[str] = Field(
+        default_factory=lambda: [
+            "youtube.com",
+            "www.youtube.com",
+            "m.youtube.com",
+            "youtu.be",
+            "music.youtube.com",
+        ],
+        validation_alias="YOUTUBE_ALLOW_HOSTS",
+    )
     worker_poll_interval_seconds: int = Field(default=2, validation_alias="WORKER_POLL_INTERVAL_SECONDS")
     worker_idle_sleep_seconds: int = Field(default=5, validation_alias="WORKER_IDLE_SLEEP_SECONDS")
     worker_max_attempts: int = Field(default=3, validation_alias="WORKER_MAX_ATTEMPTS")
@@ -54,6 +69,16 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             stripped = value.strip()
             return stripped or None
+        return value
+
+    @field_validator("cors_allow_origins", "youtube_allow_hosts", mode="before")
+    @classmethod
+    def _parse_list(cls, value: object) -> object:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            items = [item.strip() for item in value.split(",")]
+            return [item for item in items if item]
         return value
 
 
