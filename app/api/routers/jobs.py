@@ -1,10 +1,11 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
+from starlette.responses import StreamingResponse
 
 from app.api.deps.auth import AuthContext, get_auth_context
-from app.application.jobs import get_job_status
+from app.application.jobs import get_job_status, stream_job_events
 from app.core.config import Settings, get_settings
 from app.schemas.errors import ErrorResponse
 from app.schemas.jobs import JobStatusResponse
@@ -29,3 +30,35 @@ async def get_job(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> JobStatusResponse:
     return await get_job_status(job_id, auth, settings)
+
+
+@router.get(
+    "/{job_id}/events",
+    responses={
+        401: {"model": ErrorResponse, "description": "Missing or invalid auth token."},
+        400: {"model": ErrorResponse, "description": "Invalid job id."},
+        404: {"model": ErrorResponse, "description": "Job not found."},
+        500: {"model": ErrorResponse, "description": "Unexpected server error."},
+        502: {"model": ErrorResponse, "description": "Upstream provider failed."},
+    },
+)
+async def server_sent_events(
+    job_id: UUID,
+    request: Request,
+    auth: Annotated[AuthContext, Depends(get_auth_context)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> StreamingResponse:
+    poll_interval = settings.job_status_poll_interval_seconds
+
+    headers = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+    return StreamingResponse(
+        stream_job_events(
+            job_id,
+            request,
+            auth,
+            settings,
+            poll_interval_seconds=poll_interval,
+        ),
+        media_type="text/event-stream",
+        headers=headers,
+    )

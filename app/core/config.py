@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     )
 
     deepgram_api_key: str = Field(..., validation_alias="DEEPGRAM_API_KEY")
+    deepgram_model: str = Field(default="nova-2", validation_alias="DEEPGRAM_MODEL")
     openrouter_api_key: str = Field(..., validation_alias="OPENROUTER_API_KEY")
     openrouter_model: str = Field(default="openai/gpt-4.1-mini", validation_alias="OPENROUTER_MODEL")
     openrouter_site_url: str | None = Field(default=None, validation_alias="OPENROUTER_SITE_URL")
@@ -27,6 +28,9 @@ class Settings(BaseSettings):
     cors_allow_origins: list[str] = Field(default_factory=list, validation_alias="CORS_ALLOW_ORIGINS")
     rate_limit_requests: int = Field(default=0, validation_alias="RATE_LIMIT_REQUESTS")
     rate_limit_window_seconds: int = Field(default=60, validation_alias="RATE_LIMIT_WINDOW_SECONDS")
+    rate_limit_max_ips: int = Field(default=10000, validation_alias="RATE_LIMIT_MAX_IPS")
+    rate_limit_idle_seconds: int = Field(default=1800, validation_alias="RATE_LIMIT_IDLE_SECONDS")
+    job_status_poll_interval_seconds: int = Field(default=2, validation_alias="JOB_STATUS_POLL_INTERVAL_SECONDS")
     max_request_bytes: int = Field(default=64000, validation_alias="MAX_REQUEST_BYTES")
     max_duration_seconds: int = Field(default=14400, validation_alias="MAX_DURATION_SECONDS")
     youtube_allow_hosts: list[str] = Field(

@@ -7,6 +7,7 @@ import tempfile
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from urllib.parse import urlparse
 
 from app.core.config import Settings, get_settings
 from app.core.constants import SUMMARY_PROMPT_KEY_DEFAULT
@@ -20,12 +21,17 @@ from app.crud.supabase.jobs import (
 )
 from app.crud.supabase.storage_objects import upload_pdf
 from app.crud.supabase.summaries import create_summary
-from app.crud.supabase.transcripts import create_transcript, fetch_transcript_by_hash
-from app.services.downloader import download_audio
+from app.crud.supabase.transcripts import (
+    create_transcript,
+    fetch_transcript_by_hash,
+    fetch_transcript_by_video_id,
+)
+from app.services.downloader import download_audio, fetch_muxed_media_url
 from app.services.pdf import markdown_to_pdf_bytes
 from app.services.summarizer import summarize_transcript
 from app.services.supabase import create_supabase_admin_client
-from app.services.transcriber import transcribe_file
+from app.services.transcriber import TranscriptionError, transcribe_file, transcribe_url
+from app.services.youtube import extract_youtube_video_id
 from supabase import AsyncClient
 
 logger = logging.getLogger("fathom.worker")
@@ -47,24 +53,51 @@ async def _run_pipeline(
     admin_client: AsyncClient,
 ) -> tuple[str, str, str | None, bytes]:
     url_hash = _hash_url(url)
+    parsed_url = urlparse(url)
+    parsed_video_id = extract_youtube_video_id(parsed_url)
     transcript_text: str
     video_id: str | None = None
 
-    transcript_row = await fetch_transcript_by_hash(
-        admin_client,
-        url_hash=url_hash,
-        provider_model=provider_model,
-    )
+    transcript_row = None
+    if parsed_video_id:
+        transcript_row = await fetch_transcript_by_video_id(
+            admin_client,
+            video_id=parsed_video_id,
+            provider_model=provider_model,
+        )
+
+    if not transcript_row:
+        transcript_row = await fetch_transcript_by_hash(
+            admin_client,
+            url_hash=url_hash,
+            provider_model=provider_model,
+        )
 
     if transcript_row:
         transcript_text = transcript_row["transcript_text"]
-        video_id = transcript_row.get("video_id")
+        video_id = transcript_row.get("video_id") or parsed_video_id
         transcript_id = transcript_row["id"]
     else:
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            download_result = await asyncio.to_thread(download_audio, url, tmp_dir)
-            video_id = download_result.video_id
-            transcript_text = await asyncio.to_thread(transcribe_file, download_result.path, settings.deepgram_api_key)
+        direct_url = None
+        try:
+            direct_url = await asyncio.to_thread(fetch_muxed_media_url, url)
+        except Exception:
+            direct_url = None
+
+        if direct_url:
+            try:
+                transcript_text = await transcribe_url(direct_url, settings.deepgram_api_key, settings.deepgram_model)
+                video_id = parsed_video_id
+            except TranscriptionError:
+                direct_url = None
+
+        if not direct_url:
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                download_result = await asyncio.to_thread(download_audio, url, tmp_dir)
+                video_id = download_result.video_id or parsed_video_id
+                transcript_text = await transcribe_file(
+                    download_result.path, settings.deepgram_api_key, settings.deepgram_model
+                )
 
         transcript_row = await create_transcript(
             admin_client,
