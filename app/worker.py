@@ -26,13 +26,22 @@ from app.crud.supabase.transcripts import (
     fetch_transcript_by_video_id,
 )
 from app.services.downloader import download_audio, fetch_muxed_media_url
-from app.services.summarizer import summarize_transcript
+from app.services.summarizer import OPENROUTER_MODEL, summarize_transcript
 from app.services.supabase import create_supabase_admin_client
-from app.services.transcriber import TranscriptionError, transcribe_file, transcribe_url
+from app.services.transcriber import DEEPGRAM_MODEL, TranscriptionError, transcribe_file, transcribe_url
 from app.services.youtube import extract_youtube_video_id
 from supabase import AsyncClient
 
 logger = logging.getLogger("fathom.worker")
+
+# ---------------------------------------------------------------------------
+# Worker configuration
+# ---------------------------------------------------------------------------
+WORKER_POLL_INTERVAL_SECONDS = 2
+WORKER_IDLE_SLEEP_SECONDS = 5
+WORKER_MAX_ATTEMPTS = 3
+WORKER_BACKOFF_BASE_SECONDS = 5
+WORKER_STALE_AFTER_SECONDS = 900  # 15 minutes
 
 
 def _hash_url(url: str) -> str:
@@ -47,7 +56,6 @@ async def _run_pipeline(
     *,
     url: str,
     settings: Settings,
-    provider_model: str,
     admin_client: AsyncClient,
 ) -> tuple[str, str, str | None]:
     url_hash = _hash_url(url)
@@ -55,6 +63,7 @@ async def _run_pipeline(
     parsed_video_id = extract_youtube_video_id(parsed_url)
     transcript_text: str
     video_id: str | None = None
+    provider_model = f"deepgram:{DEEPGRAM_MODEL}"
 
     transcript_row = None
     if parsed_video_id:
@@ -84,7 +93,7 @@ async def _run_pipeline(
 
         if direct_url:
             try:
-                transcript_text = await transcribe_url(direct_url, settings.deepgram_api_key, settings.deepgram_model)
+                transcript_text = await transcribe_url(direct_url, settings.deepgram_api_key)
                 video_id = parsed_video_id
             except TranscriptionError:
                 direct_url = None
@@ -93,9 +102,7 @@ async def _run_pipeline(
             with tempfile.TemporaryDirectory() as tmp_dir:
                 download_result = await asyncio.to_thread(download_audio, url, tmp_dir)
                 video_id = download_result.video_id or parsed_video_id
-                transcript_text = await transcribe_file(
-                    download_result.path, settings.deepgram_api_key, settings.deepgram_model
-                )
+                transcript_text = await transcribe_file(download_result.path, settings.deepgram_api_key)
 
         transcript_row = await create_transcript(
             admin_client,
@@ -110,9 +117,6 @@ async def _run_pipeline(
         summarize_transcript,
         transcript_text,
         settings.openrouter_api_key,
-        settings.openrouter_model,
-        settings.openrouter_site_url,
-        settings.openrouter_app_name,
     )
     return transcript_id, summary_markdown, video_id or url_hash
 
@@ -121,14 +125,11 @@ async def _process_job(job: dict[str, Any], settings: Settings, admin_client: As
     job_id = job["id"]
     url = job["url"]
     user_id = job["user_id"]
-
-    provider_model = "deepgram:nova-2"
     summary_id = str(uuid.uuid4())
 
     transcript_id, summary_markdown, video_segment = await _run_pipeline(
         url=url,
         settings=settings,
-        provider_model=provider_model,
         admin_client=admin_client,
     )
 
@@ -138,7 +139,7 @@ async def _process_job(job: dict[str, Any], settings: Settings, admin_client: As
         user_id=user_id,
         transcript_id=transcript_id,
         prompt_key=SUMMARY_PROMPT_KEY_DEFAULT,
-        summary_model=settings.openrouter_model,
+        summary_model=OPENROUTER_MODEL,
         summary_markdown=summary_markdown,
         pdf_object_key=None,
     )
@@ -153,38 +154,32 @@ def _extract_error(exc: Exception) -> tuple[str, str]:
 
 
 async def _run_loop(settings: Settings) -> None:
-    idle_sleep = settings.worker_idle_sleep_seconds
-    poll_interval = settings.worker_poll_interval_seconds
-    max_attempts = settings.worker_max_attempts
-    backoff_base = settings.worker_backoff_base_seconds
-    stale_after = settings.worker_stale_after_seconds
-
     admin_client = await create_supabase_admin_client(settings)
 
     while True:
-        await requeue_stale_jobs(admin_client, stale_after_seconds=stale_after)
+        await requeue_stale_jobs(admin_client, stale_after_seconds=WORKER_STALE_AFTER_SECONDS)
         job = await claim_next_job(admin_client)
         if not job:
-            await asyncio.sleep(idle_sleep)
+            await asyncio.sleep(WORKER_IDLE_SLEEP_SECONDS)
             continue
 
         attempt_count = int(job.get("attempt_count") or 0)
-        if attempt_count > max_attempts:
+        if attempt_count > WORKER_MAX_ATTEMPTS:
             await mark_job_failed(
                 admin_client,
                 job_id=job["id"],
                 error_code="max_attempts_exceeded",
                 error_message="Job exceeded maximum retry attempts.",
             )
-            await asyncio.sleep(poll_interval)
+            await asyncio.sleep(WORKER_POLL_INTERVAL_SECONDS)
             continue
 
         try:
             await _process_job(job, settings, admin_client)
         except Exception as exc:
             error_code, error_message = _extract_error(exc)
-            if attempt_count < max_attempts:
-                backoff_seconds = _compute_backoff_seconds(backoff_base, attempt_count)
+            if attempt_count < WORKER_MAX_ATTEMPTS:
+                backoff_seconds = _compute_backoff_seconds(WORKER_BACKOFF_BASE_SECONDS, attempt_count)
                 run_after = datetime.now(UTC) + timedelta(seconds=backoff_seconds)
                 await mark_job_retry(
                     admin_client,
@@ -201,7 +196,7 @@ async def _run_loop(settings: Settings) -> None:
                     error_message=error_message,
                 )
 
-        await asyncio.sleep(poll_interval)
+        await asyncio.sleep(WORKER_POLL_INTERVAL_SECONDS)
 
 
 def main() -> None:

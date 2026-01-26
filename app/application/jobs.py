@@ -13,6 +13,9 @@ from app.crud.supabase.jobs import fetch_job
 from app.schemas.jobs import JobStatusResponse
 from app.services.supabase import create_supabase_user_client
 
+# SSE polling interval for job status updates
+JOB_STATUS_POLL_INTERVAL_SECONDS = 1
+
 
 async def get_job_status(job_id: UUID, auth: AuthContext, settings: Settings) -> JobStatusResponse:
     client = await create_supabase_user_client(settings, auth.access_token)

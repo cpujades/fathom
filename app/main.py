@@ -34,6 +34,7 @@ if settings.cors_allow_origins:
 app = FastAPI(title="Fathom MVP", middleware=middleware)
 app.include_router(router)
 app.state.settings = settings
+app.state.rate_limit = settings.rate_limit
 
 
 @app.middleware("http")

@@ -9,6 +9,9 @@ from deepgram.core.api_error import ApiError
 
 from app.core.errors import ExternalServiceError
 
+# Default Deepgram model for transcription
+DEEPGRAM_MODEL = "nova-2"
+
 
 class TranscriptionError(ExternalServiceError):
     pass
@@ -37,11 +40,9 @@ def _extract_transcript(response: Any) -> str:
     return transcript
 
 
-async def transcribe_file(file_path: pathlib.Path, api_key: str, model: str) -> str:
+async def transcribe_file(file_path: pathlib.Path, api_key: str) -> str:
     if not api_key:
         raise TranscriptionError("Missing DEEPGRAM_API_KEY.")
-    if not model:
-        raise TranscriptionError("Missing DEEPGRAM_MODEL.")
 
     audio_bytes = await asyncio.to_thread(file_path.read_bytes)
     client = AsyncDeepgramClient(api_key=api_key)
@@ -49,7 +50,7 @@ async def transcribe_file(file_path: pathlib.Path, api_key: str, model: str) -> 
     try:
         response = await client.listen.v1.media.transcribe_file(
             request=audio_bytes,
-            model=model,
+            model=DEEPGRAM_MODEL,
             smart_format=True,
             punctuate=True,
         )
@@ -59,18 +60,16 @@ async def transcribe_file(file_path: pathlib.Path, api_key: str, model: str) -> 
     return _extract_transcript(response)
 
 
-async def transcribe_url(media_url: str, api_key: str, model: str) -> str:
+async def transcribe_url(media_url: str, api_key: str) -> str:
     if not api_key:
         raise TranscriptionError("Missing DEEPGRAM_API_KEY.")
-    if not model:
-        raise TranscriptionError("Missing DEEPGRAM_MODEL.")
 
     client = AsyncDeepgramClient(api_key=api_key)
 
     try:
         response = await client.listen.v1.media.transcribe_url(
             url=media_url,
-            model=model,
+            model=DEEPGRAM_MODEL,
             smart_format=True,
             punctuate=True,
         )
