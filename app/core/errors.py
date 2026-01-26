@@ -44,6 +44,13 @@ class RateLimitError(AppError):
     code = "rate_limit_exceeded"
 
 
+class RequestTooLargeError(AppError):
+    """Request body exceeds server limits (413)."""
+
+    status_code = 413
+    code = "request_too_large"
+
+
 class ConfigurationError(AppError):
     """Server misconfiguration (500)."""
 

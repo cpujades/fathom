@@ -56,6 +56,11 @@ Fill in:
 - `DEEPGRAM_API_KEY`
 - `OPENROUTER_API_KEY`
 - `OPENROUTER_MODEL` (e.g. `openai/gpt-4.1-mini` or `google/gemini-3-flash-preview`)
+Optional best‑practice guardrails:
+- `CORS_ALLOW_ORIGINS` (comma-separated list)
+- `RATE_LIMIT_REQUESTS` and `RATE_LIMIT_WINDOW_SECONDS`
+- `MAX_REQUEST_BYTES`
+- `MAX_DURATION_SECONDS`
 
 ### Run
 
