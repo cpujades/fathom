@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from openai import OpenAI
+from openai import APIError, OpenAI
 
 from app.core.constants import SYSTEM_PROMPT
 from app.core.errors import ExternalServiceError
@@ -43,7 +43,7 @@ def summarize_transcript(
             ],
             temperature=0.2,
         )
-    except Exception as exc:
+    except APIError as exc:
         raise SummarizationError("Failed to call OpenRouter.") from exc
 
     content: Any = response.choices[0].message.content if response.choices else None
