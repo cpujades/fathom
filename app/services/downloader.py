@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError as YtDlpDownloadError
+from yt_dlp.utils import YoutubeDLError
 
 from app.core.errors import ExternalServiceError
 
@@ -47,7 +48,7 @@ def download_audio(url: str, output_dir: str) -> DownloadResult:
             info = ydl.extract_info(url, download=True)
     except YtDlpDownloadError as exc:
         raise DownloadError("Failed to download audio from the provided URL.") from exc
-    except Exception as exc:
+    except YoutubeDLError as exc:
         raise DownloadError("Unexpected error while downloading audio.") from exc
 
     if not info:
@@ -77,7 +78,7 @@ def fetch_video_metadata(url: str) -> VideoMetadata:
             info = ydl.extract_info(url, download=False)
     except YtDlpDownloadError as exc:
         raise DownloadError("Failed to fetch video metadata.") from exc
-    except Exception as exc:
+    except YoutubeDLError as exc:
         raise DownloadError("Unexpected error while fetching metadata.") from exc
 
     if not info:
@@ -138,7 +139,7 @@ def fetch_muxed_media_url(url: str) -> str | None:
             info = ydl.extract_info(url, download=False)
     except YtDlpDownloadError as exc:
         raise DownloadError("Failed to fetch media formats.") from exc
-    except Exception as exc:
+    except YoutubeDLError as exc:
         raise DownloadError("Unexpected error while fetching media formats.") from exc
 
     formats = info.get("formats") if isinstance(info, dict) else None

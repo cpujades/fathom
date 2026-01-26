@@ -3,6 +3,8 @@ from __future__ import annotations
 import time
 from importlib.metadata import PackageNotFoundError, version
 
+from postgrest import APIError
+
 from app.core.config import Settings
 from app.core.errors import NotReadyError
 from app.schemas.meta import HealthResponse, ReadyResponse, StatusResponse
@@ -24,7 +26,7 @@ async def readiness_status(settings: Settings) -> ReadyResponse:
     # Lightweight query to ensure PostgREST is reachable.
     try:
         await client.table("jobs").select("id").limit(1).execute()
-    except Exception as exc:
+    except APIError as exc:
         raise NotReadyError("Supabase is not reachable.") from exc
 
     return ReadyResponse(status="ok")

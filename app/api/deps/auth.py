@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -19,6 +19,20 @@ security = HTTPBearer(auto_error=False)
 class AuthContext:
     access_token: str
     user_id: str
+
+
+def _extract_user_id(user: Any) -> str | None:
+    """
+    Extract user ID from Supabase auth response.
+
+    Supabase SDK returns either a User object directly or a UserResponse wrapper
+    depending on the SDK version and method used. This handles both cases.
+    """
+    if hasattr(user, "id") and user.id:
+        return str(user.id)
+    if hasattr(user, "user") and hasattr(user.user, "id") and user.user.id:
+        return str(user.user.id)
+    return None
 
 
 async def get_auth_context(
@@ -42,8 +56,8 @@ async def get_auth_context(
         # Unexpected errors (network issues, timeouts, etc.)
         raise ExternalServiceError("Failed to validate auth token.") from exc
 
-    user_id = getattr(user, "id", None) or getattr(getattr(user, "user", None), "id", None)
+    user_id = _extract_user_id(user)
     if not user_id:
         raise AuthenticationError("Invalid auth token.")
 
-    return AuthContext(access_token=access_token, user_id=str(user_id))
+    return AuthContext(access_token=access_token, user_id=user_id)
