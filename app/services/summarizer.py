@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from openai import APIError, OpenAI
+from openai import APIError, AsyncOpenAI
 
 from app.core.constants import SYSTEM_PROMPT
 from app.core.errors import ExternalServiceError
@@ -18,18 +18,18 @@ class SummarizationError(ExternalServiceError):
     pass
 
 
-def summarize_transcript(transcript: str, api_key: str) -> str:
+async def summarize_transcript(transcript: str, api_key: str) -> str:
     if not api_key:
         raise SummarizationError("Missing OPENROUTER_API_KEY.")
 
-    client = OpenAI(
+    client = AsyncOpenAI(
         api_key=api_key,
         base_url="https://openrouter.ai/api/v1",
         default_headers={"X-Title": OPENROUTER_APP_NAME},
     )
 
     try:
-        response = client.chat.completions.create(
+        response = await client.chat.completions.create(
             model=OPENROUTER_MODEL,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},

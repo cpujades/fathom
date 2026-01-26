@@ -113,11 +113,7 @@ async def _run_pipeline(
         )
         transcript_id = transcript_row["id"]
 
-    summary_markdown = await asyncio.to_thread(
-        summarize_transcript,
-        transcript_text,
-        settings.openrouter_api_key,
-    )
+    summary_markdown = await summarize_transcript(transcript_text, settings.openrouter_api_key)
     return transcript_id, summary_markdown, video_id or url_hash
 
 
