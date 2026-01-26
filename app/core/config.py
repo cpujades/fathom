@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     )
 
     deepgram_api_key: str = Field(..., validation_alias="DEEPGRAM_API_KEY")
+    deepgram_model: str = Field(default="nova-2", validation_alias="DEEPGRAM_MODEL")
     openrouter_api_key: str = Field(..., validation_alias="OPENROUTER_API_KEY")
     openrouter_model: str = Field(default="openai/gpt-4.1-mini", validation_alias="OPENROUTER_MODEL")
     openrouter_site_url: str | None = Field(default=None, validation_alias="OPENROUTER_SITE_URL")

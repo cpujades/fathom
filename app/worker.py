@@ -26,11 +26,11 @@ from app.crud.supabase.transcripts import (
     fetch_transcript_by_hash,
     fetch_transcript_by_video_id,
 )
-from app.services.downloader import download_audio
+from app.services.downloader import download_audio, fetch_muxed_media_url
 from app.services.pdf import markdown_to_pdf_bytes
 from app.services.summarizer import summarize_transcript
 from app.services.supabase import create_supabase_admin_client
-from app.services.transcriber import transcribe_file
+from app.services.transcriber import TranscriptionError, transcribe_file, transcribe_url
 from app.services.youtube import extract_youtube_video_id
 from supabase import AsyncClient
 
@@ -78,10 +78,26 @@ async def _run_pipeline(
         video_id = transcript_row.get("video_id") or parsed_video_id
         transcript_id = transcript_row["id"]
     else:
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            download_result = await asyncio.to_thread(download_audio, url, tmp_dir)
-            video_id = download_result.video_id or parsed_video_id
-            transcript_text = await asyncio.to_thread(transcribe_file, download_result.path, settings.deepgram_api_key)
+        direct_url = None
+        try:
+            direct_url = await asyncio.to_thread(fetch_muxed_media_url, url)
+        except Exception:
+            direct_url = None
+
+        if direct_url:
+            try:
+                transcript_text = await transcribe_url(direct_url, settings.deepgram_api_key, settings.deepgram_model)
+                video_id = parsed_video_id
+            except TranscriptionError:
+                direct_url = None
+
+        if not direct_url:
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                download_result = await asyncio.to_thread(download_audio, url, tmp_dir)
+                video_id = download_result.video_id or parsed_video_id
+                transcript_text = await transcribe_file(
+                    download_result.path, settings.deepgram_api_key, settings.deepgram_model
+                )
 
         transcript_row = await create_transcript(
             admin_client,

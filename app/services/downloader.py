@@ -95,3 +95,59 @@ def fetch_video_metadata(url: str) -> VideoMetadata:
         title = None
 
     return VideoMetadata(video_id=video_id, duration_seconds=duration_seconds, title=title)
+
+
+def _is_muxed_mp4_candidate(fmt: dict) -> bool:
+    ext = fmt.get("ext")
+    acodec = fmt.get("acodec")
+    vcodec = fmt.get("vcodec")
+    asr = fmt.get("asr") or 0
+    size = fmt.get("filesize") or fmt.get("filesize_approx")
+    url = fmt.get("url")
+    return (
+        ext == "mp4"
+        and acodec not in (None, "", "none")
+        and vcodec not in (None, "", "none")
+        and int(asr) > 0
+        and isinstance(size, (int, float))
+        and size > 0
+        and isinstance(url, str)
+        and bool(url)
+    )
+
+
+def _score_muxed_candidate(fmt: dict) -> tuple[float, float]:
+    tbr = float(fmt.get("tbr") or 0)
+    size = float(fmt.get("filesize") or fmt.get("filesize_approx") or 0)
+    return (tbr, size)
+
+
+def fetch_muxed_media_url(url: str) -> str | None:
+    """
+    Return a direct media URL for a muxed MP4 stream (audio+video).
+    """
+    ydl_opts = {
+        "noplaylist": True,
+        "quiet": True,
+        "no_warnings": True,
+        "skip_download": True,
+    }
+
+    try:
+        with YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+    except YtDlpDownloadError as exc:
+        raise DownloadError("Failed to fetch media formats.") from exc
+    except Exception as exc:
+        raise DownloadError("Unexpected error while fetching media formats.") from exc
+
+    formats = info.get("formats") if isinstance(info, dict) else None
+    if not isinstance(formats, list):
+        return None
+
+    candidates = [fmt for fmt in formats if isinstance(fmt, dict) and _is_muxed_mp4_candidate(fmt)]
+    if not candidates:
+        return None
+
+    best = max(candidates, key=_score_muxed_candidate)
+    return str(best["url"])
