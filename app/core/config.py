@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     rate_limit_window_seconds: int = Field(default=60, validation_alias="RATE_LIMIT_WINDOW_SECONDS")
     rate_limit_max_ips: int = Field(default=10000, validation_alias="RATE_LIMIT_MAX_IPS")
     rate_limit_idle_seconds: int = Field(default=1800, validation_alias="RATE_LIMIT_IDLE_SECONDS")
+    job_status_poll_interval_seconds: int = Field(default=2, validation_alias="JOB_STATUS_POLL_INTERVAL_SECONDS")
     max_request_bytes: int = Field(default=64000, validation_alias="MAX_REQUEST_BYTES")
     max_duration_seconds: int = Field(default=14400, validation_alias="MAX_DURATION_SECONDS")
     youtube_allow_hosts: list[str] = Field(
