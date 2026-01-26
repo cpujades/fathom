@@ -35,6 +35,31 @@ async def fetch_transcript_by_hash(
     return first_row(data, error_message="Supabase returned an unexpected transcripts shape.")
 
 
+async def fetch_transcript_by_video_id(
+    client: AsyncClient,
+    *,
+    video_id: str,
+    provider_model: str,
+) -> dict[str, Any] | None:
+    try:
+        response = await (
+            client.table("transcripts")
+            .select("id,transcript_text,video_id,provider_model,url_hash")
+            .eq("video_id", video_id)
+            .eq("provider_model", provider_model)
+            .limit(1)
+            .execute()
+        )
+    except APIError as exc:
+        raise_for_postgrest_error(exc, "Failed to fetch transcript.")
+
+    data = response.data or []
+    if not data:
+        return None
+
+    return first_row(data, error_message="Supabase returned an unexpected transcripts shape.")
+
+
 async def create_transcript(
     client: AsyncClient,
     *,
