@@ -85,3 +85,17 @@ async def create_transcript(
         raise_for_postgrest_error(exc, "Failed to create transcript.")
 
     return first_row(response.data, error_message="Failed to create transcript.")
+
+
+async def fetch_transcript_by_id(client: AsyncClient, transcript_id: str) -> dict[str, Any]:
+    """Fetch a transcript by ID."""
+    try:
+        response = await client.table("transcripts").select("id,video_id").eq("id", transcript_id).limit(1).execute()
+    except APIError as exc:
+        raise_for_postgrest_error(exc, "Failed to fetch transcript.")
+
+    return first_row(
+        response.data,
+        error_message="Supabase returned an unexpected transcripts shape.",
+        not_found_message="Transcript not found.",
+    )

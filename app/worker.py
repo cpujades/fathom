@@ -19,7 +19,6 @@ from app.crud.supabase.jobs import (
     mark_job_succeeded,
     requeue_stale_jobs,
 )
-from app.crud.supabase.storage_objects import upload_pdf
 from app.crud.supabase.summaries import create_summary
 from app.crud.supabase.transcripts import (
     create_transcript,
@@ -27,7 +26,6 @@ from app.crud.supabase.transcripts import (
     fetch_transcript_by_video_id,
 )
 from app.services.downloader import download_audio, fetch_muxed_media_url
-from app.services.pdf import markdown_to_pdf_bytes
 from app.services.summarizer import summarize_transcript
 from app.services.supabase import create_supabase_admin_client
 from app.services.transcriber import TranscriptionError, transcribe_file, transcribe_url
@@ -51,7 +49,7 @@ async def _run_pipeline(
     settings: Settings,
     provider_model: str,
     admin_client: AsyncClient,
-) -> tuple[str, str, str | None, bytes]:
+) -> tuple[str, str, str | None]:
     url_hash = _hash_url(url)
     parsed_url = urlparse(url)
     parsed_video_id = extract_youtube_video_id(parsed_url)
@@ -116,9 +114,7 @@ async def _run_pipeline(
         settings.openrouter_site_url,
         settings.openrouter_app_name,
     )
-    pdf_bytes = await asyncio.to_thread(markdown_to_pdf_bytes, summary_markdown)
-
-    return transcript_id, summary_markdown, video_id or url_hash, pdf_bytes
+    return transcript_id, summary_markdown, video_id or url_hash
 
 
 async def _process_job(job: dict[str, Any], settings: Settings, admin_client: AsyncClient) -> None:
@@ -129,19 +125,11 @@ async def _process_job(job: dict[str, Any], settings: Settings, admin_client: As
     provider_model = "deepgram:nova-2"
     summary_id = str(uuid.uuid4())
 
-    transcript_id, summary_markdown, video_segment, pdf_bytes = await _run_pipeline(
+    transcript_id, summary_markdown, video_segment = await _run_pipeline(
         url=url,
         settings=settings,
         provider_model=provider_model,
         admin_client=admin_client,
-    )
-
-    object_key = f"{user_id}/{video_segment}/{summary_id}.pdf"
-    await upload_pdf(
-        admin_client,
-        bucket=settings.supabase_bucket,
-        object_key=object_key,
-        pdf_bytes=pdf_bytes,
     )
 
     await create_summary(
@@ -152,7 +140,7 @@ async def _process_job(job: dict[str, Any], settings: Settings, admin_client: As
         prompt_key=SUMMARY_PROMPT_KEY_DEFAULT,
         summary_model=settings.openrouter_model,
         summary_markdown=summary_markdown,
-        pdf_object_key=object_key,
+        pdf_object_key=None,
     )
 
     await mark_job_succeeded(admin_client, job_id=job_id, summary_id=summary_id)

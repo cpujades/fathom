@@ -17,3 +17,8 @@ class SummaryResponse(BaseModel):
     summary_id: UUID
     markdown: str
     pdf_url: str | None
+
+
+class SummaryPdfResponse(BaseModel):
+    summary_id: UUID
+    pdf_url: str
