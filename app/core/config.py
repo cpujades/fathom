@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     cors_allow_origins: list[str] = Field(default_factory=list, validation_alias="CORS_ALLOW_ORIGINS")
     rate_limit_requests: int = Field(default=0, validation_alias="RATE_LIMIT_REQUESTS")
     rate_limit_window_seconds: int = Field(default=60, validation_alias="RATE_LIMIT_WINDOW_SECONDS")
+    rate_limit_max_ips: int = Field(default=10000, validation_alias="RATE_LIMIT_MAX_IPS")
+    rate_limit_idle_seconds: int = Field(default=1800, validation_alias="RATE_LIMIT_IDLE_SECONDS")
     max_request_bytes: int = Field(default=64000, validation_alias="MAX_REQUEST_BYTES")
     max_duration_seconds: int = Field(default=14400, validation_alias="MAX_DURATION_SECONDS")
     youtube_allow_hosts: list[str] = Field(
