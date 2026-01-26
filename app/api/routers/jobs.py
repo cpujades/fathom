@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Request
 from starlette.responses import StreamingResponse
 
 from app.api.deps.auth import AuthContext, get_auth_context
-from app.application.jobs import get_job_status, stream_job_events
+from app.application.jobs import JOB_STATUS_POLL_INTERVAL_SECONDS, get_job_status, stream_job_events
 from app.core.config import Settings, get_settings
 from app.schemas.errors import ErrorResponse
 from app.schemas.jobs import JobStatusResponse
@@ -48,8 +48,6 @@ async def server_sent_events(
     auth: Annotated[AuthContext, Depends(get_auth_context)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> StreamingResponse:
-    poll_interval = settings.job_status_poll_interval_seconds
-
     headers = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
     return StreamingResponse(
         stream_job_events(
@@ -57,7 +55,7 @@ async def server_sent_events(
             request,
             auth,
             settings,
-            poll_interval_seconds=poll_interval,
+            poll_interval_seconds=JOB_STATUS_POLL_INTERVAL_SECONDS,
         ),
         media_type="text/event-stream",
         headers=headers,

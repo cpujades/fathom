@@ -6,6 +6,7 @@ from uuid import UUID
 from app.api.deps.auth import AuthContext
 from app.application.guards import validate_video_duration, validate_youtube_url
 from app.core.config import Settings
+from app.core.constants import SIGNED_URL_TTL_SECONDS
 from app.core.errors import ExternalServiceError
 from app.crud.supabase.jobs import create_job
 from app.crud.supabase.storage_objects import create_pdf_signed_url, upload_pdf
@@ -22,9 +23,9 @@ async def create_summary_job(
     auth: AuthContext,
     settings: Settings,
 ) -> SummarizeResponse:
-    validate_youtube_url(str(request.url), settings)
+    validate_youtube_url(str(request.url))
     metadata = await asyncio.to_thread(fetch_video_metadata, str(request.url))
-    validate_video_duration(metadata.duration_seconds, settings)
+    validate_video_duration(metadata.duration_seconds)
 
     client = await create_supabase_user_client(settings, auth.access_token)
     job = await create_job(client, url=str(request.url), user_id=auth.user_id)
@@ -52,7 +53,7 @@ async def get_summary_with_pdf(
         admin_client,
         settings.supabase_bucket,
         object_key,
-        settings.supabase_signed_url_ttl_seconds,
+        SIGNED_URL_TTL_SECONDS,
     )
 
     return SummaryResponse(
@@ -77,7 +78,7 @@ async def create_summary_pdf(
             admin_client,
             settings.supabase_bucket,
             existing_object_key,
-            settings.supabase_signed_url_ttl_seconds,
+            SIGNED_URL_TTL_SECONDS,
         )
         if not pdf_url:
             raise ExternalServiceError("Signed PDF URL was not returned.")
@@ -110,7 +111,7 @@ async def create_summary_pdf(
         admin_client,
         settings.supabase_bucket,
         object_key,
-        settings.supabase_signed_url_ttl_seconds,
+        SIGNED_URL_TTL_SECONDS,
     )
     if not pdf_url:
         raise ExternalServiceError("Signed PDF URL was not returned.")

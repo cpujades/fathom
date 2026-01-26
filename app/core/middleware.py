@@ -12,45 +12,72 @@ from starlette.responses import Response
 from app.core.errors import RateLimitError, RequestTooLargeError
 
 logger = logging.getLogger("fathom")
+
+# ---------------------------------------------------------------------------
+# Request size limits
+# ---------------------------------------------------------------------------
+MAX_REQUEST_BYTES = 64_000  # 64 KB
+
+# ---------------------------------------------------------------------------
+# Rate limiting defaults (only used when rate limiting is enabled)
+# ---------------------------------------------------------------------------
+RATE_LIMIT_WINDOW_SECONDS = 60
+RATE_LIMIT_MAX_IPS = 10_000
+RATE_LIMIT_IDLE_SECONDS = 1800  # 30 minutes
+
 _rate_limit_buckets: dict[str, deque[float]] = {}
 _rate_limit_last_seen: dict[str, float] = {}
 
 
-async def _enforce_request_size(request: Request, max_bytes: int) -> None:
-    if max_bytes <= 0:
-        return
-
+async def _enforce_request_size(request: Request) -> None:
     content_length = request.headers.get("content-length")
     if content_length:
         try:
-            if int(content_length) > max_bytes:
+            if int(content_length) > MAX_REQUEST_BYTES:
                 raise RequestTooLargeError("Request body too large.")
         except ValueError:
-            # Ignore invalid Content-Length and fall back to streaming enforcement.
             pass
 
     body = bytearray()
     async for chunk in request.stream():
         body.extend(chunk)
-        if len(body) > max_bytes:
+        if len(body) > MAX_REQUEST_BYTES:
             raise RequestTooLargeError("Request body too large.")
 
     request._body = bytes(body)
 
 
-def _evict_rate_limit_buckets(*, now: float, max_ips: int, idle_seconds: int) -> None:
-    if idle_seconds > 0:
-        stale_ips = [ip for ip, last_seen in _rate_limit_last_seen.items() if now - last_seen > idle_seconds]
-        for ip in stale_ips:
-            _rate_limit_last_seen.pop(ip, None)
-            _rate_limit_buckets.pop(ip, None)
+def _evict_stale_buckets(now: float) -> None:
+    stale_ips = [ip for ip, last in _rate_limit_last_seen.items() if now - last > RATE_LIMIT_IDLE_SECONDS]
+    for ip in stale_ips:
+        _rate_limit_last_seen.pop(ip, None)
+        _rate_limit_buckets.pop(ip, None)
 
-    if max_ips > 0 and len(_rate_limit_buckets) > max_ips:
+    if len(_rate_limit_buckets) > RATE_LIMIT_MAX_IPS:
         candidates = sorted(_rate_limit_last_seen.items(), key=lambda item: item[1])
-        overflow = len(_rate_limit_buckets) - max_ips
+        overflow = len(_rate_limit_buckets) - RATE_LIMIT_MAX_IPS
         for ip, _ in candidates[:overflow]:
             _rate_limit_last_seen.pop(ip, None)
             _rate_limit_buckets.pop(ip, None)
+
+
+def _enforce_rate_limit(request: Request, rate_limit: int) -> None:
+    forwarded_for = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+    client_host = request.client.host if request.client else ""
+    ip = forwarded_for or client_host or "unknown"
+    now = time.monotonic()
+
+    _evict_stale_buckets(now)
+
+    bucket = _rate_limit_buckets.setdefault(ip, deque())
+    while bucket and now - bucket[0] > RATE_LIMIT_WINDOW_SECONDS:
+        bucket.popleft()
+
+    if len(bucket) >= rate_limit:
+        raise RateLimitError("Too many requests.")
+
+    bucket.append(now)
+    _rate_limit_last_seen[ip] = now
 
 
 async def log_requests(request: Request, call_next: RequestResponseEndpoint) -> Response:
@@ -58,25 +85,11 @@ async def log_requests(request: Request, call_next: RequestResponseEndpoint) -> 
     request_id = request.headers.get("X-Request-Id") or uuid.uuid4().hex
     request.state.request_id = request_id
 
-    await _enforce_request_size(request, request.app.state.settings.max_request_bytes)
+    await _enforce_request_size(request)
 
-    rate_limit = request.app.state.settings.rate_limit_requests
+    rate_limit = getattr(request.app.state, "rate_limit", 0)
     if rate_limit > 0:
-        window_seconds = max(request.app.state.settings.rate_limit_window_seconds, 1)
-        max_ips = request.app.state.settings.rate_limit_max_ips
-        idle_seconds = request.app.state.settings.rate_limit_idle_seconds
-        forwarded_for = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
-        client_host = request.client.host if request.client else ""
-        ip = forwarded_for or client_host or "unknown"
-        now = time.monotonic()
-        _evict_rate_limit_buckets(now=now, max_ips=max_ips, idle_seconds=idle_seconds)
-        bucket = _rate_limit_buckets.setdefault(ip, deque())
-        while bucket and now - bucket[0] > window_seconds:
-            bucket.popleft()
-        if len(bucket) >= rate_limit:
-            raise RateLimitError("Too many requests.")
-        bucket.append(now)
-        _rate_limit_last_seen[ip] = now
+        _enforce_rate_limit(request, rate_limit)
 
     response = await call_next(request)
     response.headers["X-Request-Id"] = request_id

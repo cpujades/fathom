@@ -7,36 +7,30 @@ from openai import APIError, OpenAI
 from app.core.constants import SYSTEM_PROMPT
 from app.core.errors import ExternalServiceError
 
+# Default OpenRouter model for summarization
+OPENROUTER_MODEL = "openai/gpt-4.1-mini"
+
+# OpenRouter metadata headers (optional but recommended)
+OPENROUTER_APP_NAME = "fathom"
+
 
 class SummarizationError(ExternalServiceError):
     pass
 
 
-def summarize_transcript(
-    transcript: str,
-    api_key: str,
-    model: str,
-    site_url: str | None,
-    app_name: str | None,
-) -> str:
+def summarize_transcript(transcript: str, api_key: str) -> str:
     if not api_key:
         raise SummarizationError("Missing OPENROUTER_API_KEY.")
-
-    headers: dict[str, str] = {}
-    if site_url:
-        headers["HTTP-Referer"] = site_url
-    if app_name:
-        headers["X-Title"] = app_name
 
     client = OpenAI(
         api_key=api_key,
         base_url="https://openrouter.ai/api/v1",
-        default_headers=headers or None,
+        default_headers={"X-Title": OPENROUTER_APP_NAME},
     )
 
     try:
         response = client.chat.completions.create(
-            model=model,
+            model=OPENROUTER_MODEL,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": transcript},
