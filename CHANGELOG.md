@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/cpujades/fathom/compare/v0.5.0...v0.5.1) (2026-01-27)
+
+
+### Refactoring
+
+* **structure:** move entrypoint to api app and group orchestration ([#45](https://github.com/cpujades/fathom/issues/45)) ([8f76eed](https://github.com/cpujades/fathom/commit/8f76eedbec6a99de6ad93026a02ce93471152ac7))
+
 ## [0.5.0](https://github.com/cpujades/fathom/compare/v0.4.0...v0.5.0) (2026-01-27)
 
 
