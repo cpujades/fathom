@@ -10,16 +10,15 @@ from app.services.supabase.helpers import first_row, is_unique_violation, raise_
 from supabase import AsyncClient
 
 
+def _summary_select_query(client: AsyncClient) -> Any:
+    """Return the base summaries select query with the fields we need."""
+    return client.table("summaries").select("id,user_id,transcript_id,summary_markdown,pdf_object_key")
+
+
 async def fetch_summary(client: AsyncClient, summary_id: str) -> dict[str, Any]:
     """Fetch a summary by ID."""
     try:
-        response = await (
-            client.table("summaries")
-            .select("id,user_id,transcript_id,summary_markdown,pdf_object_key")
-            .eq("id", summary_id)
-            .limit(1)
-            .execute()
-        )
+        response = await _summary_select_query(client).eq("id", summary_id).limit(1).execute()
     except APIError as exc:
         raise_for_postgrest_error(exc, "Failed to fetch summary.")
 
@@ -33,17 +32,14 @@ async def fetch_summary(client: AsyncClient, summary_id: str) -> dict[str, Any]:
 async def fetch_summary_by_keys(
     client: AsyncClient,
     *,
-    user_id: str,
     transcript_id: str,
     prompt_key: str,
     summary_model: str,
 ) -> dict[str, Any] | None:
-    """Fetch a summary by its per-user unique key."""
+    """Fetch a summary by its global cache key."""
     try:
         response = await (
-            client.table("summaries")
-            .select("id,user_id,transcript_id,summary_markdown,pdf_object_key")
-            .eq("user_id", user_id)
+            _summary_select_query(client)
             .eq("transcript_id", transcript_id)
             .eq("prompt_key", prompt_key)
             .eq("summary_model", summary_model)
@@ -88,7 +84,6 @@ async def create_summary(
         if is_unique_violation(exc):
             existing = await fetch_summary_by_keys(
                 client,
-                user_id=user_id,
                 transcript_id=transcript_id,
                 prompt_key=prompt_key,
                 summary_model=summary_model,
