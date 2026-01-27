@@ -53,5 +53,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 # Initialize logging once at module load
 setup_logging()
 
-# Default app instance for uvicorn (uvicorn app.main:app)
+# Default app instance for uvicorn (uvicorn app.api.app:app)
 app = create_app()

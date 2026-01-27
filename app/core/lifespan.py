@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.core.config import get_settings
-from app.worker import _run_loop
+from app.orchestration.runner import _run_loop
 
 logger = logging.getLogger(__name__)
 

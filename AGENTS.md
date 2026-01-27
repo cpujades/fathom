@@ -5,7 +5,7 @@
 - a structured Markdown summary (OpenRouter via the OpenAI Python SDK)
 - a PDF export (WeasyPrint)
 
-Entry point: `app/main.py`
+Entry point: `app/api/app.py`
 
 ## Quickstart (local)
 
@@ -16,7 +16,7 @@ For full setup details (including system deps like `ffmpeg` and WeasyPrint requi
 uv venv
 source .venv/bin/activate
 uv sync
-uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+uvicorn app.api.app:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 ## Request flow (high level)
@@ -25,7 +25,7 @@ uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
  - `POST /summarize` creates a job row and returns a `job_id`.
  - `GET /jobs/{job_id}` returns job status (and `summary_id` when ready).
  - `GET /summaries/{summary_id}` returns the summary and a signed `pdf_url` when available.
-- **Orchestration**: `app/pipeline.py`
+- **Orchestration**: `app/orchestration/pipeline.py`
  - Used by a separate worker process: downloads audio → transcribes → summarizes → renders PDF bytes → uploads to Supabase Storage.
 - **Integrations**: `app/services/*`
   - `downloader.py` (yt-dlp), `transcriber.py` (Deepgram), `summarizer.py` (OpenRouter via OpenAI SDK), `pdf.py` (WeasyPrint).
@@ -82,10 +82,10 @@ uv run pre-commit run --all-files
 - **Architecture boundaries**
   - `app/api/*` owns HTTP concerns (request/response models, status codes, file responses).
   - `app/services/*` owns IO/integrations and should stay small and composable.
-  - `app/pipeline.py` coordinates services; keep orchestration readable and linear.
+  - `app/orchestration/pipeline.py` coordinates services; keep orchestration readable and linear.
 - **Error handling**
   - Raise domain errors (`AppError` and subclasses) from services/pipeline.
-  - `app/main.py` maps `AppError` to the API error shape; avoid raising `HTTPException` from deep layers.
+  - `app/api/app.py` maps `AppError` to the API error shape; avoid raising `HTTPException` from deep layers.
 - **Configuration**
   - Read config via `get_settings()`; avoid implicit global state.
   - Keep secrets out of logs and out of the repo.

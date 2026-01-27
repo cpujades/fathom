@@ -65,14 +65,14 @@ Optional best‑practice guardrails:
 ### Run
 
 ```bash
-uvicorn app.main:app --reload
+uvicorn app.api.app:app --reload
 ```
 
 ### Worker
 Run the background worker in a separate process:
 
 ```bash
-python -m app.worker
+python -m app.orchestration.runner
 ```
 
 ### Use
