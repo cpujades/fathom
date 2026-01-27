@@ -47,6 +47,13 @@ STORAGE_RATE_LIMIT_CODES = frozenset({"SlowDown"})
 POSTGREST_AUTH_CODES = frozenset({"PGRST301", "PGRST302"})
 # RLS failures: 42501 = insufficient_privilege (PostgreSQL)
 POSTGREST_FORBIDDEN_CODES = frozenset({"42501"})
+# Unique violation: 23505 = unique_violation (PostgreSQL)
+POSTGREST_UNIQUE_VIOLATION_CODES = frozenset({"23505"})
+
+
+def is_unique_violation(exc: APIError) -> bool:
+    """Return True when the error is a PostgreSQL unique-constraint violation."""
+    return (getattr(exc, "code", None) or "") == POSTGREST_UNIQUE_VIOLATION_CODES
 
 
 def raise_for_auth_error(exc: AuthApiError, fallback_message: str) -> NoReturn:

@@ -24,7 +24,7 @@ select
   '00000000-0000-0000-0000-000000000001'::uuid,
   t.id,
   'default',
-  'openai/gpt-4.1-mini',
+  'x-ai/grok-4.1-fast',
   '# Example summary
 
 This is a seeded summary.',
@@ -43,4 +43,4 @@ from public.summaries s
 join public.transcripts t on t.id = s.transcript_id
 where t.url_hash = 'example_url_hash'
   and s.prompt_key = 'default'
-  and s.summary_model = 'openai/gpt-4.1-mini';
+  and s.summary_model = 'x-ai/grok-4.1-fast';

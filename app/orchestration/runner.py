@@ -30,7 +30,7 @@ from app.crud.supabase.transcripts import (
 from app.services.downloader import download_audio, fetch_muxed_media_url
 from app.services.summarizer import OPENROUTER_MODEL, summarize_transcript
 from app.services.supabase import create_supabase_admin_client
-from app.services.transcriber import DEEPGRAM_MODEL, TranscriptionError, transcribe_file, transcribe_url
+from app.services.transcriber import DEEPGRAM_MODEL, transcribe_file, transcribe_url
 from app.services.youtube import extract_youtube_video_id
 from supabase import AsyncClient
 
@@ -44,6 +44,9 @@ WORKER_IDLE_SLEEP_SECONDS = 5
 WORKER_MAX_ATTEMPTS = 3
 WORKER_BACKOFF_BASE_SECONDS = 5
 WORKER_STALE_AFTER_SECONDS = 900  # 15 minutes
+
+# Direct URL transcription configuration
+DIRECT_URL_MAX_ATTEMPTS = 2
 
 
 def _hash_url(url: str) -> str:
@@ -96,26 +99,37 @@ async def _run_pipeline(
         transcript_id = transcript_row["id"]
         logger.info("transcript cache_hit=true transcript_id=%s video_id=%s", transcript_id, video_id)
     else:
-        direct_url = None
+        direct_url: str | None
         try:
             direct_url = await asyncio.to_thread(fetch_muxed_media_url, url)
         except Exception:
             direct_url = None
 
+        direct_transcription_succeeded = False
         if direct_url:
-            try:
+            for attempt in range(1, DIRECT_URL_MAX_ATTEMPTS + 1):
                 step_start = time.perf_counter()
-                transcript_text = await transcribe_url(direct_url, settings.deepgram_api_key)
-                _log_step(
-                    "transcribe_url",
-                    duration_ms=(time.perf_counter() - step_start) * 1000,
-                    provider="deepgram",
-                )
-                video_id = parsed_video_id
-            except TranscriptionError:
-                direct_url = None
+                try:
+                    transcript_text = await transcribe_url(direct_url, settings.deepgram_api_key)
+                    _log_step(
+                        "transcribe_url",
+                        duration_ms=(time.perf_counter() - step_start) * 1000,
+                        provider="deepgram",
+                        attempt=attempt,
+                    )
+                    video_id = parsed_video_id
+                    direct_transcription_succeeded = True
+                    break
+                except Exception as exc:  # Fall back to download on any failure.
+                    duration_ms = (time.perf_counter() - step_start) * 1000
+                    logger.warning(
+                        "transcribe_url failed attempt=%s %.2fms error=%s",
+                        attempt,
+                        duration_ms,
+                        type(exc).__name__,
+                    )
 
-        if not direct_url:
+        if not direct_transcription_succeeded:
             with tempfile.TemporaryDirectory() as tmp_dir:
                 step_start = time.perf_counter()
                 download_result = await asyncio.to_thread(download_audio, url, tmp_dir)
@@ -156,21 +170,21 @@ async def _process_job(job: dict[str, Any], settings: Settings, admin_client: As
     job_id = job["id"]
     url = job["url"]
     user_id = job["user_id"]
-    summary_id = str(uuid.uuid4())
+    requested_summary_id = str(uuid.uuid4())
     job_start = time.perf_counter()
 
-    with log_context(job_id=job_id, user_id=user_id, summary_id=summary_id):
+    with log_context(job_id=job_id, user_id=user_id, summary_id=requested_summary_id):
         logger.info("job start")
 
-        transcript_id, summary_markdown, video_segment = await _run_pipeline(
+        transcript_id, summary_markdown, _video_segment = await _run_pipeline(
             url=url,
             settings=settings,
             admin_client=admin_client,
         )
 
-        await create_summary(
+        summary_row = await create_summary(
             admin_client,
-            summary_id=summary_id,
+            summary_id=requested_summary_id,
             user_id=user_id,
             transcript_id=transcript_id,
             prompt_key=SUMMARY_PROMPT_KEY_DEFAULT,
@@ -178,8 +192,17 @@ async def _process_job(job: dict[str, Any], settings: Settings, admin_client: As
             summary_markdown=summary_markdown,
             pdf_object_key=None,
         )
+        summary_id = summary_row["id"]
+        if summary_id != requested_summary_id:
+            logger.info(
+                "summary deduplicated existing_summary_id=%s requested_summary_id=%s",
+                summary_id,
+                requested_summary_id,
+            )
 
-        await mark_job_succeeded(admin_client, job_id=job_id, summary_id=summary_id)
+        # Ensure the job points at the canonical summary id.
+        with log_context(summary_id=summary_id):
+            await mark_job_succeeded(admin_client, job_id=job_id, summary_id=summary_id)
         _log_step(
             "job complete",
             duration_ms=(time.perf_counter() - job_start) * 1000,

@@ -6,7 +6,7 @@ from typing import Any
 
 from postgrest import APIError
 
-from app.services.supabase.helpers import first_row, raise_for_postgrest_error
+from app.services.supabase.helpers import first_row, is_unique_violation, raise_for_postgrest_error
 from supabase import AsyncClient
 
 
@@ -30,6 +30,36 @@ async def fetch_summary(client: AsyncClient, summary_id: str) -> dict[str, Any]:
     )
 
 
+async def fetch_summary_by_keys(
+    client: AsyncClient,
+    *,
+    user_id: str,
+    transcript_id: str,
+    prompt_key: str,
+    summary_model: str,
+) -> dict[str, Any] | None:
+    """Fetch a summary by its per-user unique key."""
+    try:
+        response = await (
+            client.table("summaries")
+            .select("id,user_id,transcript_id,summary_markdown,pdf_object_key")
+            .eq("user_id", user_id)
+            .eq("transcript_id", transcript_id)
+            .eq("prompt_key", prompt_key)
+            .eq("summary_model", summary_model)
+            .limit(1)
+            .execute()
+        )
+    except APIError as exc:
+        raise_for_postgrest_error(exc, "Failed to fetch summary by keys.")
+
+    data = response.data or []
+    if not data:
+        return None
+
+    return first_row(data, error_message="Supabase returned an unexpected summaries shape.")
+
+
 async def create_summary(
     client: AsyncClient,
     *,
@@ -41,23 +71,30 @@ async def create_summary(
     summary_markdown: str,
     pdf_object_key: str | None,
 ) -> dict[str, Any]:
+    payload = {
+        "id": summary_id,
+        "user_id": user_id,
+        "transcript_id": transcript_id,
+        "prompt_key": prompt_key,
+        "summary_model": summary_model,
+        "summary_markdown": summary_markdown,
+        "pdf_object_key": pdf_object_key,
+    }
+
     try:
-        response = (
-            await client.table("summaries")
-            .insert(
-                {
-                    "id": summary_id,
-                    "user_id": user_id,
-                    "transcript_id": transcript_id,
-                    "prompt_key": prompt_key,
-                    "summary_model": summary_model,
-                    "summary_markdown": summary_markdown,
-                    "pdf_object_key": pdf_object_key,
-                }
-            )
-            .execute()
-        )
+        response = await client.table("summaries").insert(payload).execute()
     except APIError as exc:
+        # Make the insert idempotent under retries/races.
+        if is_unique_violation(exc):
+            existing = await fetch_summary_by_keys(
+                client,
+                user_id=user_id,
+                transcript_id=transcript_id,
+                prompt_key=prompt_key,
+                summary_model=summary_model,
+            )
+            if existing:
+                return existing
         raise_for_postgrest_error(exc, "Failed to create summary.")
 
     return first_row(response.data, error_message="Failed to create summary.")

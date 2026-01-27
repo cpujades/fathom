@@ -55,7 +55,7 @@ cp env.example .env
 Fill in:
 - `DEEPGRAM_API_KEY`
 - `OPENROUTER_API_KEY`
-- `OPENROUTER_MODEL` (e.g. `openai/gpt-4.1-mini` or `google/gemini-3-flash-preview`)
+- `OPENROUTER_MODEL` (e.g. `x-ai/grok-4.1-fast`)
 Optional best‑practice guardrails:
 - `CORS_ALLOW_ORIGINS` (comma-separated list)
 - `RATE_LIMIT_REQUESTS` and `RATE_LIMIT_WINDOW_SECONDS`

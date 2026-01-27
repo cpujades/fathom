@@ -6,7 +6,7 @@ from typing import Any
 
 from postgrest import APIError
 
-from app.services.supabase.helpers import first_row, raise_for_postgrest_error
+from app.services.supabase.helpers import first_row, is_unique_violation, raise_for_postgrest_error
 from supabase import AsyncClient
 
 
@@ -68,20 +68,25 @@ async def create_transcript(
     transcript_text: str,
     provider_model: str,
 ) -> dict[str, Any]:
+    payload = {
+        "url_hash": url_hash,
+        "video_id": video_id,
+        "transcript_text": transcript_text,
+        "provider_model": provider_model,
+    }
+
     try:
-        response = (
-            await client.table("transcripts")
-            .insert(
-                {
-                    "url_hash": url_hash,
-                    "video_id": video_id,
-                    "transcript_text": transcript_text,
-                    "provider_model": provider_model,
-                }
-            )
-            .execute()
-        )
+        response = await client.table("transcripts").insert(payload).execute()
     except APIError as exc:
+        # Make the insert idempotent under retries/races.
+        if is_unique_violation(exc):
+            existing = await fetch_transcript_by_hash(
+                client,
+                url_hash=url_hash,
+                provider_model=provider_model,
+            )
+            if existing:
+                return existing
         raise_for_postgrest_error(exc, "Failed to create transcript.")
 
     return first_row(response.data, error_message="Failed to create transcript.")
