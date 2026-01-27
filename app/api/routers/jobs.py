@@ -10,7 +10,7 @@ from app.core.config import Settings, get_settings
 from app.schemas.errors import ErrorResponse
 from app.schemas.jobs import JobStatusResponse
 
-router = APIRouter(prefix="/jobs")
+router = APIRouter(prefix="/jobs", tags=["jobs"])
 
 
 @router.get(

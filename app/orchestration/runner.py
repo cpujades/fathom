@@ -245,11 +245,28 @@ async def _run_loop(settings: Settings) -> None:
             continue
 
         attempt_count = int(job.get("attempt_count") or 0)
-        logger.info("job claimed job_id=%s attempt=%s", job.get("id"), attempt_count)
+        job_id = job.get("id")
+        if not job_id:
+            logger.debug("claim_next_job returned an empty row; treating as no job available")
+            await asyncio.sleep(WORKER_IDLE_SLEEP_SECONDS)
+            continue
+
+        logger.info("job claimed job_id=%s attempt=%s", job_id, attempt_count)
+        if not job.get("url") or not job.get("user_id"):
+            logger.error("job missing required fields job_id=%s", job_id)
+            await mark_job_failed(
+                admin_client,
+                job_id=job_id,
+                error_code="invalid_job_payload",
+                error_message="Job is missing required fields (url or user_id).",
+            )
+            await asyncio.sleep(WORKER_POLL_INTERVAL_SECONDS)
+            continue
+
         if attempt_count > WORKER_MAX_ATTEMPTS:
             await mark_job_failed(
                 admin_client,
-                job_id=job["id"],
+                job_id=job_id,
                 error_code="max_attempts_exceeded",
                 error_message="Job exceeded maximum retry attempts.",
             )
@@ -257,13 +274,13 @@ async def _run_loop(settings: Settings) -> None:
             continue
 
         try:
-            with log_context(job_id=job.get("id"), attempt=attempt_count):
+            with log_context(job_id=job_id, attempt=attempt_count):
                 await _process_job(job, settings, admin_client)
         except Exception as exc:
             error_code, error_message = _extract_error(exc)
             logger.exception(
                 "job failed job_id=%s attempt=%s error_code=%s",
-                job.get("id"),
+                job_id,
                 attempt_count,
                 error_code,
             )
@@ -272,7 +289,7 @@ async def _run_loop(settings: Settings) -> None:
                 run_after = datetime.now(UTC) + timedelta(seconds=backoff_seconds)
                 await mark_job_retry(
                     admin_client,
-                    job_id=job["id"],
+                    job_id=job_id,
                     error_code=error_code,
                     error_message=error_message,
                     run_after=run_after,
@@ -280,7 +297,7 @@ async def _run_loop(settings: Settings) -> None:
             else:
                 await mark_job_failed(
                     admin_client,
-                    job_id=job["id"],
+                    job_id=job_id,
                     error_code=error_code,
                     error_message=error_message,
                 )

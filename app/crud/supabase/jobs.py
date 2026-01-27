@@ -51,9 +51,17 @@ async def claim_next_job(client: AsyncClient) -> dict[str, Any] | None:
     if not data:
         return None
     if isinstance(data, dict):
-        return dict(data)
+        row = dict(data)
+        # Supabase can return a "null composite" row when no job is available,
+        # which appears as a dict with all fields set to None.
+        if not row.get("id"):
+            return None
+        return row
 
-    return first_row(data, error_message="Supabase returned an unexpected claim shape.")
+    row = first_row(data, error_message="Supabase returned an unexpected claim shape.")
+    if not row.get("id"):
+        return None
+    return row
 
 
 async def requeue_stale_jobs(client: AsyncClient, *, stale_after_seconds: int) -> int:
