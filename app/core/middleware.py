@@ -10,8 +10,9 @@ from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
 
 from app.core.errors import RateLimitError, RequestTooLargeError
+from app.core.logging import log_context
 
-logger = logging.getLogger("fathom")
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Request size limits
@@ -91,15 +92,15 @@ async def log_requests(request: Request, call_next: RequestResponseEndpoint) -> 
     if rate_limit > 0:
         _enforce_rate_limit(request, rate_limit)
 
-    response = await call_next(request)
-    response.headers["X-Request-Id"] = request_id
-    duration_ms = (time.perf_counter() - start) * 1000
-    logger.info(
-        "%s %s %s %.2fms request_id=%s",
-        request.method,
-        request.url.path,
-        response.status_code,
-        duration_ms,
-        request_id,
-    )
-    return response
+    with log_context(request_id=request_id, method=request.method, path=request.url.path):
+        response = await call_next(request)
+        response.headers["X-Request-Id"] = request_id
+        duration_ms = (time.perf_counter() - start) * 1000
+        logger.info(
+            "%s %s %s %.2fms",
+            request.method,
+            request.url.path,
+            response.status_code,
+            duration_ms,
+        )
+        return response

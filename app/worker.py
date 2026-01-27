@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import logging
 import tempfile
+import time
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -12,6 +13,7 @@ from urllib.parse import urlparse
 from app.core.config import Settings, get_settings
 from app.core.constants import SUMMARY_PROMPT_KEY_DEFAULT
 from app.core.errors import AppError
+from app.core.logging import log_context
 from app.crud.supabase.jobs import (
     claim_next_job,
     mark_job_failed,
@@ -32,7 +34,7 @@ from app.services.transcriber import DEEPGRAM_MODEL, TranscriptionError, transcr
 from app.services.youtube import extract_youtube_video_id
 from supabase import AsyncClient
 
-logger = logging.getLogger("fathom.worker")
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Worker configuration
@@ -50,6 +52,14 @@ def _hash_url(url: str) -> str:
 
 def _compute_backoff_seconds(base: int, attempt: int) -> int:
     return int(base * (2 ** max(attempt - 1, 0)))
+
+
+def _log_step(label: str, *, duration_ms: float, **fields: object) -> None:
+    field_text = " ".join(f"{key}={value}" for key, value in fields.items())
+    if field_text:
+        logger.info("%s %.2fms %s", label, duration_ms, field_text)
+    else:
+        logger.info("%s %.2fms", label, duration_ms)
 
 
 async def _run_pipeline(
@@ -84,6 +94,7 @@ async def _run_pipeline(
         transcript_text = transcript_row["transcript_text"]
         video_id = transcript_row.get("video_id") or parsed_video_id
         transcript_id = transcript_row["id"]
+        logger.info("transcript cache_hit=true transcript_id=%s video_id=%s", transcript_id, video_id)
     else:
         direct_url = None
         try:
@@ -93,16 +104,34 @@ async def _run_pipeline(
 
         if direct_url:
             try:
+                step_start = time.perf_counter()
                 transcript_text = await transcribe_url(direct_url, settings.deepgram_api_key)
+                _log_step(
+                    "transcribe_url",
+                    duration_ms=(time.perf_counter() - step_start) * 1000,
+                    provider="deepgram",
+                )
                 video_id = parsed_video_id
             except TranscriptionError:
                 direct_url = None
 
         if not direct_url:
             with tempfile.TemporaryDirectory() as tmp_dir:
+                step_start = time.perf_counter()
                 download_result = await asyncio.to_thread(download_audio, url, tmp_dir)
+                _log_step(
+                    "download_audio",
+                    duration_ms=(time.perf_counter() - step_start) * 1000,
+                    video_id=download_result.video_id or parsed_video_id,
+                )
                 video_id = download_result.video_id or parsed_video_id
+                step_start = time.perf_counter()
                 transcript_text = await transcribe_file(download_result.path, settings.deepgram_api_key)
+                _log_step(
+                    "transcribe_file",
+                    duration_ms=(time.perf_counter() - step_start) * 1000,
+                    provider="deepgram",
+                )
 
         transcript_row = await create_transcript(
             admin_client,
@@ -113,7 +142,13 @@ async def _run_pipeline(
         )
         transcript_id = transcript_row["id"]
 
+    step_start = time.perf_counter()
     summary_markdown = await summarize_transcript(transcript_text, settings.openrouter_api_key)
+    _log_step(
+        "summarize_transcript",
+        duration_ms=(time.perf_counter() - step_start) * 1000,
+        model=OPENROUTER_MODEL,
+    )
     return transcript_id, summary_markdown, video_id or url_hash
 
 
@@ -122,25 +157,33 @@ async def _process_job(job: dict[str, Any], settings: Settings, admin_client: As
     url = job["url"]
     user_id = job["user_id"]
     summary_id = str(uuid.uuid4())
+    job_start = time.perf_counter()
 
-    transcript_id, summary_markdown, video_segment = await _run_pipeline(
-        url=url,
-        settings=settings,
-        admin_client=admin_client,
-    )
+    with log_context(job_id=job_id, user_id=user_id, summary_id=summary_id):
+        logger.info("job start")
 
-    await create_summary(
-        admin_client,
-        summary_id=summary_id,
-        user_id=user_id,
-        transcript_id=transcript_id,
-        prompt_key=SUMMARY_PROMPT_KEY_DEFAULT,
-        summary_model=OPENROUTER_MODEL,
-        summary_markdown=summary_markdown,
-        pdf_object_key=None,
-    )
+        transcript_id, summary_markdown, video_segment = await _run_pipeline(
+            url=url,
+            settings=settings,
+            admin_client=admin_client,
+        )
 
-    await mark_job_succeeded(admin_client, job_id=job_id, summary_id=summary_id)
+        await create_summary(
+            admin_client,
+            summary_id=summary_id,
+            user_id=user_id,
+            transcript_id=transcript_id,
+            prompt_key=SUMMARY_PROMPT_KEY_DEFAULT,
+            summary_model=OPENROUTER_MODEL,
+            summary_markdown=summary_markdown,
+            pdf_object_key=None,
+        )
+
+        await mark_job_succeeded(admin_client, job_id=job_id, summary_id=summary_id)
+        _log_step(
+            "job complete",
+            duration_ms=(time.perf_counter() - job_start) * 1000,
+        )
 
 
 def _extract_error(exc: Exception) -> tuple[str, str]:
@@ -160,6 +203,7 @@ async def _run_loop(settings: Settings) -> None:
             continue
 
         attempt_count = int(job.get("attempt_count") or 0)
+        logger.info("job claimed job_id=%s attempt=%s", job.get("id"), attempt_count)
         if attempt_count > WORKER_MAX_ATTEMPTS:
             await mark_job_failed(
                 admin_client,
@@ -171,9 +215,16 @@ async def _run_loop(settings: Settings) -> None:
             continue
 
         try:
-            await _process_job(job, settings, admin_client)
+            with log_context(job_id=job.get("id"), attempt=attempt_count):
+                await _process_job(job, settings, admin_client)
         except Exception as exc:
             error_code, error_message = _extract_error(exc)
+            logger.exception(
+                "job failed job_id=%s attempt=%s error_code=%s",
+                job.get("id"),
+                attempt_count,
+                error_code,
+            )
             if attempt_count < WORKER_MAX_ATTEMPTS:
                 backoff_seconds = _compute_backoff_seconds(WORKER_BACKOFF_BASE_SECONDS, attempt_count)
                 run_after = datetime.now(UTC) + timedelta(seconds=backoff_seconds)
