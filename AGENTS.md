@@ -45,7 +45,7 @@ cp env.example .env
   - `SUPABASE_PUBLISHABLE_KEY`
   - `SUPABASE_SECRET_KEY`
 - **Optional**
-  - `OPENROUTER_MODEL` (default: `openai/gpt-4.1-mini`)
+  - `OPENROUTER_MODEL` (default: `x-ai/grok-4.1-fast`)
   - `OPENROUTER_SITE_URL` (sent as `HTTP-Referer` header; recommended by OpenRouter)
   - `OPENROUTER_APP_NAME` (sent as `X-Title` header; default: `fathom`)
   - `SUPABASE_BUCKET` (default: `fathom`)

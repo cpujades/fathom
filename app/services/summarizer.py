@@ -8,7 +8,7 @@ from app.core.constants import SYSTEM_PROMPT
 from app.core.errors import ExternalServiceError
 
 # Default OpenRouter model for summarization
-OPENROUTER_MODEL = "openai/gpt-4.1-mini"
+OPENROUTER_MODEL = "x-ai/grok-4.1-fast"
 
 # OpenRouter metadata headers (optional but recommended)
 OPENROUTER_APP_NAME = "fathom"
@@ -25,6 +25,9 @@ async def summarize_transcript(transcript: str, api_key: str) -> str:
     client = AsyncOpenAI(
         api_key=api_key,
         base_url="https://openrouter.ai/api/v1",
+        default_headers={
+            "X-Title": OPENROUTER_APP_NAME,
+        },
     )
 
     try:
