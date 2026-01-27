@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.6.0](https://github.com/cpujades/fathom/compare/v0.5.1...v0.6.0) (2026-01-27)
+
+
+### Features
+
+* **cache:** reuse cached summaries securely via jobs-based RLS ([#49](https://github.com/cpujades/fathom/issues/49)) ([037a8e0](https://github.com/cpujades/fathom/commit/037a8e02c162f083ec402026232a622f1f25be67))
+
+
+### Bug Fixes
+
+* **pipeline:** make transcript/summary inserts idempotent ([#47](https://github.com/cpujades/fathom/issues/47)) ([1b5754c](https://github.com/cpujades/fathom/commit/1b5754c525e94a00071c7634af58c25f08f5416b))
+
 ## [0.5.1](https://github.com/cpujades/fathom/compare/v0.5.0...v0.5.1) (2026-01-27)
 
 
