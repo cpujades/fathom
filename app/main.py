@@ -10,6 +10,7 @@ from app.api.router import router
 from app.core.config import Settings, get_settings
 from app.core.errors import AppError
 from app.core.handlers import handle_app_error, handle_validation_error
+from app.core.lifespan import lifespan
 from app.core.logging import setup_logging
 from app.core.middleware import log_requests
 
@@ -37,7 +38,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
         )
 
-    app = FastAPI(title="Fathom MVP", middleware=middleware)
+    app = FastAPI(title="Fathom MVP", middleware=middleware, lifespan=lifespan)
     app.include_router(router)
     app.state.settings = settings
     app.state.rate_limit = settings.rate_limit
