@@ -21,7 +21,7 @@ from app.crud.supabase.jobs import (
     mark_job_succeeded,
     requeue_stale_jobs,
 )
-from app.crud.supabase.summaries import create_summary
+from app.crud.supabase.summaries import create_summary, fetch_summary_by_keys
 from app.crud.supabase.transcripts import (
     create_transcript,
     fetch_transcript_by_hash,
@@ -65,12 +65,13 @@ def _log_step(label: str, *, duration_ms: float, **fields: object) -> None:
         logger.info("%s %.2fms", label, duration_ms)
 
 
-async def _run_pipeline(
+async def _resolve_transcript(
     *,
     url: str,
     settings: Settings,
     admin_client: AsyncClient,
 ) -> tuple[str, str, str | None]:
+    """Return (transcript_id, transcript_text, video_id_or_hash)."""
     url_hash = _hash_url(url)
     parsed_url = urlparse(url)
     parsed_video_id = extract_youtube_video_id(parsed_url)
@@ -98,72 +99,65 @@ async def _run_pipeline(
         video_id = transcript_row.get("video_id") or parsed_video_id
         transcript_id = transcript_row["id"]
         logger.info("transcript cache_hit=true transcript_id=%s video_id=%s", transcript_id, video_id)
-    else:
-        direct_url: str | None
-        try:
-            direct_url = await asyncio.to_thread(fetch_muxed_media_url, url)
-        except Exception:
-            direct_url = None
+        return transcript_id, transcript_text, video_id or url_hash
 
-        direct_transcription_succeeded = False
-        if direct_url:
-            for attempt in range(1, DIRECT_URL_MAX_ATTEMPTS + 1):
-                step_start = time.perf_counter()
-                try:
-                    transcript_text = await transcribe_url(direct_url, settings.deepgram_api_key)
-                    _log_step(
-                        "transcribe_url",
-                        duration_ms=(time.perf_counter() - step_start) * 1000,
-                        provider="deepgram",
-                        attempt=attempt,
-                    )
-                    video_id = parsed_video_id
-                    direct_transcription_succeeded = True
-                    break
-                except Exception as exc:  # Fall back to download on any failure.
-                    duration_ms = (time.perf_counter() - step_start) * 1000
-                    logger.warning(
-                        "transcribe_url failed attempt=%s %.2fms error=%s",
-                        attempt,
-                        duration_ms,
-                        type(exc).__name__,
-                    )
+    direct_url: str | None
+    try:
+        direct_url = await asyncio.to_thread(fetch_muxed_media_url, url)
+    except Exception:
+        direct_url = None
 
-        if not direct_transcription_succeeded:
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                step_start = time.perf_counter()
-                download_result = await asyncio.to_thread(download_audio, url, tmp_dir)
+    direct_transcription_succeeded = False
+    if direct_url:
+        for attempt in range(1, DIRECT_URL_MAX_ATTEMPTS + 1):
+            step_start = time.perf_counter()
+            try:
+                transcript_text = await transcribe_url(direct_url, settings.deepgram_api_key)
                 _log_step(
-                    "download_audio",
-                    duration_ms=(time.perf_counter() - step_start) * 1000,
-                    video_id=download_result.video_id or parsed_video_id,
-                )
-                video_id = download_result.video_id or parsed_video_id
-                step_start = time.perf_counter()
-                transcript_text = await transcribe_file(download_result.path, settings.deepgram_api_key)
-                _log_step(
-                    "transcribe_file",
+                    "transcribe_url",
                     duration_ms=(time.perf_counter() - step_start) * 1000,
                     provider="deepgram",
+                    attempt=attempt,
+                )
+                video_id = parsed_video_id
+                direct_transcription_succeeded = True
+                break
+            except Exception as exc:  # Fall back to download on any failure.
+                duration_ms = (time.perf_counter() - step_start) * 1000
+                logger.warning(
+                    "transcribe_url failed attempt=%s %.2fms error=%s",
+                    attempt,
+                    duration_ms,
+                    type(exc).__name__,
                 )
 
-        transcript_row = await create_transcript(
-            admin_client,
-            url_hash=url_hash,
-            video_id=video_id,
-            transcript_text=transcript_text,
-            provider_model=provider_model,
-        )
-        transcript_id = transcript_row["id"]
+    if not direct_transcription_succeeded:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            step_start = time.perf_counter()
+            download_result = await asyncio.to_thread(download_audio, url, tmp_dir)
+            _log_step(
+                "download_audio",
+                duration_ms=(time.perf_counter() - step_start) * 1000,
+                video_id=download_result.video_id or parsed_video_id,
+            )
+            video_id = download_result.video_id or parsed_video_id
+            step_start = time.perf_counter()
+            transcript_text = await transcribe_file(download_result.path, settings.deepgram_api_key)
+            _log_step(
+                "transcribe_file",
+                duration_ms=(time.perf_counter() - step_start) * 1000,
+                provider="deepgram",
+            )
 
-    step_start = time.perf_counter()
-    summary_markdown = await summarize_transcript(transcript_text, settings.openrouter_api_key)
-    _log_step(
-        "summarize_transcript",
-        duration_ms=(time.perf_counter() - step_start) * 1000,
-        model=OPENROUTER_MODEL,
+    transcript_row = await create_transcript(
+        admin_client,
+        url_hash=url_hash,
+        video_id=video_id,
+        transcript_text=transcript_text,
+        provider_model=provider_model,
     )
-    return transcript_id, summary_markdown, video_id or url_hash
+    transcript_id = transcript_row["id"]
+    return transcript_id, transcript_text, video_id or url_hash
 
 
 async def _process_job(job: dict[str, Any], settings: Settings, admin_client: AsyncClient) -> None:
@@ -176,10 +170,35 @@ async def _process_job(job: dict[str, Any], settings: Settings, admin_client: As
     with log_context(job_id=job_id, user_id=user_id, summary_id=requested_summary_id):
         logger.info("job start")
 
-        transcript_id, summary_markdown, _video_segment = await _run_pipeline(
+        transcript_id, transcript_text, _video_segment = await _resolve_transcript(
             url=url,
             settings=settings,
             admin_client=admin_client,
+        )
+
+        cached_summary = await fetch_summary_by_keys(
+            admin_client,
+            transcript_id=transcript_id,
+            prompt_key=SUMMARY_PROMPT_KEY_DEFAULT,
+            summary_model=OPENROUTER_MODEL,
+        )
+        if cached_summary:
+            cached_summary_id = cached_summary["id"]
+            logger.info("summary cache_hit=true summary_id=%s", cached_summary_id)
+            with log_context(summary_id=cached_summary_id):
+                await mark_job_succeeded(admin_client, job_id=job_id, summary_id=cached_summary_id)
+            _log_step(
+                "job complete (cached summary)",
+                duration_ms=(time.perf_counter() - job_start) * 1000,
+            )
+            return
+
+        step_start = time.perf_counter()
+        summary_markdown = await summarize_transcript(transcript_text, settings.openrouter_api_key)
+        _log_step(
+            "summarize_transcript",
+            duration_ms=(time.perf_counter() - step_start) * 1000,
+            model=OPENROUTER_MODEL,
         )
 
         summary_row = await create_summary(
