@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.5.0](https://github.com/cpujades/fathom/compare/v0.4.0...v0.5.0) (2026-01-27)
+
+
+### Features
+
+* **best-practices:** add request guardrails, CORS allowlist, and basic rate limiting ([#36](https://github.com/cpujades/fathom/issues/36)) ([49c373f](https://github.com/cpujades/fathom/commit/49c373fd35b738a94684bfc32a63deda16d8f73d))
+* **pdf:** generate PDFs on demand and keep summaries markdown-first ([#38](https://github.com/cpujades/fathom/issues/38)) ([3c01b23](https://github.com/cpujades/fathom/commit/3c01b232cd7457e2a070200373ef565defe2a6b1))
+* **transcription:** add async Deepgram flow with URL fallback ([#37](https://github.com/cpujades/fathom/issues/37)) ([2f117e4](https://github.com/cpujades/fathom/commit/2f117e460e4da15fae2ae2a1337eddcd27de1665))
+* **worker:** add async job processing pipeline with retries ([#34](https://github.com/cpujades/fathom/issues/34)) ([403ef6d](https://github.com/cpujades/fathom/commit/403ef6ded131e04cc76b06e93beacb221bdf5bad))
+
+
+### Refactoring
+
+* **app:** add app factory ([#42](https://github.com/cpujades/fathom/issues/42)) ([0b4f6b3](https://github.com/cpujades/fathom/commit/0b4f6b3fdfb6169bcad87980405066b235480f14))
+* **config:** simplify settings by moving constants to modules ([#40](https://github.com/cpujades/fathom/issues/40)) ([e0eade7](https://github.com/cpujades/fathom/commit/e0eade74a1435697ed6c616881ec1799d3e0a4b1))
+* narrow exception handling and extract helpers ([#39](https://github.com/cpujades/fathom/issues/39)) ([002a963](https://github.com/cpujades/fathom/commit/002a963524403537eea3e91d8a29a80fb1af3609))
+* **summarizer:** use AsyncOpenAI and await summaries ([#41](https://github.com/cpujades/fathom/issues/41)) ([439352e](https://github.com/cpujades/fathom/commit/439352e20af92c9b649896a140eebc91b1ebb90e))
+
+
+### Chores
+
+* **deps:** bump weasyprint in the uv group across 1 directory ([#33](https://github.com/cpujades/fathom/issues/33)) ([b5f44fa](https://github.com/cpujades/fathom/commit/b5f44fa654bdd45134464d1d8ad2acd7365f1ed8))
+* **dev:** add lifespan hook to run embedded worker locally ([#44](https://github.com/cpujades/fathom/issues/44)) ([50b6019](https://github.com/cpujades/fathom/commit/50b6019e30be3d9548461e13359b7dce20753836))
+* **logging:** add context-aware global config and debug-friendly settings ([#43](https://github.com/cpujades/fathom/issues/43)) ([85cec13](https://github.com/cpujades/fathom/commit/85cec1326c4bc7f9f925ef067eed37f1b3206992))
+
 ## [0.4.0](https://github.com/cpujades/fathom/compare/v0.3.3...v0.4.0) (2026-01-18)
 
 
