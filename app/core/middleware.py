@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import time
 import uuid
 from collections import deque
@@ -11,8 +10,6 @@ from starlette.responses import Response
 
 from app.core.errors import RateLimitError, RequestTooLargeError
 from app.core.logging import log_context
-
-logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Request size limits
@@ -82,7 +79,6 @@ def _enforce_rate_limit(request: Request, rate_limit: int) -> None:
 
 
 async def log_requests(request: Request, call_next: RequestResponseEndpoint) -> Response:
-    start = time.perf_counter()
     request_id = request.headers.get("X-Request-Id") or uuid.uuid4().hex
     request.state.request_id = request_id
 
@@ -95,12 +91,4 @@ async def log_requests(request: Request, call_next: RequestResponseEndpoint) -> 
     with log_context(request_id=request_id, method=request.method, path=request.url.path):
         response = await call_next(request)
         response.headers["X-Request-Id"] = request_id
-        duration_ms = (time.perf_counter() - start) * 1000
-        logger.info(
-            "%s %s %s %.2fms",
-            request.method,
-            request.url.path,
-            response.status_code,
-            duration_ms,
-        )
         return response

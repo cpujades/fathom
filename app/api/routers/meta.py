@@ -6,7 +6,7 @@ from app.application.meta import health_status, readiness_status, status_snapsho
 from app.core.config import Settings, get_settings
 from app.schemas.meta import HealthResponse, ReadyResponse, StatusResponse
 
-router = APIRouter(prefix="/meta")
+router = APIRouter(prefix="/meta", tags=["meta"])
 
 
 @router.get("/health", response_model=HealthResponse)

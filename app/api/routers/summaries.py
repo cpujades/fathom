@@ -9,7 +9,7 @@ from app.core.config import Settings, get_settings
 from app.schemas.errors import ErrorResponse
 from app.schemas.summaries import SummarizeRequest, SummarizeResponse, SummaryPdfResponse, SummaryResponse
 
-router = APIRouter()
+router = APIRouter(tags=["summaries"])
 
 
 @router.post(

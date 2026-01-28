@@ -6,6 +6,7 @@ from starlette.middleware import Middleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.cors import CORSMiddleware
 
+from app import __version__
 from app.api.router import router
 from app.core.config import Settings, get_settings
 from app.core.errors import AppError
@@ -38,7 +39,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
         )
 
-    app = FastAPI(title="Fathom MVP", middleware=middleware, lifespan=lifespan)
+    app = FastAPI(
+        title="Fathom",
+        description="Podcast chatbot service",
+        version=__version__,
+        middleware=middleware,
+        lifespan=lifespan,
+    )
     app.include_router(router)
     app.state.settings = settings
     app.state.rate_limit = settings.rate_limit
