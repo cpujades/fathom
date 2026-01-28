@@ -65,14 +65,14 @@ Optional best‑practice guardrails:
 ### Run
 
 ```bash
-uvicorn app.api.app:app --reload
+uvicorn --app-dir apps/backend fathom.api.app:app --reload
 ```
 
 ### Worker
 Run the background worker in a separate process:
 
 ```bash
-python -m app.orchestration.runner
+PYTHONPATH=apps/backend python -m fathom.orchestration.runner
 ```
 
 ### Use

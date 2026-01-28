@@ -1,0 +1,14 @@
+{
+  "name": "fathom",
+  "private": true,
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev:web": "pnpm --filter @fathom/web dev",
+    "build:web": "pnpm --filter @fathom/web build",
+    "start:web": "pnpm --filter @fathom/web start",
+    "lint:web": "pnpm --filter @fathom/web lint",
+    "typecheck:web": "pnpm --filter @fathom/web typecheck"
+  }
+}
