@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github.com/cpujades/fathom/compare/v0.7.0...v0.7.1) (2026-01-28)
+
+
+### Refactoring
+
+* **monorepo:** namespace backend and scaffold web app ([#52](https://github.com/cpujades/fathom/issues/52)) ([f1c9964](https://github.com/cpujades/fathom/commit/f1c9964a787fc4e4810467ccd2cad23b9d77d8f1))
+
 ## [0.7.0](https://github.com/cpujades/fathom/compare/v0.6.0...v0.7.0) (2026-01-28)
 
 
