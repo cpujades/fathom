@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/cpujades/fathom/compare/v0.6.0...v0.7.0) (2026-01-28)
+
+
+### Features
+
+* add api metadata and improve logging ([#50](https://github.com/cpujades/fathom/issues/50)) ([ef07228](https://github.com/cpujades/fathom/commit/ef072287bb2490fc5fb0315d863209bcb02f4da5))
+
 ## [0.6.0](https://github.com/cpujades/fathom/compare/v0.5.1...v0.6.0) (2026-01-27)
 
 
