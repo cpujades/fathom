@@ -16,7 +16,7 @@ fi
 if [[ "$#" -gt 0 ]]; then
   output="$(ty check "$@" 2>&1)" || true
 else
-  output="$(ty check app 2>&1)" || true
+  output="$(ty check apps/backend 2>&1)" || true
 fi
 if [[ -n "${output}" ]]; then
   echo "${output}"

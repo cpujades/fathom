@@ -5,7 +5,7 @@
 - a structured Markdown summary (OpenRouter via the OpenAI Python SDK)
 - a PDF export (WeasyPrint)
 
-Entry point: `app/api/app.py`
+Entry point: `apps/backend/fathom/api/app.py`
 
 ## Quickstart (local)
 
@@ -16,23 +16,23 @@ For full setup details (including system deps like `ffmpeg` and WeasyPrint requi
 uv venv
 source .venv/bin/activate
 uv sync
-uvicorn app.api.app:app --host 127.0.0.1 --port 8000 --reload
+uvicorn --app-dir apps/backend fathom.api.app:app --host 127.0.0.1 --port 8080 --reload
 ```
 
 ## Request flow (high level)
 
-- **HTTP layer**: `app/api/router.py`
+- **HTTP layer**: `apps/backend/fathom/api/routers`
  - `POST /summarize` creates a job row and returns a `job_id`.
  - `GET /jobs/{job_id}` returns job status (and `summary_id` when ready).
  - `GET /summaries/{summary_id}` returns the summary and a signed `pdf_url` when available.
-- **Orchestration**: `app/orchestration/pipeline.py`
+- **Orchestration**: `apps/backend/fathom/orchestration/pipeline.py`
  - Used by a separate worker process: downloads audio → transcribes → summarizes → renders PDF bytes → uploads to Supabase Storage.
-- **Integrations**: `app/services/*`
+- **Integrations**: `apps/backend/fathom/services/*`
   - `downloader.py` (yt-dlp), `transcriber.py` (Deepgram), `summarizer.py` (OpenRouter via OpenAI SDK), `pdf.py` (WeasyPrint).
 
 ## Configuration (env vars)
 
-Configuration is read from environment variables via `app/core/config.py:get_settings()`.
+Configuration is read from environment variables via `apps/backend/fathom/core/config.py:get_settings()`.
 
 ```bash
 cp env.example .env
@@ -66,8 +66,8 @@ Run checks:
 ```bash
 uv run ruff check .
 uv run ruff format --check .
-uv run mypy app
-uv run ty check app  # informational (non-blocking)
+uv run mypy apps/backend
+uv run ty check apps/backend  # informational (non-blocking)
 ```
 
 Git hooks (recommended):
@@ -80,12 +80,12 @@ uv run pre-commit run --all-files
 ## Conventions
 
 - **Architecture boundaries**
-  - `app/api/*` owns HTTP concerns (request/response models, status codes, file responses).
-  - `app/services/*` owns IO/integrations and should stay small and composable.
-  - `app/orchestration/pipeline.py` coordinates services; keep orchestration readable and linear.
+  - `apps/backend/fathom/api/*` owns HTTP concerns (request/response models, status codes, file responses).
+  - `apps/backend/fathom/services/*` owns IO/integrations and should stay small and composable.
+  - `apps/backend/fathom/orchestration/pipeline.py` coordinates services; keep orchestration readable and linear.
 - **Error handling**
   - Raise domain errors (`AppError` and subclasses) from services/pipeline.
-  - `app/api/app.py` maps `AppError` to the API error shape; avoid raising `HTTPException` from deep layers.
+  - `apps/backend/fathom/api/app.py` maps `AppError` to the API error shape; avoid raising `HTTPException` from deep layers.
 - **Configuration**
   - Read config via `get_settings()`; avoid implicit global state.
   - Keep secrets out of logs and out of the repo.
@@ -93,7 +93,7 @@ uv run pre-commit run --all-files
 ## Packaging & tooling
 
 - Build backend: `hatchling`
-- The importable Python package is `app/` (distribution name is `fathom`).
+- Python packages live in `apps/backend/fathom/*` (api, core, services, etc). The distribution name is `fathom`.
 - `uv.lock` is committed for reproducible installs.
 
 ## Principles

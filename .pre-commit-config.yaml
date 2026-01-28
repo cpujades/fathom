@@ -28,7 +28,7 @@ repos:
         entry: uv run mypy
         language: system
         types: [python]
-        files: ^app/
+        files: ^apps/backend/fathom/
 
   - repo: local
     hooks:
@@ -37,5 +37,5 @@ repos:
         entry: bash scripts/ty_check.sh
         language: system
         types: [python]
-        files: ^app/
+        files: ^apps/backend/fathom/
         verbose: true

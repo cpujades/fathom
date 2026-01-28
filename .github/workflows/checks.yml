@@ -36,8 +36,8 @@ jobs:
         run: uv run ruff format --check .
 
       - name: Mypy
-        run: uv run mypy app
+        run: uv run mypy apps/backend/fathom
 
       - name: Ty (informational)
         continue-on-error: true
-        run: uv run ty check app
+        run: uv run ty check apps/backend/fathom
