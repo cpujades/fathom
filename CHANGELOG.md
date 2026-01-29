@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.0](https://github.com/cpujades/fathom/compare/v0.7.1...v0.8.0) (2026-01-29)
+
+
+### Features
+
+* **web:** add landing page with pricing section ([#54](https://github.com/cpujades/fathom/issues/54)) ([28cc79c](https://github.com/cpujades/fathom/commit/28cc79cb6612175b5c59e1a4ee97b180454ac49b))
+* **web:** add supabase auth pages and app shell ([#56](https://github.com/cpujades/fathom/issues/56)) ([10a164c](https://github.com/cpujades/fathom/commit/10a164cbcf54d71549c16a67bb8611b0d9999b23))
+
 ## [0.7.1](https://github.com/cpujades/fathom/compare/v0.7.0...v0.7.1) (2026-01-28)
 
 
