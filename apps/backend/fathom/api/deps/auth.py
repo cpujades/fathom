@@ -6,10 +6,12 @@ from typing import Annotated, Any
 
 from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jwt import ExpiredSignatureError, InvalidTokenError
+from jwt import decode as jwt_decode
 from supabase_auth.errors import AuthApiError
 
 from fathom.core.config import Settings, get_settings
-from fathom.core.errors import AppError, AuthenticationError, ExternalServiceError
+from fathom.core.errors import AppError, AuthenticationError, ConfigurationError, ExternalServiceError
 from fathom.core.logging import log_context
 from fathom.services.supabase import create_supabase_user_client
 from fathom.services.supabase.helpers import raise_for_auth_error
@@ -39,6 +41,32 @@ def _extract_user_id(user: Any) -> str | None:
     return None
 
 
+def _decode_local_jwt(access_token: str, settings: Settings) -> AuthContext:
+    if not settings.supabase_jwt_secret:
+        raise ConfigurationError("SUPABASE_JWT_SECRET is required when SUPABASE_AUTH_MODE=local.")
+
+    options = {"verify_aud": bool(settings.supabase_jwt_audience)}
+    decode_kwargs: dict[str, Any] = {
+        "key": settings.supabase_jwt_secret,
+        "algorithms": ["HS256"],
+        "options": options,
+    }
+    if settings.supabase_jwt_audience:
+        decode_kwargs["audience"] = settings.supabase_jwt_audience
+    try:
+        claims = jwt_decode(access_token, **decode_kwargs)
+    except ExpiredSignatureError as exc:
+        raise AuthenticationError("Auth token expired.") from exc
+    except InvalidTokenError as exc:
+        raise AuthenticationError("Invalid auth token.") from exc
+
+    user_id = claims.get("sub") or claims.get("user_id")
+    if not user_id:
+        raise AuthenticationError("Invalid auth token.")
+
+    return AuthContext(access_token=access_token, user_id=str(user_id))
+
+
 async def get_auth_context(
     request: Request,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(security)],
@@ -56,8 +84,11 @@ async def get_auth_context(
         raise AuthenticationError("Missing or invalid Authorization header.")
 
     access_token = credentials.credentials
+    auth_mode = (settings.supabase_auth_mode or "remote").lower()
 
     try:
+        if auth_mode == "local":
+            return _decode_local_jwt(access_token, settings)
         supabase = await create_supabase_user_client(settings, access_token)
         user = await supabase.auth.get_user(jwt=access_token)
     except AuthApiError as exc:

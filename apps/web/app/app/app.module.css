@@ -121,6 +121,33 @@
   font-size: 0.95rem;
 }
 
+.progressWrap {
+  margin-top: 1rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.progressTrack {
+  width: 100%;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(135deg, rgba(103, 232, 249, 1), rgba(124, 245, 211, 0.8));
+  transition: width 250ms ease;
+}
+
+.statusMessage {
+  font-size: 0.9rem;
+  color: var(--text-2);
+  letter-spacing: 0.01em;
+}
+
 .statusBadge {
   display: inline-flex;
   align-items: center;
@@ -161,14 +188,18 @@
 
 .markdown h1 {
   font-size: 1.5rem;
+  letter-spacing: -0.01em;
 }
 
 .markdown h2 {
   font-size: 1.25rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid rgba(103, 232, 249, 0.18);
 }
 
 .markdown h3 {
   font-size: 1.1rem;
+  color: rgba(103, 232, 249, 0.9);
 }
 
 .markdown p {
@@ -176,6 +207,10 @@
 }
 
 .markdown strong {
+  color: var(--text-1);
+}
+
+.markdown em {
   color: var(--text-1);
 }
 
@@ -193,6 +228,10 @@
 
 .markdown li {
   margin: 0.4rem 0;
+}
+
+.markdown li::marker {
+  color: var(--accent);
 }
 
 .markdown code {
@@ -248,6 +287,23 @@
 .markdown a {
   color: var(--text-1);
   text-decoration: underline;
+}
+
+.streamingCursor {
+  display: inline-block;
+  width: 0.5rem;
+  height: 1rem;
+  margin-left: 0.3rem;
+  border-radius: 4px;
+  background: rgba(103, 232, 249, 0.85);
+  box-shadow: 0 0 12px rgba(103, 232, 249, 0.6);
+  animation: blink 1s step-start infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0.1;
+  }
 }
 
 .summaryActions {

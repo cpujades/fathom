@@ -7,6 +7,11 @@ from fathom.core.errors import ConfigurationError
 from supabase import AsyncClient, AsyncClientOptions, create_async_client
 
 
+def _normalize_supabase_url(url: str) -> str:
+    """Ensure the Supabase URL has a trailing slash (required by storage client)."""
+    return url.rstrip("/") + "/"
+
+
 async def create_supabase_admin_client(settings: Settings) -> AsyncClient:
     """Create a Supabase client with admin (service role) credentials."""
     missing: list[str] = []
@@ -18,7 +23,8 @@ async def create_supabase_admin_client(settings: Settings) -> AsyncClient:
         missing_str = ", ".join(missing)
         raise ConfigurationError(f"Supabase admin client is not configured. Missing {missing_str}.")
 
-    return await create_async_client(settings.supabase_url, settings.supabase_secret_key)
+    supabase_url = _normalize_supabase_url(settings.supabase_url)
+    return await create_async_client(supabase_url, settings.supabase_secret_key)
 
 
 async def create_supabase_user_client(settings: Settings, access_token: str) -> AsyncClient:
@@ -38,4 +44,5 @@ async def create_supabase_user_client(settings: Settings, access_token: str) -> 
         },
         persist_session=False,
     )
-    return await create_async_client(settings.supabase_url, settings.supabase_publishable_key, options)
+    supabase_url = _normalize_supabase_url(settings.supabase_url)
+    return await create_async_client(supabase_url, settings.supabase_publishable_key, options)

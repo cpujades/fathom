@@ -17,6 +17,7 @@ dependencies = [
   "weasyprint==68.0",
   "pydantic==2.12.5",
   "supabase==2.27.1",
+  "pyjwt==2.10.1",
   "pydantic-settings==2.12.0",
 ]
 

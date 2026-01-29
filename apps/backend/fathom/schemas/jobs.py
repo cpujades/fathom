@@ -14,3 +14,6 @@ class JobStatusResponse(BaseModel):
     summary_id: UUID | None = None
     error_code: str | None = None
     error_message: str | None = None
+    stage: str | None = None
+    progress: int | None = None
+    status_message: str | None = None
