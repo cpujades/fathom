@@ -32,9 +32,14 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     workers in production deployments.
     """
     worker_task: asyncio.Task[None] | None = None
+    settings = get_settings()
+    logger.info(
+        "API environment resolved. app_env=%s supabase_url=%s",
+        settings.app_env,
+        settings.supabase_url,
+    )
 
     if _should_run_embedded_worker():
-        settings = get_settings()
         logger.warning(
             "Starting embedded worker in API process (dev-only). Do not enable RUN_WORKER_IN_API in production."
         )

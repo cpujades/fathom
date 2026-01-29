@@ -6,18 +6,20 @@ import styles from "./page.module.css";
 export default function Home() {
   return (
     <div className={styles.page}>
-      <header className={styles.header}>
-        <div className={styles.brand}>
-          <span className={styles.brandMark} aria-hidden="true" />
-          Fathom
+      <header className={`${styles.header} max-w-7xl mx-auto px-4 md:px-6 lg:px-8`}>
+        <div className="flex items-center gap-2">
+          <div className={styles.brand}>
+            <span className={styles.brandMark} aria-hidden="true" />
+            Fathom
+          </div>
         </div>
-        <nav className={styles.nav}>
+        <nav className={`${styles.nav} hidden md:flex`}>
           <a href="#how">How it works</a>
           <a href="#signal">Signal</a>
           <a href="#pricing">Pricing</a>
           <a href="#faq">FAQ</a>
         </nav>
-        <div className={styles.actions}>
+        <div className={`${styles.actions} hidden md:flex`}>
           <Link className={`${styles.button} ${styles.buttonGhost}`} href="/signin">
             Sign in
           </Link>
@@ -27,7 +29,7 @@ export default function Home() {
         </div>
       </header>
 
-      <main>
+      <main className="max-w-7xl mx-auto px-4 md:px-6 lg:px-8">
         <section className={styles.hero}>
           <div className={`${styles.reveal} ${styles.revealDelay1}`}>
             <div className={`${styles.pill} ${styles.pillSpaced}`}>Podcast intelligence</div>

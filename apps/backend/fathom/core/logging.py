@@ -46,7 +46,7 @@ _LOG_CONTEXT: ContextVar[dict[str, Any] | None] = ContextVar("log_context", defa
 
 DEFAULT_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
-APP_LOGGER_PREFIX = "app"
+APP_LOGGER_PREFIX = "fathom"
 
 # Pragmatic defaults to reduce third-party noise when LOG_LEVEL is DEBUG.
 _DEFAULT_THIRD_PARTY_LEVELS: dict[str, str] = {

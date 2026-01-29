@@ -82,6 +82,19 @@
   color: var(--text-1);
 }
 
+.menuButton {
+  padding: 0.45rem;
+  width: 40px;
+  height: 40px;
+  justify-content: center;
+}
+
+@media (min-width: 768px) {
+  .menuButton {
+    display: none;
+  }
+}
+
 .buttonPrimary {
   background: linear-gradient(135deg, rgba(103, 232, 249, 1), rgba(124, 245, 211, 0.8));
   color: #081014;
