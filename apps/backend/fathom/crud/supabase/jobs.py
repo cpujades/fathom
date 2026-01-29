@@ -14,7 +14,19 @@ from supabase import AsyncClient
 async def create_job(client: AsyncClient, *, url: str, user_id: str) -> dict[str, Any]:
     """Insert a new job row and return it."""
     try:
-        response = await client.table("jobs").insert({"url": url, "user_id": user_id}).execute()
+        response = (
+            await client.table("jobs")
+            .insert(
+                {
+                    "url": url,
+                    "user_id": user_id,
+                    "stage": "queued",
+                    "progress": 5,
+                    "status_message": "Queued — waiting for a worker",
+                }
+            )
+            .execute()
+        )
     except APIError as exc:
         raise_for_postgrest_error(exc, "Failed to create job.")
 
@@ -26,7 +38,7 @@ async def fetch_job(client: AsyncClient, job_id: str) -> dict[str, Any]:
     try:
         response = await (
             client.table("jobs")
-            .select("id,status,summary_id,error_code,error_message")
+            .select("id,status,summary_id,error_code,error_message,stage,progress,status_message")
             .eq("id", job_id)
             .limit(1)
             .execute()
@@ -90,6 +102,9 @@ async def mark_job_succeeded(client: AsyncClient, *, job_id: str, summary_id: st
             .update(
                 {
                     "status": "succeeded",
+                    "stage": "completed",
+                    "progress": 100,
+                    "status_message": "Summary ready",
                     "summary_id": summary_id,
                     "error_code": None,
                     "error_message": None,
@@ -118,6 +133,9 @@ async def mark_job_failed(
             .update(
                 {
                     "status": "failed",
+                    "stage": "failed",
+                    "progress": 100,
+                    "status_message": "Summary failed",
                     "error_code": error_code,
                     "error_message": error_message,
                     "last_error_at": last_error_at,
@@ -146,6 +164,9 @@ async def mark_job_retry(
             .update(
                 {
                     "status": "queued",
+                    "stage": "queued",
+                    "progress": 5,
+                    "status_message": "Queued for retry",
                     "error_code": error_code,
                     "error_message": error_message,
                     "last_error_at": last_error_at,
@@ -157,3 +178,31 @@ async def mark_job_retry(
         )
     except APIError as exc:
         raise_for_postgrest_error(exc, "Failed to update job status.")
+
+
+async def update_job_progress(
+    client: AsyncClient,
+    *,
+    job_id: str,
+    stage: str | None = None,
+    progress: int | None = None,
+    status_message: str | None = None,
+    summary_id: str | None = None,
+) -> None:
+    payload: dict[str, Any] = {}
+    if stage is not None:
+        payload["stage"] = stage
+    if progress is not None:
+        payload["progress"] = progress
+    if status_message is not None:
+        payload["status_message"] = status_message
+    if summary_id is not None:
+        payload["summary_id"] = summary_id
+
+    if not payload:
+        return
+
+    try:
+        await client.table("jobs").update(payload).eq("id", job_id).execute()
+    except APIError as exc:
+        raise_for_postgrest_error(exc, "Failed to update job progress.")

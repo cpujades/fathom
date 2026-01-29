@@ -20,15 +20,16 @@ from fathom.crud.supabase.jobs import (
     mark_job_retry,
     mark_job_succeeded,
     requeue_stale_jobs,
+    update_job_progress,
 )
-from fathom.crud.supabase.summaries import create_summary, fetch_summary_by_keys
+from fathom.crud.supabase.summaries import create_summary, fetch_summary_by_keys, update_summary_markdown
 from fathom.crud.supabase.transcripts import (
     create_transcript,
     fetch_transcript_by_hash,
     fetch_transcript_by_video_id,
 )
 from fathom.services.downloader import download_audio, fetch_muxed_media_url
-from fathom.services.summarizer import OPENROUTER_MODEL, summarize_transcript
+from fathom.services.summarizer import OPENROUTER_MODEL, stream_summarize_transcript, summarize_transcript
 from fathom.services.supabase import create_supabase_admin_client
 from fathom.services.transcriber import DEEPGRAM_MODEL, transcribe_file, transcribe_url
 from fathom.services.youtube import extract_youtube_video_id
@@ -40,13 +41,17 @@ logger = logging.getLogger(__name__)
 # Worker configuration
 # ---------------------------------------------------------------------------
 WORKER_POLL_INTERVAL_SECONDS = 2
-WORKER_IDLE_SLEEP_SECONDS = 5
+WORKER_IDLE_SLEEP_SECONDS = 1
 WORKER_MAX_ATTEMPTS = 3
 WORKER_BACKOFF_BASE_SECONDS = 5
 WORKER_STALE_AFTER_SECONDS = 900  # 15 minutes
 
 # Direct URL transcription configuration
 DIRECT_URL_MAX_ATTEMPTS = 2
+
+# Streaming summary flush tuning
+STREAM_FLUSH_CHAR_THRESHOLD = 400
+STREAM_FLUSH_SECONDS = 2.5
 
 
 def _hash_url(url: str) -> str:
@@ -169,13 +174,34 @@ async def _process_job(job: dict[str, Any], settings: Settings, admin_client: As
 
     with log_context(job_id=job_id, user_id=user_id, summary_id=requested_summary_id):
         logger.info("job start")
+        await update_job_progress(
+            admin_client,
+            job_id=job_id,
+            stage="warming",
+            progress=10,
+            status_message="Warming up the studio",
+        )
 
+        await update_job_progress(
+            admin_client,
+            job_id=job_id,
+            stage="transcribing",
+            progress=30,
+            status_message="Transcribing the audio",
+        )
         transcript_id, transcript_text, _video_segment = await _resolve_transcript(
             url=url,
             settings=settings,
             admin_client=admin_client,
         )
 
+        await update_job_progress(
+            admin_client,
+            job_id=job_id,
+            stage="checking_cache",
+            progress=45,
+            status_message="Checking for existing summaries",
+        )
         cached_summary = await fetch_summary_by_keys(
             admin_client,
             transcript_id=transcript_id,
@@ -186,6 +212,14 @@ async def _process_job(job: dict[str, Any], settings: Settings, admin_client: As
             cached_summary_id = cached_summary["id"]
             logger.info("summary cache_hit=true summary_id=%s", cached_summary_id)
             with log_context(summary_id=cached_summary_id):
+                await update_job_progress(
+                    admin_client,
+                    job_id=job_id,
+                    stage="cached",
+                    progress=100,
+                    status_message="Summary ready (cached)",
+                    summary_id=cached_summary_id,
+                )
                 await mark_job_succeeded(admin_client, job_id=job_id, summary_id=cached_summary_id)
             _log_step(
                 "job complete (cached summary)",
@@ -194,13 +228,6 @@ async def _process_job(job: dict[str, Any], settings: Settings, admin_client: As
             return
 
         step_start = time.perf_counter()
-        summary_markdown = await summarize_transcript(transcript_text, settings.openrouter_api_key)
-        _log_step(
-            "summarize_transcript",
-            duration_ms=(time.perf_counter() - step_start) * 1000,
-            model=OPENROUTER_MODEL,
-        )
-
         summary_row = await create_summary(
             admin_client,
             summary_id=requested_summary_id,
@@ -208,18 +235,95 @@ async def _process_job(job: dict[str, Any], settings: Settings, admin_client: As
             transcript_id=transcript_id,
             prompt_key=SUMMARY_PROMPT_KEY_DEFAULT,
             summary_model=OPENROUTER_MODEL,
-            summary_markdown=summary_markdown,
+            summary_markdown="",
             pdf_object_key=None,
         )
         summary_id = summary_row["id"]
-        if summary_id != requested_summary_id:
-            logger.info(
-                "summary deduplicated existing_summary_id=%s requested_summary_id=%s",
-                summary_id,
-                requested_summary_id,
+        await update_job_progress(
+            admin_client,
+            job_id=job_id,
+            stage="summarizing",
+            progress=60,
+            status_message="Drafting your briefing",
+            summary_id=summary_id,
+        )
+
+        summary_markdown = ""
+        last_flush_len = 0
+        last_flush_time = time.monotonic()
+        progress = 60
+        playful_messages = [
+            "Pulling out the best insights",
+            "Connecting the dots",
+            "Highlighting the sharpest moments",
+            "Building your action list",
+            "Polishing the key takeaways",
+            "Shaping the final narrative",
+        ]
+        message_index = 0
+
+        stream_failed = False
+        try:
+            async for delta in stream_summarize_transcript(transcript_text, settings.openrouter_api_key):
+                summary_markdown += delta
+                should_flush = False
+                if len(summary_markdown) - last_flush_len >= STREAM_FLUSH_CHAR_THRESHOLD:
+                    should_flush = True
+                if time.monotonic() - last_flush_time >= STREAM_FLUSH_SECONDS:
+                    should_flush = True
+
+                if should_flush:
+                    await update_summary_markdown(
+                        admin_client,
+                        summary_id=summary_id,
+                        summary_markdown=summary_markdown,
+                    )
+                    last_flush_len = len(summary_markdown)
+                    last_flush_time = time.monotonic()
+                    progress = min(progress + 3, 92)
+                    await update_job_progress(
+                        admin_client,
+                        job_id=job_id,
+                        stage="summarizing",
+                        progress=progress,
+                        status_message=playful_messages[message_index % len(playful_messages)],
+                    )
+                    message_index += 1
+        except Exception:
+            stream_failed = True
+
+        if stream_failed or not summary_markdown.strip():
+            await update_job_progress(
+                admin_client,
+                job_id=job_id,
+                stage="summarizing",
+                progress=min(progress + 5, 92),
+                status_message="Finalizing a full summary",
+            )
+            summary_markdown = await summarize_transcript(transcript_text, settings.openrouter_api_key)
+
+        if summary_markdown:
+            await update_summary_markdown(
+                admin_client,
+                summary_id=summary_id,
+                summary_markdown=summary_markdown,
             )
 
-        # Ensure the job points at the canonical summary id.
+        _log_step(
+            "summarize_transcript",
+            duration_ms=(time.perf_counter() - step_start) * 1000,
+            model=OPENROUTER_MODEL,
+        )
+
+        await update_job_progress(
+            admin_client,
+            job_id=job_id,
+            stage="completed",
+            progress=100,
+            status_message="Summary ready",
+            summary_id=summary_id,
+        )
+
         with log_context(summary_id=summary_id):
             await mark_job_succeeded(admin_client, job_id=job_id, summary_id=summary_id)
         _log_step(

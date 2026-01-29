@@ -110,3 +110,22 @@ async def update_summary_pdf_key(
         raise_for_postgrest_error(exc, "Failed to update summary PDF key.")
 
     return first_row(response.data, error_message="Failed to update summary PDF key.")
+
+
+async def update_summary_markdown(
+    client: AsyncClient,
+    *,
+    summary_id: str,
+    summary_markdown: str,
+) -> dict[str, Any]:
+    try:
+        response = (
+            await client.table("summaries")
+            .update({"summary_markdown": summary_markdown})
+            .eq("id", summary_id)
+            .execute()
+        )
+    except APIError as exc:
+        raise_for_postgrest_error(exc, "Failed to update summary markdown.")
+
+    return first_row(response.data, error_message="Failed to update summary markdown.")

@@ -183,6 +183,12 @@ export interface components {
             error_code?: string | null;
             /** Error Message */
             error_message?: string | null;
+            /** Stage */
+            stage?: string | null;
+            /** Progress */
+            progress?: number | null;
+            /** Status Message */
+            status_message?: string | null;
         };
         /** ReadyResponse */
         ReadyResponse: {

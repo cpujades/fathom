@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from typing import Any
 
 from openai import APIError, AsyncOpenAI
@@ -47,3 +48,36 @@ async def summarize_transcript(transcript: str, api_key: str) -> str:
         raise SummarizationError("Empty summary response.")
 
     return content.strip()
+
+
+async def stream_summarize_transcript(transcript: str, api_key: str) -> AsyncIterator[str]:
+    if not api_key:
+        raise SummarizationError("Missing OPENROUTER_API_KEY.")
+
+    client = AsyncOpenAI(
+        api_key=api_key,
+        base_url="https://openrouter.ai/api/v1",
+        default_headers={
+            "X-Title": OPENROUTER_APP_NAME,
+        },
+    )
+
+    try:
+        stream = await client.chat.completions.create(
+            model=OPENROUTER_MODEL,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": transcript},
+            ],
+            temperature=0,
+            stream=True,
+        )
+    except APIError as exc:
+        raise SummarizationError("Failed to call OpenRouter.") from exc
+
+    async for chunk in stream:
+        if not chunk.choices:
+            continue
+        delta = getattr(chunk.choices[0].delta, "content", None)
+        if isinstance(delta, str) and delta:
+            yield delta

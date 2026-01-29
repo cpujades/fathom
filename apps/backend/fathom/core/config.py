@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     supabase_publishable_key: str = Field(..., validation_alias="SUPABASE_PUBLISHABLE_KEY")
     supabase_secret_key: str = Field(..., validation_alias="SUPABASE_SECRET_KEY")
     supabase_bucket: str = Field(default="fathom", validation_alias="SUPABASE_BUCKET")
+    supabase_auth_mode: str = Field(default="remote", validation_alias="SUPABASE_AUTH_MODE")
+    supabase_jwt_secret: str | None = Field(default=None, validation_alias="SUPABASE_JWT_SECRET")
+    supabase_jwt_audience: str | None = Field(default=None, validation_alias="SUPABASE_JWT_AUDIENCE")
 
     # ---------------------------------------------------------------------------
     # Deployment config (optional)
@@ -49,6 +52,9 @@ class Settings(BaseSettings):
         "supabase_publishable_key",
         "supabase_secret_key",
         "supabase_bucket",
+        "supabase_auth_mode",
+        "supabase_jwt_secret",
+        "supabase_jwt_audience",
         mode="before",
     )
     @classmethod
