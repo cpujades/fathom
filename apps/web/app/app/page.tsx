@@ -4,15 +4,20 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
+import { createApiClient } from "@fathom/api-client";
 
 import styles from "./app.module.css";
+import { getApiErrorMessage } from "../lib/apiErrors";
 import { getSupabaseClient } from "../lib/supabaseClient";
 
 export default function AppHome() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [url, setUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [healthStatus, setHealthStatus] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     let unsubscribe: (() => void) | null = null;
@@ -31,6 +36,10 @@ export default function AppHome() {
         }
 
         setUser(data.session.user);
+
+        const api = createApiClient();
+        const { data: healthData } = await api.GET("/meta/health");
+        setHealthStatus(healthData?.status ?? null);
 
         const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
           if (!session) {
@@ -61,6 +70,47 @@ export default function AppHome() {
     router.replace("/signin");
   };
 
+  const handleSubmit = async () => {
+    if (!url.trim()) {
+      setError("Please paste a valid podcast or YouTube URL.");
+      return;
+    }
+
+    setError(null);
+    setSubmitting(true);
+
+    try {
+      const supabase = getSupabaseClient();
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !sessionData.session) {
+        router.replace("/signin");
+        return;
+      }
+
+      const api = createApiClient(sessionData.session.access_token);
+      const { data, error: apiError } = await api.POST("/summarize", {
+        body: {
+          url: url.trim()
+        }
+      });
+
+      if (apiError) {
+        setError(getApiErrorMessage(apiError, "Unable to create a summary job."));
+        return;
+      }
+
+      if (data?.job_id) {
+        router.push(`/app/jobs/${data.job_id}`);
+      } else {
+        setError("Unexpected response from the server.");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className={styles.page}>
@@ -88,6 +138,9 @@ export default function AppHome() {
           Fathom
         </div>
         <div className={styles.headerActions}>
+          {healthStatus ? <div className={styles.usageChip}>API: {healthStatus}</div> : null}
+          {user?.email ? <div className={styles.usageChip}>{user.email}</div> : null}
+          <div className={styles.usageChip}>Usage: 0 / 6h</div>
           <Link className={styles.button} href="/">
             Landing
           </Link>
@@ -107,11 +160,16 @@ export default function AppHome() {
               type="url"
               placeholder="https://www.youtube.com/watch?v=..."
               aria-label="Podcast or YouTube URL"
+              value={url}
+              onChange={(event) => setUrl(event.target.value)}
             />
-            <button className={styles.primaryButton} type="button">
-              Summarize
+            <button className={styles.primaryButton} type="button" onClick={handleSubmit} disabled={submitting}>
+              {submitting ? "Submitting..." : "Summarize"}
             </button>
           </div>
+          <p className={styles.inputHelp}>
+            We will transcribe, summarize, and format the briefing automatically.
+          </p>
           {error ? <p className={styles.status}>{error}</p> : null}
         </div>
         <div className={styles.card}>

@@ -9,6 +9,7 @@
     "build:web": "pnpm --filter @fathom/web build",
     "start:web": "pnpm --filter @fathom/web start",
     "lint:web": "pnpm --filter @fathom/web lint",
-    "typecheck:web": "pnpm --filter @fathom/web typecheck"
+    "typecheck:web": "pnpm --filter @fathom/web typecheck",
+    "generate:api-client": "pnpm --filter @fathom/api-client generate"
   }
 }
