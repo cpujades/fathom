@@ -1,0 +1,119 @@
+.page {
+  min-height: 100vh;
+  background: var(--bg-0);
+  color: var(--text-1);
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.5rem clamp(1.5rem, 4vw, 4rem);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.brandMark {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(103, 232, 249, 0.9), rgba(124, 245, 211, 0.35));
+  box-shadow: 0 0 16px rgba(103, 232, 249, 0.35);
+}
+
+.headerActions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1rem;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: transparent;
+  color: var(--text-1);
+  cursor: pointer;
+  transition: border 150ms ease, transform 150ms ease;
+}
+
+.button:hover {
+  border-color: rgba(103, 232, 249, 0.45);
+  transform: translateY(-1px);
+}
+
+.main {
+  flex: 1;
+  padding: clamp(2rem, 6vw, 4rem);
+  display: grid;
+  gap: 2rem;
+}
+
+.card {
+  background: rgba(18, 21, 27, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 24px;
+  padding: 1.75rem;
+}
+
+.cardTitle {
+  margin: 0 0 0.5rem;
+  font-size: 1.4rem;
+}
+
+.cardText {
+  color: var(--text-2);
+  margin: 0;
+}
+
+.inputRow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+
+.input {
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(11, 13, 16, 0.8);
+  color: var(--text-1);
+  padding: 0.8rem 1rem;
+  font-size: 1rem;
+}
+
+.primaryButton {
+  border: none;
+  border-radius: 14px;
+  padding: 0.8rem 1.2rem;
+  background: linear-gradient(135deg, rgba(103, 232, 249, 1), rgba(124, 245, 211, 0.8));
+  color: #081014;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.status {
+  color: var(--text-2);
+  font-size: 0.95rem;
+}
+
+@media (max-width: 720px) {
+  .inputRow {
+    grid-template-columns: 1fr;
+  }
+}
