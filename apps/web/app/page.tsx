@@ -35,7 +35,7 @@ export default function Home() {
               Fathom the signal. Skip the noise.
             </h1>
             <p className={styles.heroText}>
-              Turn any podcast or YouTube link into a high-signal briefing in minutes. Stay
+              Turn any podcast or YouTube link into a high-signal briefing in seconds. Stay
               informed, without the backlog.
             </p>
             <div className={styles.heroActions}>
@@ -72,7 +72,7 @@ export default function Home() {
 
         <section className={`${styles.section} ${styles.reveal}`} id="how">
           <div className={styles.sectionHeader}>
-            <h2 className={styles.sectionTitle}>From link to briefing in minutes</h2>
+            <h2 className={styles.sectionTitle}>From link to briefing in seconds</h2>
             <p className={styles.sectionText}>
               Fathom turns long-form audio into clean, structured intelligence, ready for
               skimming, sharing, and saving.
@@ -198,7 +198,7 @@ export default function Home() {
             <div className={styles.sectionHeader}>
               <h2 className={styles.sectionTitle}>Ready to clear your backlog?</h2>
               <p className={styles.sectionText}>
-                Get your first briefing in minutes. No commitment required.
+                Get your first briefing in seconds. No commitment required.
               </p>
             </div>
             <div className={styles.heroActions}>
