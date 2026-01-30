@@ -7,7 +7,7 @@ from uuid import UUID
 from fathom.api.deps.auth import AuthContext
 from fathom.application.guards import validate_video_duration, validate_youtube_url
 from fathom.core.config import Settings
-from fathom.core.constants import SIGNED_URL_TTL_SECONDS
+from fathom.core.constants import SIGNED_URL_TTL_SECONDS, SUPABASE_PDF_BUCKET
 from fathom.core.errors import ExternalServiceError
 from fathom.core.logging import log_context
 from fathom.crud.supabase.jobs import create_job
@@ -71,7 +71,7 @@ async def get_summary_with_pdf(
         admin_client = await create_supabase_admin_client(settings)
         pdf_url = await create_pdf_signed_url(
             admin_client,
-            settings.supabase_bucket,
+            SUPABASE_PDF_BUCKET,
             object_key,
             SIGNED_URL_TTL_SECONDS,
         )
@@ -100,7 +100,7 @@ async def create_summary_pdf(
             logger.info("summary pdf already exists")
             pdf_url = await create_pdf_signed_url(
                 admin_client,
-                settings.supabase_bucket,
+                SUPABASE_PDF_BUCKET,
                 existing_object_key,
                 SIGNED_URL_TTL_SECONDS,
             )
@@ -126,7 +126,7 @@ async def create_summary_pdf(
         object_key = f"{user_id}/{video_id}/{summary_id}.pdf"
         await upload_pdf(
             admin_client,
-            bucket=settings.supabase_bucket,
+            bucket=SUPABASE_PDF_BUCKET,
             object_key=object_key,
             pdf_bytes=pdf_bytes,
         )
@@ -135,7 +135,7 @@ async def create_summary_pdf(
 
         pdf_url = await create_pdf_signed_url(
             admin_client,
-            settings.supabase_bucket,
+            SUPABASE_PDF_BUCKET,
             object_key,
             SIGNED_URL_TTL_SECONDS,
         )

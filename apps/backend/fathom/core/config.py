@@ -25,16 +25,15 @@ class Settings(BaseSettings):
     # ---------------------------------------------------------------------------
     # API Keys (required secrets)
     # ---------------------------------------------------------------------------
-    deepgram_api_key: str = Field(..., validation_alias="DEEPGRAM_API_KEY")
     openrouter_api_key: str = Field(..., validation_alias="OPENROUTER_API_KEY")
+    groq_api_key: str = Field(..., validation_alias="GROQ_API_KEY")
 
     # ---------------------------------------------------------------------------
-    # Supabase (required secrets + deployment config)
+    # Supabase (required secrets)
     # ---------------------------------------------------------------------------
     supabase_url: str = Field(..., validation_alias="SUPABASE_URL")
     supabase_publishable_key: str = Field(..., validation_alias="SUPABASE_PUBLISHABLE_KEY")
     supabase_secret_key: str = Field(..., validation_alias="SUPABASE_SECRET_KEY")
-    supabase_bucket: str = Field(default="fathom", validation_alias="SUPABASE_BUCKET")
     supabase_jwt_secret: str | None = Field(default=None, validation_alias="SUPABASE_JWT_SECRET")
     supabase_db_url: str | None = Field(default=None, validation_alias="SUPABASE_DB_URL")
 
@@ -50,12 +49,11 @@ class Settings(BaseSettings):
     rate_limit: int = Field(default=0, validation_alias="RATE_LIMIT")  # requests/min, 0 = disabled
 
     @field_validator(
-        "deepgram_api_key",
         "openrouter_api_key",
+        "groq_api_key",
         "supabase_url",
         "supabase_publishable_key",
         "supabase_secret_key",
-        "supabase_bucket",
         "supabase_jwt_secret",
         "app_env",
         mode="before",

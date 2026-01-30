@@ -11,7 +11,12 @@ from typing import Any
 from urllib.parse import urlparse
 
 from fathom.core.config import Settings, get_settings
-from fathom.core.constants import SUMMARY_PROMPT_KEY_DEFAULT
+from fathom.core.constants import (
+    GROQ_MODEL,
+    GROQ_SIGNED_URL_TTL_SECONDS,
+    SUMMARY_PROMPT_KEY_DEFAULT,
+    SUPABASE_GROQ_BUCKET,
+)
 from fathom.core.errors import AppError
 from fathom.core.logging import log_context
 from fathom.crud.supabase.jobs import (
@@ -22,16 +27,17 @@ from fathom.crud.supabase.jobs import (
     requeue_stale_jobs,
     update_job_progress,
 )
+from fathom.crud.supabase.storage_objects import create_signed_url, delete_object, upload_object
 from fathom.crud.supabase.summaries import create_summary, fetch_summary_by_keys, update_summary_markdown
 from fathom.crud.supabase.transcripts import (
     create_transcript,
     fetch_transcript_by_hash,
     fetch_transcript_by_video_id,
 )
-from fathom.services.downloader import download_audio, fetch_muxed_media_url
+from fathom.services.downloader import download_audio
 from fathom.services.summarizer import OPENROUTER_MODEL, stream_summarize_transcript, summarize_transcript
 from fathom.services.supabase import create_supabase_admin_client
-from fathom.services.transcriber import DEEPGRAM_MODEL, transcribe_file, transcribe_url
+from fathom.services.transcriber import transcribe_url
 from fathom.services.youtube import extract_youtube_video_id
 from supabase import AsyncClient
 
@@ -45,9 +51,6 @@ WORKER_IDLE_SLEEP_SECONDS = 1
 WORKER_MAX_ATTEMPTS = 3
 WORKER_BACKOFF_BASE_SECONDS = 5
 WORKER_STALE_AFTER_SECONDS = 900  # 15 minutes
-
-# Direct URL transcription configuration
-DIRECT_URL_MAX_ATTEMPTS = 2
 
 # Streaming summary flush tuning
 STREAM_FLUSH_CHAR_THRESHOLD = 400
@@ -82,7 +85,7 @@ async def _resolve_transcript(
     parsed_video_id = extract_youtube_video_id(parsed_url)
     transcript_text: str
     video_id: str | None = None
-    provider_model = f"deepgram:{DEEPGRAM_MODEL}"
+    provider_model = f"groq:{GROQ_MODEL}"
 
     transcript_row = None
     if parsed_video_id:
@@ -106,53 +109,55 @@ async def _resolve_transcript(
         logger.info("transcript cache_hit=true transcript_id=%s video_id=%s", transcript_id, video_id)
         return transcript_id, transcript_text, video_id or url_hash
 
-    direct_url: str | None
-    try:
-        direct_url = await asyncio.to_thread(fetch_muxed_media_url, url)
-    except Exception:
-        direct_url = None
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        step_start = time.perf_counter()
+        download_result = await asyncio.to_thread(download_audio, url, tmp_dir)
+        _log_step(
+            "download_audio",
+            duration_ms=(time.perf_counter() - step_start) * 1000,
+            video_id=parsed_video_id,
+            bytes=download_result.filesize_bytes,
+        )
+        video_id = download_result.video_id or parsed_video_id
 
-    direct_transcription_succeeded = False
-    if direct_url:
-        for attempt in range(1, DIRECT_URL_MAX_ATTEMPTS + 1):
+        object_key = f"groq-audio/{uuid.uuid4().hex}.{download_result.subtype or 'bin'}"
+        audio_bytes = await asyncio.to_thread(download_result.path.read_bytes)
+        content_type = download_result.mime_type or "application/octet-stream"
+        await upload_object(
+            admin_client,
+            bucket=SUPABASE_GROQ_BUCKET,
+            object_key=object_key,
+            data=audio_bytes,
+            content_type=content_type,
+        )
+        try:
+            signed_url = await create_signed_url(
+                admin_client,
+                bucket=SUPABASE_GROQ_BUCKET,
+                object_key=object_key,
+                ttl_seconds=GROQ_SIGNED_URL_TTL_SECONDS,
+            )
             step_start = time.perf_counter()
+            transcript_text = await asyncio.to_thread(
+                transcribe_url,
+                signed_url,
+                settings.groq_api_key,
+                GROQ_MODEL,
+            )
+            _log_step(
+                "transcribe_url",
+                duration_ms=(time.perf_counter() - step_start) * 1000,
+                provider="groq",
+            )
+        finally:
             try:
-                transcript_text = await transcribe_url(direct_url, settings.deepgram_api_key)
-                _log_step(
-                    "transcribe_url",
-                    duration_ms=(time.perf_counter() - step_start) * 1000,
-                    provider="deepgram",
-                    attempt=attempt,
+                await delete_object(
+                    admin_client,
+                    bucket=SUPABASE_GROQ_BUCKET,
+                    object_key=object_key,
                 )
-                video_id = parsed_video_id
-                direct_transcription_succeeded = True
-                break
-            except Exception as exc:  # Fall back to download on any failure.
-                duration_ms = (time.perf_counter() - step_start) * 1000
-                logger.warning(
-                    "transcribe_url failed attempt=%s %.2fms error=%s",
-                    attempt,
-                    duration_ms,
-                    type(exc).__name__,
-                )
-
-    if not direct_transcription_succeeded:
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            step_start = time.perf_counter()
-            download_result = await asyncio.to_thread(download_audio, url, tmp_dir)
-            _log_step(
-                "download_audio",
-                duration_ms=(time.perf_counter() - step_start) * 1000,
-                video_id=download_result.video_id or parsed_video_id,
-            )
-            video_id = download_result.video_id or parsed_video_id
-            step_start = time.perf_counter()
-            transcript_text = await transcribe_file(download_result.path, settings.deepgram_api_key)
-            _log_step(
-                "transcribe_file",
-                duration_ms=(time.perf_counter() - step_start) * 1000,
-                provider="deepgram",
-            )
+            except Exception:
+                logger.warning("failed to cleanup groq audio object", exc_info=True)
 
     transcript_row = await create_transcript(
         admin_client,
@@ -160,6 +165,13 @@ async def _resolve_transcript(
         video_id=video_id,
         transcript_text=transcript_text,
         provider_model=provider_model,
+        source_title=download_result.title,
+        source_author=download_result.author,
+        source_description=download_result.description,
+        source_keywords=download_result.keywords,
+        source_views=download_result.views,
+        source_likes=download_result.likes,
+        source_length_seconds=download_result.length_seconds,
     )
     transcript_id = transcript_row["id"]
     return transcript_id, transcript_text, video_id or url_hash
