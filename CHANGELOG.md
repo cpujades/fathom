@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.8.0](https://github.com/cpujades/fathom/compare/v0.7.1...v0.8.0) (2026-01-30)
+
+
+### Features
+
+* add realtime job updates and refresh summary experience ([#59](https://github.com/cpujades/fathom/issues/59)) ([7a22c1c](https://github.com/cpujades/fathom/commit/7a22c1c4dd9f9dea9c5e47e2854f1463eb616f6e))
+* stream job progress updates and add local JWT auth ([#58](https://github.com/cpujades/fathom/issues/58)) ([ad28bee](https://github.com/cpujades/fathom/commit/ad28beec6754863fb2f1e8f0184a559e5cf66bfe))
+* **web:** add api client flow for summary jobs ([#57](https://github.com/cpujades/fathom/issues/57)) ([4e1c421](https://github.com/cpujades/fathom/commit/4e1c4217fbef2bc22942b8bf4092caa5e81b0719))
+* **web:** add landing page with pricing section ([#54](https://github.com/cpujades/fathom/issues/54)) ([28cc79c](https://github.com/cpujades/fathom/commit/28cc79cb6612175b5c59e1a4ee97b180454ac49b))
+* **web:** add supabase auth pages and app shell ([#56](https://github.com/cpujades/fathom/issues/56)) ([10a164c](https://github.com/cpujades/fathom/commit/10a164cbcf54d71549c16a67bb8611b0d9999b23))
+
 ## [0.7.1](https://github.com/cpujades/fathom/compare/v0.7.0...v0.7.1) (2026-01-28)
 
 
