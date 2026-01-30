@@ -67,12 +67,26 @@ async def create_transcript(
     video_id: str | None,
     transcript_text: str,
     provider_model: str,
+    source_title: str | None = None,
+    source_author: str | None = None,
+    source_description: str | None = None,
+    source_keywords: list[str] | None = None,
+    source_views: int | None = None,
+    source_likes: int | None = None,
+    source_length_seconds: int | None = None,
 ) -> dict[str, Any]:
     payload = {
         "url_hash": url_hash,
         "video_id": video_id,
         "transcript_text": transcript_text,
         "provider_model": provider_model,
+        "source_title": source_title,
+        "source_author": source_author,
+        "source_description": source_description,
+        "source_keywords": source_keywords,
+        "source_views": source_views,
+        "source_likes": source_likes,
+        "source_length_seconds": source_length_seconds,
     }
 
     try:
