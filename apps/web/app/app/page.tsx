@@ -7,7 +7,6 @@ import type { User } from "@supabase/supabase-js";
 import { createApiClient } from "@fathom/api-client";
 
 import styles from "./app.module.css";
-import { getApiErrorMessage } from "../lib/apiErrors";
 import { getSupabaseClient } from "../lib/supabaseClient";
 
 export default function AppHome() {
@@ -24,6 +23,7 @@ export default function AppHome() {
 
     const loadSession = async () => {
       try {
+        router.prefetch("/app/jobs/new");
         const supabase = getSupabaseClient();
         const { data, error: sessionError } = await supabase.auth.getSession();
         if (sessionError) {
@@ -70,7 +70,11 @@ export default function AppHome() {
     router.replace("/signin");
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
+    if (submitting) {
+      return;
+    }
+
     if (!url.trim()) {
       setError("Please paste a valid podcast or YouTube URL.");
       return;
@@ -79,36 +83,8 @@ export default function AppHome() {
     setError(null);
     setSubmitting(true);
 
-    try {
-      const supabase = getSupabaseClient();
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError || !sessionData.session) {
-        router.replace("/signin");
-        return;
-      }
-
-      const api = createApiClient(sessionData.session.access_token);
-      const { data, error: apiError } = await api.POST("/summarize", {
-        body: {
-          url: url.trim()
-        }
-      });
-
-      if (apiError) {
-        setError(getApiErrorMessage(apiError, "Unable to create a summary job."));
-        return;
-      }
-
-      if (data?.job_id) {
-        router.push(`/app/jobs/${data.job_id}`);
-      } else {
-        setError("Unexpected response from the server.");
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong.");
-    } finally {
-      setSubmitting(false);
-    }
+    const trimmedUrl = url.trim();
+    router.push(`/app/jobs/new?url=${encodeURIComponent(trimmedUrl)}`);
   };
 
   if (loading) {

@@ -10,7 +10,7 @@ from deepgram.core.api_error import ApiError
 from fathom.core.errors import ExternalServiceError
 
 # Default Deepgram model for transcription
-DEEPGRAM_MODEL = "nova-2"
+DEEPGRAM_MODEL = "nova-3"
 
 
 class TranscriptionError(ExternalServiceError):

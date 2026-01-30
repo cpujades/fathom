@@ -3,14 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 
 import type { JobStatusResponse, SummaryResponse } from "@fathom/api-client";
 import { createApiClient, getApiBaseUrl } from "@fathom/api-client";
-import styles from "../../app.module.css";
+import styles from "./job.module.css";
 import { getApiErrorMessage } from "../../../lib/apiErrors";
 import { getSupabaseClient } from "../../../lib/supabaseClient";
+import { StreamingMarkdown } from "../../../components/StreamingMarkdown";
 
 const POLL_INTERVAL_MS = 2000;
 const SSE_STALL_TIMEOUT_MS = 6000;
@@ -25,31 +24,29 @@ export default function JobDetailPage() {
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [statusMessage, setStatusMessage] = useState<string>("Initializing job...");
   const [progress, setProgress] = useState(5);
   const [streamedMarkdown, setStreamedMarkdown] = useState("");
   const pollingRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sseAbortRef = useRef<AbortController | null>(null);
 
-  const stageFallback: Record<string, { progress: number; message: string }> = {
-    queued: { progress: 8, message: "Queued — waiting for a worker" },
-    running: { progress: 20, message: "Starting the summary job" },
-    warming: { progress: 15, message: "Warming up the engines" },
-    transcribing: { progress: 35, message: "Transcribing the audio" },
-    checking_cache: { progress: 50, message: "Checking for existing summaries" },
-    summarizing: { progress: 65, message: "Drafting your briefing" },
-    rendering: { progress: 85, message: "Final polish in progress" },
-    completed: { progress: 100, message: "Summary ready" },
-    cached: { progress: 100, message: "Loaded from cache" },
-    failed: { progress: 100, message: "Summary failed" }
+  const stageFallback: Record<string, number> = {
+    queued: 8,
+    running: 20,
+    warming: 15,
+    transcribing: 35,
+    checking_cache: 50,
+    summarizing: 65,
+    rendering: 85,
+    completed: 100,
+    cached: 100,
+    failed: 100
   };
 
   const updateProgress = (payload: JobStatusResponse) => {
     if (typeof payload.progress === "number") {
       setProgress(payload.progress);
     } else if (payload.stage && stageFallback[payload.stage]) {
-      setProgress(stageFallback[payload.stage].progress);
+      setProgress(stageFallback[payload.stage]);
     } else {
       switch (payload.status) {
         case "queued":
@@ -67,13 +64,6 @@ export default function JobDetailPage() {
       }
     }
 
-    if (payload.status_message) {
-      setStatusMessage(payload.status_message);
-    } else if (payload.stage && stageFallback[payload.stage]) {
-      setStatusMessage(stageFallback[payload.stage].message);
-    } else {
-      setStatusMessage("Processing your summary...");
-    }
   };
 
   const fetchSummary = async (summaryId: string, accessToken: string) => {
@@ -104,14 +94,14 @@ export default function JobDetailPage() {
     setJob(payload);
     updateProgress(payload);
 
-    if (payload.status === "succeeded" && payload.summary_id) {
+    const isStageComplete = payload.stage === "completed" || payload.stage === "cached";
+
+    if ((payload.status === "succeeded" || isStageComplete) && payload.summary_id) {
       await fetchSummary(payload.summary_id, accessToken);
-      setLoading(false);
       return true;
     }
 
     if (payload.status === "failed") {
-      setLoading(false);
       return true;
     }
 
@@ -143,7 +133,6 @@ export default function JobDetailPage() {
             return;
           }
           setError(getApiErrorMessage(apiError, "Unable to fetch job status."));
-          setLoading(false);
           return;
         }
 
@@ -156,7 +145,6 @@ export default function JobDetailPage() {
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong.");
-        setLoading(false);
       }
     };
 
@@ -308,10 +296,45 @@ export default function JobDetailPage() {
     };
   }, [jobId, router]);
 
-  const statusLabel = job?.stage ?? job?.status ?? "queued";
-  const statusLabelText = statusLabel.replace(/_/g, " ");
+  const isComplete = job?.status === "succeeded" || job?.stage === "completed" || job?.stage === "cached";
+  const isFailed = job?.status === "failed";
   const markdownToRender =
     streamedMarkdown.length >= (summary?.markdown?.length ?? 0) ? streamedMarkdown : summary?.markdown ?? "";
+  const hasMarkdown = Boolean(markdownToRender);
+  const isStreaming = job?.status === "running" && !!streamedMarkdown;
+  const clampedProgress = Math.max(0, Math.min(progress, 100));
+  const headline = isComplete
+    ? "Briefing ready"
+    : isFailed
+      ? "Briefing failed"
+      : hasMarkdown
+        ? "Briefing in progress"
+        : "Preparing your briefing";
+  const subhead = isComplete
+    ? "Your summary is ready to read, export, and share."
+    : isFailed
+      ? "We ran into an issue. You can try again or start a fresh summary."
+      : "We are translating the audio into a clean, structured briefing.";
+  const isCached = job?.stage === "cached";
+  const showProgressPanel = !hasMarkdown && !isComplete && !isFailed && !isCached;
+
+  const statusFallbackStage = job?.status === "running" ? "summarizing" : job?.status ?? "queued";
+  const rawStageKey = job?.stage ?? statusFallbackStage;
+  const normalizedStage = rawStageKey === "completed" || rawStageKey === "cached" ? "rendering" : rawStageKey;
+  const displayStageLabel = (() => {
+    if (isComplete) return "Summary ready";
+    if (isFailed) return "Needs attention";
+    switch (normalizedStage) {
+      case "transcribing":
+        return "Listening carefully";
+      case "summarizing":
+        return "Drafting the briefing";
+      case "rendering":
+        return "Polishing the output";
+      default:
+        return "Preparing your summary";
+    }
+  })();
 
   const handleGeneratePdf = async () => {
     if (!summary?.summary_id) {
@@ -360,77 +383,154 @@ export default function JobDetailPage() {
           Fathom
         </div>
         <div className={styles.headerActions}>
-          <Link className={styles.button} href="/app">
-            Back to app
+          <Link className={styles.headerButton} href="/app">
+            Workspace
           </Link>
-          <Link className={styles.button} href="/">
+          <Link className={styles.headerButton} href="/">
             Landing
           </Link>
         </div>
       </header>
 
       <main className={styles.main}>
-        <div className={styles.card}>
-          <div className={styles.statusRow}>
-            <div>
-              <h1 className={styles.cardTitle}>Summary in progress</h1>
-              <p className={styles.cardText}>Job ID: {jobId}</p>
+        <div className={styles.container}>
+          <section className={styles.hero}>
+            <h1 className={styles.heroTitle}>{headline}</h1>
+            <p className={styles.heroText}>{subhead}</p>
+            <div className={styles.heroMeta}>
+              <span className={showProgressPanel ? styles.pill : isComplete ? styles.pill : styles.pillMuted}>
+                {showProgressPanel ? displayStageLabel : isStreaming ? "Live" : "Final"}
+              </span>
             </div>
-            <span className={styles.statusBadge}>{statusLabelText}</span>
-          </div>
-          <div className={styles.progressWrap}>
-            <div className={styles.progressTrack}>
-              <div className={styles.progressFill} style={{ width: `${progress}%` }} />
-            </div>
-            <div className={styles.statusMessage}>{statusMessage}</div>
-          </div>
-          {job?.status === "failed" ? (
-            <p className={styles.status}>Error: {job.error_message ?? "Job failed."}</p>
-          ) : null}
-          {loading ? <p className={styles.status}>We will keep this open and stream updates live.</p> : null}
-          {error ? <p className={styles.status}>{error}</p> : null}
-        </div>
+          </section>
 
-        <div className={styles.card}>
-          <h2 className={styles.summaryTitle}>Summary</h2>
-          {markdownToRender ? (
-            <>
-              <div className={styles.markdown}>
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{markdownToRender}</ReactMarkdown>
-                {job?.status === "running" && streamedMarkdown ? (
-                  <span className={styles.streamingCursor} aria-hidden="true" />
-                ) : null}
+          {showProgressPanel ? (
+            <section className={styles.loadingSection}>
+              <div className={styles.loadingCard}>
+                <div className={styles.loadingTop}>
+                  <span className={styles.spinner} aria-hidden="true" />
+                  <div>
+                    <h2 className={styles.loadingTitle}>Building your briefing</h2>
+                    <p className={styles.loadingSubtitle}>{displayStageLabel}</p>
+                  </div>
+                </div>
+
+                <div className={styles.progressTrack}>
+                  <div className={styles.progressFill} style={{ width: `${clampedProgress}%` }} />
+                </div>
+                <div className={styles.loadingMeta}>
+                  <span>We’ll stream the summary here as soon as it starts.</span>
+                  <span>Usually a few minutes.</span>
+                </div>
+
+                <div className={styles.loadingSteps}>
+                  {[
+                    { key: "listen", label: "Listening", hint: "Transcribing the audio" },
+                    { key: "summarize", label: "Summarizing", hint: "Structuring key insights" },
+                    { key: "polish", label: "Polishing", hint: "Final formatting" }
+                  ].map((step, index) => {
+                    const activeIndex = normalizedStage === "rendering" ? 2 : normalizedStage === "summarizing" ? 1 : 0;
+                    const isStepActive = index === activeIndex;
+                    const isStepComplete = index < activeIndex;
+
+                    return (
+                      <div key={step.key} className={styles.loadingStep}>
+                        <span
+                          className={`${styles.stageDot} ${
+                            isStepComplete
+                              ? styles.stageDotComplete
+                              : isStepActive
+                                ? styles.stageDotActive
+                                : ""
+                          }`}
+                        />
+                        <div>
+                          <div className={styles.stageLabel}>{step.label}</div>
+                          <div className={styles.stageHint}>{step.hint}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {error ? <div className={styles.errorCard}>{error}</div> : null}
               </div>
-              <div className={styles.summaryActions}>
-                {pdfUrl ? (
-                  <a className={styles.secondaryButton} href={pdfUrl} target="_blank" rel="noreferrer">
-                    Download PDF
-                  </a>
-                ) : (
-                  <button
-                    className={styles.secondaryButton}
-                    type="button"
-                    onClick={handleGeneratePdf}
-                    disabled={pdfLoading}
-                  >
-                    {pdfLoading ? "Preparing PDF..." : "Generate PDF"}
-                  </button>
-                )}
-                <Link className={styles.secondaryButton} href="/app">
-                  New summary
-                </Link>
-              </div>
-              {pdfError ? <p className={styles.status}>{pdfError}</p> : null}
-            </>
+            </section>
           ) : (
-            <p className={styles.cardText}>
-              {job?.status === "succeeded"
-                ? "Summary ready, but still loading."
-                : "Your summary will appear here once the job completes."}
-            </p>
+            <section className={styles.layout}>
+              <div className={styles.card}>
+                <div className={styles.cardHeader}>
+                  <div>
+                    <h2 className={styles.cardTitle}>Briefing</h2>
+                    <p className={styles.cardSubtitle}>
+                      {isComplete
+                        ? "Your briefing is finalized below."
+                        : "We stream updates as the summary is drafted."}
+                    </p>
+                  </div>
+                  <span className={isComplete ? styles.pill : styles.pillMuted}>
+                    {isComplete ? "Final" : "Live"}
+                  </span>
+                </div>
+                <div className={styles.summaryBody}>
+                  {markdownToRender ? (
+                    <StreamingMarkdown
+                      markdown={markdownToRender}
+                      isStreaming={isStreaming}
+                      className={styles.markdown}
+                      cursorClassName={styles.streamingCursor}
+                    />
+                  ) : (
+                    <div className={styles.emptyState}>
+                      {isFailed
+                        ? "We could not render the summary. Try again when you’re ready."
+                        : "Your summary will appear here as soon as we have content."}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <aside className={styles.sideColumn}>
+                <div className={styles.card}>
+                  <div className={styles.cardHeader}>
+                    <div>
+                      <h2 className={styles.cardTitle}>Export</h2>
+                      <p className={styles.cardSubtitle}>
+                        Save the briefing as a PDF or start a new summary.
+                      </p>
+                    </div>
+                  </div>
+                  <div className={styles.actions}>
+                    {pdfUrl ? (
+                      <a className={styles.buttonPrimary} href={pdfUrl} target="_blank" rel="noreferrer">
+                        Download PDF
+                      </a>
+                    ) : (
+                      <button
+                        className={styles.buttonPrimary}
+                        type="button"
+                        onClick={handleGeneratePdf}
+                        disabled={pdfLoading || !job?.summary_id}
+                      >
+                        {pdfLoading ? "Preparing PDF…" : "Generate PDF"}
+                      </button>
+                    )}
+                    <Link className={styles.buttonSecondary} href="/app">
+                      New summary
+                    </Link>
+                  </div>
+                  {pdfError ? <div className={styles.errorCard}>{pdfError}</div> : null}
+                </div>
+
+                {job?.status === "failed" && (
+                  <div className={styles.errorCard}>Error: {job.error_message ?? "Job failed."}</div>
+                )}
+                {error && <div className={styles.errorCard}>{error}</div>}
+              </aside>
+            </section>
           )}
         </div>
-      </main>
+     </main>
     </div>
   );
 }

@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Annotated, Any
+from urllib.parse import urljoin
 
 from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jwt import ExpiredSignatureError, InvalidTokenError
+from jwt import ExpiredSignatureError, InvalidTokenError, PyJWKClient, PyJWKClientError, get_unverified_header
 from jwt import decode as jwt_decode
 from supabase_auth.errors import AuthApiError
 
@@ -41,23 +43,36 @@ def _extract_user_id(user: Any) -> str | None:
     return None
 
 
-def _decode_local_jwt(access_token: str, settings: Settings) -> AuthContext:
-    if not settings.supabase_jwt_secret:
-        raise ConfigurationError("SUPABASE_JWT_SECRET is required when SUPABASE_AUTH_MODE=local.")
+@lru_cache(maxsize=4)
+def _get_jwks_client(jwks_url: str) -> PyJWKClient:
+    return PyJWKClient(jwks_url, cache_jwk_set=True, cache_keys=True)
 
-    options = {"verify_aud": bool(settings.supabase_jwt_audience)}
-    decode_kwargs: dict[str, Any] = {
-        "key": settings.supabase_jwt_secret,
-        "algorithms": ["HS256"],
-        "options": options,
-    }
-    if settings.supabase_jwt_audience:
-        decode_kwargs["audience"] = settings.supabase_jwt_audience
+
+def _decode_local_jwt(access_token: str, settings: Settings) -> AuthContext:
     try:
-        claims = jwt_decode(access_token, **decode_kwargs)
+        header = get_unverified_header(access_token)
+    except InvalidTokenError as exc:
+        raise AuthenticationError("Invalid auth token.") from exc
+
+    algorithm = header.get("alg")
+    if not algorithm:
+        raise AuthenticationError("Invalid auth token.")
+
+    try:
+        if not settings.supabase_url:
+            raise ConfigurationError("SUPABASE_URL is required when APP_ENV=local.")
+        jwks_url = urljoin(settings.supabase_url.rstrip("/") + "/", "auth/v1/.well-known/jwks.json")
+        jwks_client = _get_jwks_client(jwks_url)
+        signing_key = jwks_client.get_signing_key_from_jwt(access_token)
+        claims = jwt_decode(
+            access_token,
+            signing_key.key,
+            algorithms=[algorithm],
+            audience=["authenticated", "anon"],
+        )
     except ExpiredSignatureError as exc:
         raise AuthenticationError("Auth token expired.") from exc
-    except InvalidTokenError as exc:
+    except (InvalidTokenError, PyJWKClientError) as exc:
         raise AuthenticationError("Invalid auth token.") from exc
 
     user_id = claims.get("sub") or claims.get("user_id")
@@ -84,11 +99,21 @@ async def get_auth_context(
         raise AuthenticationError("Missing or invalid Authorization header.")
 
     access_token = credentials.credentials
-    auth_mode = (settings.supabase_auth_mode or "remote").lower()
+    app_env = (settings.app_env or "local").lower()
 
     try:
-        if auth_mode == "local":
-            return _decode_local_jwt(access_token, settings)
+        with log_context(**base_log_context):
+            logger.info("Auth environment resolved.", extra={"app_env": app_env})
+        if app_env == "local":
+            try:
+                return _decode_local_jwt(access_token, settings)
+            except AuthenticationError:
+                with log_context(**base_log_context):
+                    logger.warning(
+                        "Local JWT validation failed.",
+                        extra={"error_code": "unauthorized"},
+                    )
+                raise
         supabase = await create_supabase_user_client(settings, access_token)
         user = await supabase.auth.get_user(jwt=access_token)
     except AuthApiError as exc:
