@@ -87,8 +87,8 @@ export default function Home() {
                 text: "Paste any podcast or YouTube URL. We handle the audio, transcription, and structure."
               },
               {
-                title: "Stream the build",
-                text: "Watch progress in real time with live updates and streaming summaries."
+                title: "Track the build",
+                text: "Watch progress in real time with live updates and clear status cues."
               },
               {
                 title: "Save the signal",

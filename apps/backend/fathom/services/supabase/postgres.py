@@ -44,17 +44,16 @@ def _parse_notification_payload(payload: str) -> dict[str, Any] | None:
         return None
 
 
-async def _notification_handler(
+async def _enqueue_notification(
     _connection: asyncpg.Connection,
     _pid: int,
     _channel: str,
     payload: str,
     *,
-    job_id: str,
     queue: asyncio.Queue[dict[str, Any]],
 ) -> None:
     data = _parse_notification_payload(payload)
-    if data and data.get("id") == job_id:
+    if data:
         await queue.put(data)
 
 
@@ -79,40 +78,26 @@ async def create_postgres_connection(settings: Settings) -> AsyncIterator[asyncp
         raise ConfigurationError(f"Failed to connect to Postgres: {exc}") from exc
 
 
-async def listen_to_job_updates(
+async def wait_for_job_created(
     settings: Settings,
-    job_id: str,
     *,
-    timeout_seconds: float = 30.0,
-) -> AsyncIterator[dict[str, Any]]:
-    """Listen to job update notifications from Postgres.
+    timeout_seconds: float = 10.0,
+) -> dict[str, Any] | None:
+    """Wait for a job_created notification.
 
-    Yields notification payloads when the job is updated.
-    Raises asyncio.TimeoutError if no updates received within timeout.
+    Returns the payload dict if a notification arrives before timeout, otherwise None.
     """
     async with create_postgres_connection(settings) as conn:
-        # Create a queue to receive notifications
         queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
-        notification_handler = partial(_notification_handler, job_id=job_id, queue=queue)
-
-        # Register listener
-        await conn.add_listener("job_updates", notification_handler)
-        logger.info(f"listening to job_updates channel for job {job_id}")
+        notification_handler = partial(_enqueue_notification, queue=queue)
+        await conn.add_listener("job_created", notification_handler)
+        logger.info("listening to job_created channel")
 
         try:
-            while True:
-                try:
-                    # Wait for notification with timeout
-                    notification = await asyncio.wait_for(
-                        queue.get(),
-                        timeout=timeout_seconds,
-                    )
-                    yield notification
-                except TimeoutError:
-                    # Send heartbeat and continue
-                    logger.debug(f"no updates for job {job_id} in {timeout_seconds}s, continuing...")
-                    # Yield empty dict to signal heartbeat
-                    yield {}
+            try:
+                return await asyncio.wait_for(queue.get(), timeout=timeout_seconds)
+            except TimeoutError:
+                return None
         finally:
-            await conn.remove_listener("job_updates", notification_handler)
-            logger.info(f"stopped listening to job_updates channel for job {job_id}")
+            await conn.remove_listener("job_created", notification_handler)
+            logger.info("stopped listening to job_created channel")
