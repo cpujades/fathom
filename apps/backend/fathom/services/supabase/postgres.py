@@ -62,7 +62,6 @@ async def _notification_handler(
 async def create_postgres_connection(settings: Settings) -> AsyncIterator[asyncpg.Connection]:
     """Create a direct Postgres connection for LISTEN/NOTIFY."""
     postgres_url = _build_postgres_url(settings)
-    logger.info(f"postgres_url: {postgres_url}")
     if not postgres_url:
         raise ConfigurationError("SUPABASE_DB connection details are not configured.")
 
