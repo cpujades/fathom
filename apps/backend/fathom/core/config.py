@@ -35,7 +35,11 @@ class Settings(BaseSettings):
     supabase_publishable_key: str = Field(..., validation_alias="SUPABASE_PUBLISHABLE_KEY")
     supabase_secret_key: str = Field(..., validation_alias="SUPABASE_SECRET_KEY")
     supabase_jwt_secret: str | None = Field(default=None, validation_alias="SUPABASE_JWT_SECRET")
-    supabase_db_url: str | None = Field(default=None, validation_alias="SUPABASE_DB_URL")
+    supabase_db_password: str | None = Field(default=None, validation_alias="SUPABASE_DB_PASSWORD")
+    supabase_db_user: str = Field(default="postgres", validation_alias="SUPABASE_DB_USER")
+    supabase_db_name: str = Field(default="postgres", validation_alias="SUPABASE_DB_NAME")
+    supabase_db_host: str | None = Field(default=None, validation_alias="SUPABASE_DB_HOST")
+    supabase_db_port: int = Field(default=5432, validation_alias="SUPABASE_DB_PORT")
 
     # ---------------------------------------------------------------------------
     # Environment config (optional)
@@ -55,6 +59,10 @@ class Settings(BaseSettings):
         "supabase_publishable_key",
         "supabase_secret_key",
         "supabase_jwt_secret",
+        "supabase_db_password",
+        "supabase_db_user",
+        "supabase_db_name",
+        "supabase_db_host",
         "app_env",
         mode="before",
     )

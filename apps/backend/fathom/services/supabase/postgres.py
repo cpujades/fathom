@@ -6,7 +6,9 @@ import asyncio
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any
+from functools import partial
+from typing import Any, cast
+from urllib.parse import quote
 
 import asyncpg
 
@@ -16,12 +18,53 @@ from fathom.core.errors import ConfigurationError
 logger = logging.getLogger(__name__)
 
 
+def _build_postgres_url(settings: Settings) -> str | None:
+    if not settings.supabase_db_password:
+        return None
+
+    host = settings.supabase_db_host
+    user = settings.supabase_db_user
+    name = settings.supabase_db_name
+    port = settings.supabase_db_port
+    password = quote(settings.supabase_db_password, safe="")
+    return f"postgresql://{user}:{password}@{host}:{port}/{name}"
+
+
+def _parse_notification_payload(payload: str) -> dict[str, Any] | None:
+    try:
+        import json
+
+        data = json.loads(payload)
+        if isinstance(data, dict):
+            return cast(dict[str, Any], data)
+        logger.error("notification payload is not an object")
+        return None
+    except Exception as exc:
+        logger.error("failed to parse notification payload", exc_info=exc)
+        return None
+
+
+async def _notification_handler(
+    _connection: asyncpg.Connection,
+    _pid: int,
+    _channel: str,
+    payload: str,
+    *,
+    job_id: str,
+    queue: asyncio.Queue[dict[str, Any]],
+) -> None:
+    data = _parse_notification_payload(payload)
+    if data and data.get("id") == job_id:
+        await queue.put(data)
+
+
 @asynccontextmanager
 async def create_postgres_connection(settings: Settings) -> AsyncIterator[asyncpg.Connection]:
     """Create a direct Postgres connection for LISTEN/NOTIFY."""
-    postgres_url = settings.supabase_db_url
+    postgres_url = _build_postgres_url(settings)
+    logger.info(f"postgres_url: {postgres_url}")
     if not postgres_url:
-        raise ConfigurationError("SUPABASE_DB_URL is not configured.")
+        raise ConfigurationError("SUPABASE_DB connection details are not configured.")
 
     try:
         conn = await asyncpg.connect(postgres_url, timeout=10)
@@ -50,23 +93,7 @@ async def listen_to_job_updates(
     async with create_postgres_connection(settings) as conn:
         # Create a queue to receive notifications
         queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
-
-        async def notification_handler(
-            connection: asyncpg.Connection,
-            pid: int,
-            channel: str,
-            payload: str,
-        ) -> None:
-            """Handle incoming notifications."""
-            try:
-                import json
-
-                data = json.loads(payload)
-                # Filter notifications for this specific job
-                if data.get("id") == job_id:
-                    await queue.put(data)
-            except Exception as exc:
-                logger.error("failed to parse notification payload", exc_info=exc)
+        notification_handler = partial(_notification_handler, job_id=job_id, queue=queue)
 
         # Register listener
         await conn.add_listener("job_updates", notification_handler)
