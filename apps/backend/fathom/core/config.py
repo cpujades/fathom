@@ -51,6 +51,11 @@ class Settings(BaseSettings):
     # ---------------------------------------------------------------------------
     cors_allow_origins: list[str] = Field(default_factory=list, validation_alias="CORS_ALLOW_ORIGINS")
     rate_limit: int = Field(default=0, validation_alias="RATE_LIMIT")  # requests/min, 0 = disabled
+    worker_max_concurrent_jobs: int = Field(default=10, validation_alias="WORKER_MAX_CONCURRENT_JOBS")
+    worker_job_notify_timeout_seconds: float = Field(
+        default=10.0,
+        validation_alias="WORKER_JOB_NOTIFY_TIMEOUT_SECONDS",
+    )
 
     @field_validator(
         "openrouter_api_key",
@@ -80,6 +85,20 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             items = [item.strip() for item in value.split(",")]
             return [item for item in items if item]
+        return value
+
+    @field_validator("worker_max_concurrent_jobs", mode="before")
+    @classmethod
+    def _clamp_worker_jobs(cls, value: object) -> object:
+        if isinstance(value, int):
+            return max(1, value)
+        return value
+
+    @field_validator("worker_job_notify_timeout_seconds", mode="before")
+    @classmethod
+    def _clamp_worker_timeout(cls, value: object) -> object:
+        if isinstance(value, (int, float)):
+            return max(1.0, float(value))
         return value
 
 

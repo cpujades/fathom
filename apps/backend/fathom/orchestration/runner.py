@@ -36,7 +36,7 @@ from fathom.crud.supabase.transcripts import (
 )
 from fathom.services.downloader import download_audio
 from fathom.services.summarizer import OPENROUTER_MODEL, stream_summarize_transcript, summarize_transcript
-from fathom.services.supabase import create_supabase_admin_client
+from fathom.services.supabase import create_supabase_admin_client, wait_for_job_created
 from fathom.services.transcriber import transcribe_url
 from fathom.services.youtube import extract_youtube_video_id
 from supabase import AsyncClient
@@ -46,7 +46,6 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Worker configuration
 # ---------------------------------------------------------------------------
-WORKER_POLL_INTERVAL_SECONDS = 2
 WORKER_IDLE_SLEEP_SECONDS = 1
 WORKER_MAX_ATTEMPTS = 3
 WORKER_BACKOFF_BASE_SECONDS = 5
@@ -350,75 +349,105 @@ def _extract_error(exc: Exception) -> tuple[str, str]:
     return "internal_error", str(exc) or "Unhandled error."
 
 
+async def _handle_claimed_job(job: dict[str, Any], settings: Settings, admin_client: AsyncClient) -> None:
+    attempt_count = int(job.get("attempt_count") or 0)
+    job_id = job.get("id")
+    if not job_id:
+        logger.debug("claim_next_job returned an empty row; treating as no job available")
+        return
+
+    logger.info("job claimed job_id=%s attempt=%s", job_id, attempt_count)
+    if not job.get("url") or not job.get("user_id"):
+        logger.error("job missing required fields job_id=%s", job_id)
+        await mark_job_failed(
+            admin_client,
+            job_id=job_id,
+            error_code="invalid_job_payload",
+            error_message="Job is missing required fields (url or user_id).",
+        )
+        return
+
+    if attempt_count > WORKER_MAX_ATTEMPTS:
+        await mark_job_failed(
+            admin_client,
+            job_id=job_id,
+            error_code="max_attempts_exceeded",
+            error_message="Job exceeded maximum retry attempts.",
+        )
+        return
+
+    try:
+        with log_context(job_id=job_id, attempt=attempt_count):
+            await _process_job(job, settings, admin_client)
+    except Exception as exc:
+        error_code, error_message = _extract_error(exc)
+        logger.exception(
+            "job failed job_id=%s attempt=%s error_code=%s",
+            job_id,
+            attempt_count,
+            error_code,
+        )
+        if attempt_count < WORKER_MAX_ATTEMPTS:
+            backoff_seconds = _compute_backoff_seconds(WORKER_BACKOFF_BASE_SECONDS, attempt_count)
+            run_after = datetime.now(UTC) + timedelta(seconds=backoff_seconds)
+            await mark_job_retry(
+                admin_client,
+                job_id=job_id,
+                error_code=error_code,
+                error_message=error_message,
+                run_after=run_after,
+            )
+        else:
+            await mark_job_failed(
+                admin_client,
+                job_id=job_id,
+                error_code=error_code,
+                error_message=error_message,
+            )
+
+
+async def _wait_for_job_notification(settings: Settings, timeout_seconds: float) -> bool:
+    try:
+        payload = await wait_for_job_created(settings, timeout_seconds=timeout_seconds)
+        return payload is not None
+    except Exception as exc:
+        logger.warning("job_created listen failed, falling back to idle sleep", exc_info=exc)
+        return False
+
+
+def _drain_completed_tasks(tasks: set[asyncio.Task[None]]) -> None:
+    done_tasks = {task for task in tasks if task.done()}
+    for task in done_tasks:
+        tasks.remove(task)
+        try:
+            task.result()
+        except Exception:
+            logger.exception("worker task crashed unexpectedly")
+
+
 async def _run_loop(settings: Settings) -> None:
     admin_client = await create_supabase_admin_client(settings)
+    max_concurrent_jobs = max(1, settings.worker_max_concurrent_jobs)
+    notify_timeout_seconds = max(1.0, settings.worker_job_notify_timeout_seconds)
+    running_tasks: set[asyncio.Task[None]] = set()
 
     while True:
+        _drain_completed_tasks(running_tasks)
         await requeue_stale_jobs(admin_client, stale_after_seconds=WORKER_STALE_AFTER_SECONDS)
-        job = await claim_next_job(admin_client)
-        if not job:
+        while len(running_tasks) < max_concurrent_jobs:
+            job = await claim_next_job(admin_client)
+            if not job:
+                break
+
+            task = asyncio.create_task(_handle_claimed_job(job, settings, admin_client))
+            running_tasks.add(task)
+
+        if running_tasks:
             await asyncio.sleep(WORKER_IDLE_SLEEP_SECONDS)
             continue
 
-        attempt_count = int(job.get("attempt_count") or 0)
-        job_id = job.get("id")
-        if not job_id:
-            logger.debug("claim_next_job returned an empty row; treating as no job available")
+        if not await _wait_for_job_notification(settings, timeout_seconds=notify_timeout_seconds):
             await asyncio.sleep(WORKER_IDLE_SLEEP_SECONDS)
-            continue
-
-        logger.info("job claimed job_id=%s attempt=%s", job_id, attempt_count)
-        if not job.get("url") or not job.get("user_id"):
-            logger.error("job missing required fields job_id=%s", job_id)
-            await mark_job_failed(
-                admin_client,
-                job_id=job_id,
-                error_code="invalid_job_payload",
-                error_message="Job is missing required fields (url or user_id).",
-            )
-            await asyncio.sleep(WORKER_POLL_INTERVAL_SECONDS)
-            continue
-
-        if attempt_count > WORKER_MAX_ATTEMPTS:
-            await mark_job_failed(
-                admin_client,
-                job_id=job_id,
-                error_code="max_attempts_exceeded",
-                error_message="Job exceeded maximum retry attempts.",
-            )
-            await asyncio.sleep(WORKER_POLL_INTERVAL_SECONDS)
-            continue
-
-        try:
-            with log_context(job_id=job_id, attempt=attempt_count):
-                await _process_job(job, settings, admin_client)
-        except Exception as exc:
-            error_code, error_message = _extract_error(exc)
-            logger.exception(
-                "job failed job_id=%s attempt=%s error_code=%s",
-                job_id,
-                attempt_count,
-                error_code,
-            )
-            if attempt_count < WORKER_MAX_ATTEMPTS:
-                backoff_seconds = _compute_backoff_seconds(WORKER_BACKOFF_BASE_SECONDS, attempt_count)
-                run_after = datetime.now(UTC) + timedelta(seconds=backoff_seconds)
-                await mark_job_retry(
-                    admin_client,
-                    job_id=job_id,
-                    error_code=error_code,
-                    error_message=error_message,
-                    run_after=run_after,
-                )
-            else:
-                await mark_job_failed(
-                    admin_client,
-                    job_id=job_id,
-                    error_code=error_code,
-                    error_message=error_message,
-                )
-
-        await asyncio.sleep(WORKER_POLL_INTERVAL_SECONDS)
 
 
 def main() -> None:

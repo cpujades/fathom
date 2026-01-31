@@ -5,14 +5,14 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 
 import type { JobStatusResponse, SummaryResponse } from "@fathom/api-client";
-import { createApiClient, getApiBaseUrl } from "@fathom/api-client";
+import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
+import { createApiClient } from "@fathom/api-client";
 import styles from "./job.module.css";
 import { getApiErrorMessage } from "../../../lib/apiErrors";
 import { getSupabaseClient } from "../../../lib/supabaseClient";
 import { StreamingMarkdown } from "../../../components/StreamingMarkdown";
 
 const POLL_INTERVAL_MS = 2000;
-const SSE_STALL_TIMEOUT_MS = 6000;
 
 export default function JobDetailPage() {
   const router = useRouter();
@@ -25,9 +25,9 @@ export default function JobDetailPage() {
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState(5);
-  const [streamedMarkdown, setStreamedMarkdown] = useState("");
   const pollingRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const sseAbortRef = useRef<AbortController | null>(null);
+  const realtimeChannelRef = useRef<RealtimeChannel | null>(null);
+  const realtimeClientRef = useRef<SupabaseClient | null>(null);
 
   const stageFallback: Record<string, number> = {
     queued: 8,
@@ -63,7 +63,6 @@ export default function JobDetailPage() {
           break;
       }
     }
-
   };
 
   const fetchSummary = async (summaryId: string, accessToken: string) => {
@@ -84,9 +83,6 @@ export default function JobDetailPage() {
     if (summaryData) {
       setSummary(summaryData);
       setPdfUrl(summaryData.pdf_url ?? null);
-      setStreamedMarkdown((prev) =>
-        summaryData.markdown && summaryData.markdown.length > prev.length ? summaryData.markdown : prev
-      );
     }
   };
 
@@ -151,116 +147,6 @@ export default function JobDetailPage() {
     void poll();
   };
 
-  const startSse = async (accessToken: string) => {
-    if (sseAbortRef.current) {
-      return;
-    }
-
-    const controller = new AbortController();
-    sseAbortRef.current = controller;
-
-    let stallTimer: ReturnType<typeof setTimeout> | null = null;
-    const resetStallTimer = () => {
-      if (stallTimer) {
-        clearTimeout(stallTimer);
-      }
-      stallTimer = setTimeout(() => {
-        controller.abort();
-        startPolling(accessToken);
-      }, SSE_STALL_TIMEOUT_MS);
-    };
-
-    resetStallTimer();
-
-    try {
-      const response = await fetch(`${getApiBaseUrl()}/jobs/${jobId}/events`, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          Accept: "text/event-stream"
-        },
-        signal: controller.signal
-      });
-
-      if (!response.ok || !response.body) {
-        if (response.status === 429) {
-          setStatusMessage("High traffic detected. Switching to polling...");
-        }
-        if (stallTimer) {
-          clearTimeout(stallTimer);
-        }
-        startPolling(accessToken);
-        return;
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) {
-          break;
-        }
-
-        resetStallTimer();
-        buffer += decoder.decode(value, { stream: true });
-        const chunks = buffer.split("\n\n");
-        buffer = chunks.pop() ?? "";
-
-        for (const chunk of chunks) {
-          const lines = chunk.split("\n");
-          let eventName = "message";
-          const dataLines: string[] = [];
-
-          for (const line of lines) {
-            if (line.startsWith("event:")) {
-              eventName = line.replace("event:", "").trim();
-            } else if (line.startsWith("data:")) {
-              dataLines.push(line.replace("data:", "").trim());
-            }
-          }
-
-          const dataPayload = dataLines.join("\n");
-
-          if (eventName === "job") {
-            try {
-              const payload = JSON.parse(dataPayload) as JobStatusResponse;
-              const done = await handleJobPayload(payload, accessToken);
-              if (done) {
-                reader.cancel();
-                return;
-              }
-            } catch (err) {
-              setError(err instanceof Error ? err.message : "Failed to parse SSE payload.");
-            }
-          } else if (eventName === "summary" && dataPayload) {
-            try {
-              const parsed = JSON.parse(dataPayload) as { text?: string; delta?: string; markdown?: string };
-              if (parsed.markdown) {
-                setStreamedMarkdown(parsed.markdown);
-              } else if (parsed.text || parsed.delta) {
-                setStreamedMarkdown((prev) => `${prev}${parsed.text ?? parsed.delta ?? ""}`);
-              }
-            } catch {
-              setStreamedMarkdown((prev) => `${prev}${dataPayload}`);
-            }
-          } else if (dataPayload) {
-            setStreamedMarkdown((prev) => `${prev}${dataPayload}`);
-          }
-        }
-      }
-    } catch (err) {
-      if ((err as { name?: string }).name !== "AbortError") {
-        setError(err instanceof Error ? err.message : "SSE connection failed.");
-      }
-      startPolling(accessToken);
-    } finally {
-      if (stallTimer) {
-        clearTimeout(stallTimer);
-      }
-    }
-  };
-
   useEffect(() => {
     if (!jobId) {
       return;
@@ -269,6 +155,7 @@ export default function JobDetailPage() {
     const init = async () => {
       try {
         const supabase = getSupabaseClient();
+        realtimeClientRef.current = supabase;
         const { data: sessionData } = await supabase.auth.getSession();
 
         if (!sessionData.session) {
@@ -276,7 +163,68 @@ export default function JobDetailPage() {
           return;
         }
 
-        await startSse(sessionData.session.access_token);
+        const accessToken = sessionData.session.access_token;
+        const userId = sessionData.session.user.id;
+
+        const api = createApiClient(accessToken);
+        const { data: initialJob, error: jobError } = await api.GET("/jobs/{job_id}", {
+          params: {
+            path: {
+              job_id: jobId
+            }
+          }
+        });
+
+        if (jobError) {
+          setError(getApiErrorMessage(jobError, "Unable to fetch job status."));
+        } else if (initialJob) {
+          const done = await handleJobPayload(initialJob, accessToken);
+          if (done) {
+            return;
+          }
+        }
+
+        const channel = supabase
+          .channel(`jobs:${userId}`)
+          .on(
+            "postgres_changes",
+            {
+              event: "*",
+              schema: "public",
+              table: "jobs",
+              filter: `user_id=eq.${userId}`
+            },
+            async (payload) => {
+              const row = payload.new as Record<string, unknown> | null;
+              if (!row || row.id !== jobId) {
+                return;
+              }
+
+              const jobPayload: JobStatusResponse = {
+                job_id: String(row.id),
+                status: row.status as JobStatusResponse["status"],
+                summary_id: (row.summary_id as string | null) ?? null,
+                error_code: (row.error_code as string | null) ?? null,
+                error_message: (row.error_message as string | null) ?? null,
+                stage: (row.stage as string | null) ?? null,
+                progress: (row.progress as number | null) ?? null,
+                status_message: (row.status_message as string | null) ?? null
+              };
+
+              const done = await handleJobPayload(jobPayload, accessToken);
+              if (done) {
+                supabase.removeChannel(channel);
+                realtimeChannelRef.current = null;
+              }
+            }
+          )
+          .subscribe((status) => {
+            if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+              startPolling(accessToken);
+            }
+          });
+
+        realtimeChannelRef.current = channel;
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong.");
       }
@@ -289,19 +237,17 @@ export default function JobDetailPage() {
         clearTimeout(pollingRef.current);
         pollingRef.current = null;
       }
-      if (sseAbortRef.current) {
-        sseAbortRef.current.abort();
-        sseAbortRef.current = null;
+      if (realtimeClientRef.current && realtimeChannelRef.current) {
+        realtimeClientRef.current.removeChannel(realtimeChannelRef.current);
+        realtimeChannelRef.current = null;
       }
     };
   }, [jobId, router]);
 
   const isComplete = job?.status === "succeeded" || job?.stage === "completed" || job?.stage === "cached";
   const isFailed = job?.status === "failed";
-  const markdownToRender =
-    streamedMarkdown.length >= (summary?.markdown?.length ?? 0) ? streamedMarkdown : summary?.markdown ?? "";
+  const markdownToRender = summary?.markdown ?? "";
   const hasMarkdown = Boolean(markdownToRender);
-  const isStreaming = job?.status === "running" && !!streamedMarkdown;
   const clampedProgress = Math.max(0, Math.min(progress, 100));
   const headline = isComplete
     ? "Briefing ready"
@@ -419,7 +365,7 @@ export default function JobDetailPage() {
                   <div className={styles.progressFill} style={{ width: `${clampedProgress}%` }} />
                 </div>
                 <div className={styles.loadingMeta}>
-                  <span>We’ll stream the summary here as soon as it starts.</span>
+                  <span>Your summary will appear here once it’s ready.</span>
                   <span>Usually a few minutes.</span>
                 </div>
 
@@ -465,18 +411,16 @@ export default function JobDetailPage() {
                     <p className={styles.cardSubtitle}>
                       {isComplete
                         ? "Your briefing is finalized below."
-                        : "We stream updates as the summary is drafted."}
+                        : "We refresh the briefing status as it’s prepared."}
                     </p>
                   </div>
-                  <span className={isComplete ? styles.pill : styles.pillMuted}>
-                    {isComplete ? "Final" : "Live"}
-                  </span>
+                  <span className={isComplete ? styles.pill : styles.pillMuted}>{isComplete ? "Final" : "Updating"}</span>
                 </div>
                 <div className={styles.summaryBody}>
                   {markdownToRender ? (
                     <StreamingMarkdown
                       markdown={markdownToRender}
-                      isStreaming={isStreaming}
+                      isStreaming={false}
                       className={styles.markdown}
                       cursorClassName={styles.streamingCursor}
                     />
