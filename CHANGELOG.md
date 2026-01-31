@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.9.0](https://github.com/cpujades/fathom/compare/v0.8.0...v0.9.0) (2026-01-31)
+
+
+### Features
+
+* **realtime:** switch job updates to Supabase Realtime ([#64](https://github.com/cpujades/fathom/issues/64)) ([94f7c39](https://github.com/cpujades/fathom/commit/94f7c39d29ac7fc1c85d88bae5e20933a311353d))
+* **supabase:** build postgres url from env parts ([#62](https://github.com/cpujades/fathom/issues/62)) ([d425b0d](https://github.com/cpujades/fathom/commit/d425b0d292e0614456bacd72c04eb8536cbbacd0))
+* **transcription:** use Groq and capture source metadata ([#60](https://github.com/cpujades/fathom/issues/60)) ([aa39217](https://github.com/cpujades/fathom/commit/aa392173b26e69b1086367b8ff632e1b85e49285))
+
+
+### Bug Fixes
+
+* **postgres:** remove log of secret ([#63](https://github.com/cpujades/fathom/issues/63)) ([5d37671](https://github.com/cpujades/fathom/commit/5d37671252a62eec56e64c13988d3cdebb45e9f9))
+
 ## [0.8.0](https://github.com/cpujades/fathom/compare/v0.7.1...v0.8.0) (2026-01-30)
 
 
