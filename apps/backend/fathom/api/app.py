@@ -7,7 +7,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.cors import CORSMiddleware
 
 from fathom.api import __version__
-from fathom.api.routers import jobs_router, meta_router, summaries_router
+from fathom.api.routers import billing_router, jobs_router, meta_router, summaries_router, webhooks_router
 from fathom.core.config import Settings, get_settings
 from fathom.core.errors import AppError
 from fathom.core.handlers import handle_app_error, handle_validation_error
@@ -49,6 +49,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(meta_router)
     app.include_router(jobs_router)
     app.include_router(summaries_router)
+    app.include_router(billing_router)
+    app.include_router(webhooks_router)
     app.state.settings = settings
     app.state.rate_limit = settings.rate_limit
 
