@@ -47,6 +47,23 @@ async def fetch_plan_by_price_id(client: AsyncClient, price_id: str) -> dict[str
     )
 
 
+async def fetch_active_plans(client: AsyncClient) -> list[dict[str, Any]]:
+    try:
+        response = (
+            await client.table("plans")
+            .select("id,name,plan_type,stripe_price_id,quota_seconds,rollover_cap_seconds,pack_expiry_days,is_active")
+            .eq("is_active", True)
+            .order("plan_type", desc=False)
+            .order("quota_seconds", desc=False)
+            .execute()
+        )
+    except APIError as exc:
+        raise_for_postgrest_error(exc, "Failed to fetch plans.")
+
+    data = response.data or []
+    return [cast(dict[str, Any], row) for row in data if isinstance(row, dict)]
+
+
 async def upsert_stripe_customer(
     client: AsyncClient,
     *,
@@ -120,6 +137,53 @@ async def fetch_entitlement(client: AsyncClient, user_id: str) -> dict[str, Any]
     return cast(dict[str, Any], data[0])
 
 
+async def fetch_usage_entries(
+    client: AsyncClient,
+    *,
+    user_id: str,
+    source: str,
+    start: datetime,
+    end: datetime,
+) -> list[dict[str, Any]]:
+    try:
+        response = (
+            await client.table("usage_ledger")
+            .select("seconds_used,created_at")
+            .eq("user_id", user_id)
+            .eq("source", source)
+            .gte("created_at", start.isoformat())
+            .lte("created_at", end.isoformat())
+            .execute()
+        )
+    except APIError as exc:
+        raise_for_postgrest_error(exc, "Failed to fetch usage ledger.")
+
+    data = response.data or []
+    return [cast(dict[str, Any], row) for row in data if isinstance(row, dict)]
+
+
+async def fetch_usage_history(
+    client: AsyncClient,
+    *,
+    user_id: str,
+    limit: int = 50,
+) -> list[dict[str, Any]]:
+    try:
+        response = (
+            await client.table("usage_ledger")
+            .select("job_id,seconds_used,source,created_at")
+            .eq("user_id", user_id)
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+    except APIError as exc:
+        raise_for_postgrest_error(exc, "Failed to fetch usage history.")
+
+    data = response.data or []
+    return [cast(dict[str, Any], row) for row in data if isinstance(row, dict)]
+
+
 async def upsert_subscription_entitlement(
     client: AsyncClient,
     *,
@@ -184,7 +248,7 @@ async def add_pack_credits(
     if current_expires_at and current_expires_at > purchased_at:
         pack_seconds += current_seconds
 
-    payload = {
+    payload: dict[str, Any] = {
         "user_id": user_id,
         "pack_seconds_available": pack_seconds,
         "pack_expires_at": pack_expires_at.isoformat(),
@@ -194,3 +258,42 @@ async def add_pack_credits(
         await client.table("entitlements").upsert(payload).execute()
     except APIError as exc:
         raise_for_postgrest_error(exc, "Failed to apply pack credits.")
+
+
+async def update_pack_balance(
+    client: AsyncClient,
+    *,
+    user_id: str,
+    pack_seconds_available: int,
+    pack_expires_at: datetime | None,
+) -> None:
+    payload: dict[str, Any] = {
+        "user_id": user_id,
+        "pack_seconds_available": pack_seconds_available,
+        "pack_expires_at": pack_expires_at.isoformat() if pack_expires_at else None,
+    }
+    try:
+        await client.table("entitlements").upsert(payload).execute()
+    except APIError as exc:
+        raise_for_postgrest_error(exc, "Failed to update pack balance.")
+
+
+async def insert_usage_entry(
+    client: AsyncClient,
+    *,
+    user_id: str,
+    job_id: str | None,
+    seconds_used: int,
+    source: str,
+) -> None:
+    payload: dict[str, Any] = {
+        "user_id": user_id,
+        "seconds_used": seconds_used,
+        "source": source,
+    }
+    if job_id:
+        payload["job_id"] = job_id
+    try:
+        await client.table("usage_ledger").insert(payload).execute()
+    except APIError as exc:
+        raise_for_postgrest_error(exc, "Failed to insert usage ledger entry.")

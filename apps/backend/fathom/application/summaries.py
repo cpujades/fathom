@@ -6,6 +6,7 @@ from uuid import UUID
 
 from fathom.api.deps.auth import AuthContext
 from fathom.application.guards import validate_video_duration, validate_youtube_url
+from fathom.application.usage import ensure_usage_allowed
 from fathom.core.config import Settings
 from fathom.core.constants import SIGNED_URL_TTL_SECONDS, SUPABASE_PDF_BUCKET
 from fathom.core.errors import ExternalServiceError
@@ -41,8 +42,19 @@ async def create_summary_job(
             },
         )
 
+        await ensure_usage_allowed(
+            user_id=auth.user_id,
+            duration_seconds=metadata.duration_seconds,
+            settings=settings,
+        )
+
         client = await create_supabase_user_client(settings, auth.access_token)
-        job = await create_job(client, url=url, user_id=auth.user_id)
+        job = await create_job(
+            client,
+            url=url,
+            user_id=auth.user_id,
+            duration_seconds=metadata.duration_seconds,
+        )
         job_id = job["id"]
         logger.info("summarize job created", extra={"job_id": job_id})
 

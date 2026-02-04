@@ -140,6 +140,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/billing/checkout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Checkout */
+        post: operations["create_checkout_billing_checkout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/billing/plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Plans */
+        get: operations["list_plans_billing_plans_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/billing/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Usage */
+        get: operations["get_usage_billing_usage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/billing/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get History */
+        get: operations["get_history_billing_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -241,6 +309,65 @@ export interface components {
             markdown: string;
             /** Pdf Url */
             pdf_url: string | null;
+        };
+        /** PlanResponse */
+        PlanResponse: {
+            /**
+             * Plan Id
+             * Format: uuid
+             */
+            plan_id: string;
+            /** Name */
+            name: string;
+            /** Plan Type */
+            plan_type: string;
+            /** Stripe Price Id */
+            stripe_price_id?: string | null;
+            /** Quota Seconds */
+            quota_seconds?: number | null;
+            /** Rollover Cap Seconds */
+            rollover_cap_seconds?: number | null;
+            /** Pack Expiry Days */
+            pack_expiry_days?: number | null;
+            /** Is Active */
+            is_active: boolean;
+        };
+        /** UsageOverviewResponse */
+        UsageOverviewResponse: {
+            /** Subscription Plan Name */
+            subscription_plan_name?: string | null;
+            /** Subscription Remaining Seconds */
+            subscription_remaining_seconds: number;
+            /** Pack Remaining Seconds */
+            pack_remaining_seconds: number;
+            /** Total Remaining Seconds */
+            total_remaining_seconds: number;
+            /** Pack Expires At */
+            pack_expires_at?: string | null;
+        };
+        /** UsageHistoryEntry */
+        UsageHistoryEntry: {
+            /** Job Id */
+            job_id?: string | null;
+            /** Seconds Used */
+            seconds_used: number;
+            /** Source */
+            source: string;
+            /** Created At */
+            created_at: string;
+        };
+        /** CheckoutSessionRequest */
+        CheckoutSessionRequest: {
+            /**
+             * Plan Id
+             * Format: uuid
+             */
+            plan_id: string;
+        };
+        /** CheckoutSessionResponse */
+        CheckoutSessionResponse: {
+            /** Checkout Url */
+            checkout_url: string;
         };
         /** ValidationError */
         ValidationError: {
@@ -689,6 +816,90 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_checkout_billing_checkout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CheckoutSessionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckoutSessionResponse"];
+                };
+            };
+        };
+    };
+    list_plans_billing_plans_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanResponse"][];
+                };
+            };
+        };
+    };
+    get_usage_billing_usage_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsageOverviewResponse"];
+                };
+            };
+        };
+    };
+    get_history_billing_history_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsageHistoryEntry"][];
                 };
             };
         };

@@ -11,22 +11,25 @@ from fathom.services.supabase.helpers import first_row, raise_for_postgrest_erro
 from supabase import AsyncClient
 
 
-async def create_job(client: AsyncClient, *, url: str, user_id: str) -> dict[str, Any]:
+async def create_job(
+    client: AsyncClient,
+    *,
+    url: str,
+    user_id: str,
+    duration_seconds: int | None = None,
+) -> dict[str, Any]:
     """Insert a new job row and return it."""
     try:
-        response = (
-            await client.table("jobs")
-            .insert(
-                {
-                    "url": url,
-                    "user_id": user_id,
-                    "stage": "queued",
-                    "progress": 5,
-                    "status_message": "Queued — waiting for a worker",
-                }
-            )
-            .execute()
-        )
+        payload: dict[str, Any] = {
+            "url": url,
+            "user_id": user_id,
+            "stage": "queued",
+            "progress": 5,
+            "status_message": "Queued — waiting for a worker",
+        }
+        if duration_seconds is not None:
+            payload["duration_seconds"] = duration_seconds
+        response = await client.table("jobs").insert(payload).execute()
     except APIError as exc:
         raise_for_postgrest_error(exc, "Failed to create job.")
 

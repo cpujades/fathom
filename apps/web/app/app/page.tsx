@@ -7,6 +7,7 @@ import type { User } from "@supabase/supabase-js";
 import { createApiClient } from "@fathom/api-client";
 
 import styles from "./app.module.css";
+import { formatDuration } from "../lib/format";
 import { getSupabaseClient } from "../lib/supabaseClient";
 
 export default function AppHome() {
@@ -17,6 +18,7 @@ export default function AppHome() {
   const [error, setError] = useState<string | null>(null);
   const [healthStatus, setHealthStatus] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [usageRemaining, setUsageRemaining] = useState<number | null>(null);
 
   useEffect(() => {
     let unsubscribe: (() => void) | null = null;
@@ -40,6 +42,15 @@ export default function AppHome() {
         const api = createApiClient();
         const { data: healthData } = await api.GET("/meta/health");
         setHealthStatus(healthData?.status ?? null);
+
+        const { data: usageData } = await api.GET("/billing/usage", {
+          headers: {
+            Authorization: `Bearer ${data.session.access_token}`
+          }
+        });
+        if (usageData) {
+          setUsageRemaining(usageData.total_remaining_seconds ?? null);
+        }
 
         const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
           if (!session) {
@@ -116,7 +127,18 @@ export default function AppHome() {
         <div className={styles.headerActions}>
           {healthStatus ? <div className={styles.usageChip}>API: {healthStatus}</div> : null}
           {user?.email ? <div className={styles.usageChip}>{user.email}</div> : null}
-          <div className={styles.usageChip}>Usage: 0 / 6h</div>
+          <div className={styles.usageChip}>
+            Remaining: {usageRemaining !== null ? formatDuration(usageRemaining) : "—"}
+          </div>
+          <Link className={styles.button} href="/app/billing">
+            Billing
+          </Link>
+          <Link className={styles.button} href="/app/profile">
+            Profile
+          </Link>
+          <Link className={styles.button} href="/app/history">
+            History
+          </Link>
           <Link className={styles.button} href="/">
             Landing
           </Link>

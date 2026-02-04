@@ -10,6 +10,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import urlparse
 
+from fathom.application.usage import record_usage_for_job
 from fathom.core.config import Settings, get_settings
 from fathom.core.constants import (
     GROQ_MODEL,
@@ -232,6 +233,15 @@ async def _process_job(job: dict[str, Any], settings: Settings, admin_client: As
                     summary_id=cached_summary_id,
                 )
                 await mark_job_succeeded(admin_client, job_id=job_id, summary_id=cached_summary_id)
+                try:
+                    await record_usage_for_job(
+                        user_id=user_id,
+                        job_id=job_id,
+                        duration_seconds=job.get("duration_seconds"),
+                        settings=settings,
+                    )
+                except Exception:
+                    logger.exception("usage recording failed for cached summary", extra={"job_id": job_id})
             _log_step(
                 "job complete (cached summary)",
                 duration_ms=(time.perf_counter() - job_start) * 1000,
@@ -337,6 +347,15 @@ async def _process_job(job: dict[str, Any], settings: Settings, admin_client: As
 
         with log_context(summary_id=summary_id):
             await mark_job_succeeded(admin_client, job_id=job_id, summary_id=summary_id)
+        try:
+            await record_usage_for_job(
+                user_id=user_id,
+                job_id=job_id,
+                duration_seconds=job.get("duration_seconds"),
+                settings=settings,
+            )
+        except Exception:
+            logger.exception("usage recording failed", extra={"job_id": job_id})
         _log_step(
             "job complete",
             duration_ms=(time.perf_counter() - job_start) * 1000,

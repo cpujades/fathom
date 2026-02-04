@@ -9,6 +9,11 @@ type SummaryResponse = components["schemas"]["SummaryResponse"];
 type SummaryPdfResponse = components["schemas"]["SummaryPdfResponse"];
 type JobStatusResponse = components["schemas"]["JobStatusResponse"];
 type JobStatus = JobStatusResponse["status"];
+type PlanResponse = components["schemas"]["PlanResponse"];
+type UsageOverviewResponse = components["schemas"]["UsageOverviewResponse"];
+type UsageHistoryEntry = components["schemas"]["UsageHistoryEntry"];
+type CheckoutSessionRequest = components["schemas"]["CheckoutSessionRequest"];
+type CheckoutSessionResponse = components["schemas"]["CheckoutSessionResponse"];
 
 type ErrorResponse = components["schemas"]["ErrorResponse"];
 type HTTPValidationError = components["schemas"]["HTTPValidationError"];
@@ -24,6 +29,11 @@ export type {
   StatusResponse,
   SummarizeRequest,
   SummarizeResponse,
+  CheckoutSessionRequest,
+  CheckoutSessionResponse,
   SummaryPdfResponse,
-  SummaryResponse
+  SummaryResponse,
+  PlanResponse,
+  UsageOverviewResponse,
+  UsageHistoryEntry
 };
