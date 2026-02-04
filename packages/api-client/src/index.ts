@@ -9,6 +9,11 @@ export type {
   StatusResponse,
   SummarizeRequest,
   SummarizeResponse,
+  CheckoutSessionRequest,
+  CheckoutSessionResponse,
   SummaryPdfResponse,
-  SummaryResponse
+  SummaryResponse,
+  PlanResponse,
+  UsageOverviewResponse,
+  UsageHistoryEntry
 } from "./types";
