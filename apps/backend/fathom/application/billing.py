@@ -371,7 +371,7 @@ async def _handle_order_paid(admin_client: Any, order: dict[str, Any], settings:
     currency = _as_str(order.get("currency")) or str(plan.get("currency") or "usd")
     subscription_id = _as_str(order.get("subscription_id"))
 
-    order_row = await upsert_billing_order(
+    _order_row = await upsert_billing_order(
         admin_client,
         polar_order_id=polar_order_id,
         user_id=user_id,
@@ -429,7 +429,7 @@ async def _handle_order_paid(admin_client: Any, order: dict[str, Any], settings:
         settings=settings,
     )
 
-    logger.info("polar order tracked", extra={"polar_order_id": polar_order_id, "order_id": order_row.get("id")})
+    logger.info("polar order tracked")
 
 
 async def _handle_order_refunded(admin_client: Any, refund: dict[str, Any], settings: Settings) -> None:
