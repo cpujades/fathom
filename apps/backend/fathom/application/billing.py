@@ -1,53 +1,163 @@
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from collections.abc import Mapping
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fathom.api.deps.auth import AuthContext
 from fathom.core.config import Settings
-from fathom.core.errors import ExternalServiceError, InvalidRequestError
+from fathom.core.errors import InvalidRequestError
 from fathom.core.logging import log_context
 from fathom.crud.supabase.billing import (
-    add_pack_credits,
+    expire_active_subscription_lots,
+    fetch_billing_order_by_polar_id,
+    fetch_billing_order_for_user,
+    fetch_credit_lot_by_id,
+    fetch_credit_lot_by_source,
     fetch_entitlement,
     fetch_plan_by_id,
-    fetch_plan_by_price_id,
-    fetch_stripe_customer_by_customer_id,
-    fetch_stripe_customer_by_user,
-    upsert_stripe_customer,
-    upsert_subscription_entitlement,
+    fetch_plan_by_product_id,
+    mark_webhook_event_failed,
+    mark_webhook_event_processed,
+    record_webhook_event_received,
+    remaining_seconds_from_lot,
+    revoke_remaining_credit_lot,
+    summarize_credit_lots,
+    update_billing_order,
+    update_credit_lot,
+    update_entitlement_debt,
+    update_entitlement_snapshot,
+    upsert_billing_order,
+    upsert_credit_lot,
+    upsert_polar_customer,
+    upsert_subscription_entitlement_state,
 )
-from fathom.schemas.billing import CheckoutSessionRequest, CheckoutSessionResponse
-from fathom.services.stripe import (
-    create_stripe_client,
-    get_stripe_cancel_url,
-    get_stripe_success_url,
-    get_stripe_webhook_secret,
+from fathom.schemas.billing import (
+    CheckoutSessionRequest,
+    CheckoutSessionResponse,
+    CustomerPortalSessionResponse,
+    PackRefundResponse,
 )
+from fathom.services import polar
 from fathom.services.supabase import create_supabase_admin_client
 
 logger = logging.getLogger(__name__)
 
 
-def _get_value(obj: Any, key: str, default: Any = None) -> Any:
-    if isinstance(obj, dict):
-        return obj.get(key, default)
-    return getattr(obj, key, default)
+def _as_str(value: Any) -> str | None:
+    if isinstance(value, str) and value:
+        return value
+    return None
 
 
-def _extract_event_fields(event: Any) -> tuple[str | None, dict[str, Any] | None]:
-    event_type = getattr(event, "type", None)
-    data = getattr(event, "data", None)
-    if event_type is None and isinstance(event, dict):
-        event_type = event.get("type")
-        data = event.get("data")
-    payload = None
-    if data is not None:
-        payload = getattr(data, "object", None)
-        if payload is None and isinstance(data, dict):
-            payload = data.get("object")
-    return event_type, payload
+def _as_int(value: Any) -> int | None:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return None
+    return None
+
+
+def _parse_dt(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=UTC)
+    if isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value)
+            return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+        except ValueError:
+            return None
+    if isinstance(value, int):
+        return datetime.fromtimestamp(value, UTC)
+    return None
+
+
+def _extract_event_fields(event: dict[str, Any]) -> tuple[str, str, dict[str, Any]]:
+    event_id = _as_str(event.get("id"))
+    event_type = _as_str(event.get("type"))
+    data = event.get("data")
+
+    if not event_id or not event_type or not isinstance(data, dict):
+        raise InvalidRequestError("Invalid Polar webhook payload.")
+
+    return event_id, event_type, data
+
+
+async def _sync_entitlement_snapshot(
+    admin_client: Any,
+    *,
+    user_id: str,
+    settings: Settings,
+    debt_seconds: int | None = None,
+) -> None:
+    entitlement = await fetch_entitlement(admin_client, user_id)
+    effective_debt = int(entitlement.get("debt_seconds") or 0) if entitlement else 0
+    if debt_seconds is not None:
+        effective_debt = max(debt_seconds, 0)
+
+    now = datetime.now(UTC)
+    subscription_remaining, pack_remaining, next_pack_expiry = await summarize_credit_lots(
+        admin_client,
+        user_id=user_id,
+        now=now,
+    )
+    is_blocked = effective_debt >= settings.billing_debt_cap_seconds
+
+    await update_entitlement_snapshot(
+        admin_client,
+        user_id=user_id,
+        subscription_available_seconds=subscription_remaining,
+        pack_available_seconds=pack_remaining,
+        pack_expires_at=next_pack_expiry,
+        debt_seconds=effective_debt,
+        is_blocked=is_blocked,
+        last_balance_sync_at=now,
+    )
+
+
+async def _apply_debt_paydown_for_lot(
+    admin_client: Any,
+    *,
+    user_id: str,
+    lot_id: str,
+    settings: Settings,
+) -> int:
+    entitlement = await fetch_entitlement(admin_client, user_id)
+    debt_seconds = int(entitlement.get("debt_seconds") or 0) if entitlement else 0
+    if debt_seconds <= 0:
+        return 0
+
+    lot = await fetch_credit_lot_by_id(admin_client, lot_id)
+    if not lot:
+        return debt_seconds
+
+    available = remaining_seconds_from_lot(lot)
+    if available <= 0:
+        return debt_seconds
+
+    paydown = min(available, debt_seconds)
+    if paydown <= 0:
+        return debt_seconds
+
+    current_consumed = int(lot.get("consumed_seconds") or 0)
+    await update_credit_lot(
+        admin_client,
+        lot_id=lot_id,
+        values={"consumed_seconds": current_consumed + paydown},
+    )
+
+    new_debt = max(debt_seconds - paydown, 0)
+    await update_entitlement_debt(
+        admin_client,
+        user_id=user_id,
+        debt_seconds=new_debt,
+        is_blocked=new_debt >= settings.billing_debt_cap_seconds,
+    )
+    return new_debt
 
 
 async def create_checkout_session(
@@ -62,162 +172,373 @@ async def create_checkout_session(
         if not plan.get("is_active"):
             raise InvalidRequestError("Plan is not active.")
 
-        plan_type = plan["plan_type"]
-        price_id = plan.get("stripe_price_id")
-        if plan_type != "subscription" and plan_type != "pack":
+        plan_type = str(plan["plan_type"])
+        product_id = _as_str(plan.get("polar_product_id"))
+        if plan_type not in {"subscription", "pack"}:
             raise InvalidRequestError("Plan type is invalid.")
-        if plan_type == "subscription" and price_id == "internal_free":
+        if plan_type == "subscription" and product_id == "internal_free":
             raise InvalidRequestError("Free plan does not require checkout.")
-        if not price_id:
-            raise InvalidRequestError("Plan is missing a Stripe price id.")
+        if not product_id:
+            raise InvalidRequestError("Plan is missing a Polar product id.")
 
-        stripe_client = create_stripe_client(settings)
-        success_url = get_stripe_success_url(settings)
-        cancel_url = get_stripe_cancel_url(settings)
-
-        customer_row = await fetch_stripe_customer_by_user(admin_client, auth.user_id)
-        stripe_customer_id = customer_row["stripe_customer_id"] if customer_row else None
-        if not stripe_customer_id:
-            customer = stripe_client.v1.customers.create(
-                params={
-                    "metadata": {
-                        "user_id": auth.user_id,
-                    }
-                }
-            )
-            stripe_customer_id = customer["id"]
-            await upsert_stripe_customer(admin_client, user_id=auth.user_id, stripe_customer_id=stripe_customer_id)
-
-        session = stripe_client.v1.checkout.sessions.create(
-            params={
-                "mode": "subscription" if plan_type == "subscription" else "payment",
-                "success_url": success_url,
-                "cancel_url": cancel_url,
-                "customer": stripe_customer_id,
-                "client_reference_id": auth.user_id,
-                "line_items": [{"price": price_id, "quantity": 1}],
-                "metadata": {
-                    "user_id": auth.user_id,
-                    "plan_id": plan_id,
-                    "price_id": price_id,
-                    "plan_type": plan_type,
-                },
-            }
+        await upsert_polar_customer(
+            admin_client,
+            user_id=auth.user_id,
+            external_customer_id=auth.user_id,
         )
 
-        checkout_url = session.get("url") if isinstance(session, dict) else getattr(session, "url", None)
-        if not checkout_url:
-            raise ExternalServiceError("Stripe checkout URL was not returned.")
+        checkout_url = await polar.create_checkout_session(
+            settings,
+            product_id=product_id,
+            external_customer_id=auth.user_id,
+            metadata={
+                "user_id": auth.user_id,
+                "plan_id": plan_id,
+                "plan_code": str(plan.get("plan_code") or ""),
+                "version": str(plan.get("version") or 1),
+                "plan_type": plan_type,
+            },
+        )
 
-        logger.info("stripe checkout session created", extra={"session_id": session.get("id")})
+        logger.info("polar checkout session created", extra={"user_id": auth.user_id, "plan_id": plan_id})
         return CheckoutSessionResponse(checkout_url=checkout_url)
 
 
-async def handle_stripe_webhook(payload: bytes, signature: str | None, settings: Settings) -> None:
-    if not signature:
-        raise InvalidRequestError("Missing Stripe signature.")
+async def create_portal_session(auth: AuthContext, settings: Settings) -> CustomerPortalSessionResponse:
+    admin_client = await create_supabase_admin_client(settings)
+    await upsert_polar_customer(
+        admin_client,
+        user_id=auth.user_id,
+        external_customer_id=auth.user_id,
+    )
 
-    stripe_client = create_stripe_client(settings)
-    secret = get_stripe_webhook_secret(settings)
-    event = stripe_client.construct_event(payload, signature, secret)
-    event_type, data = _extract_event_fields(event)
+    portal_url = await polar.create_customer_portal_session(
+        settings,
+        external_customer_id=auth.user_id,
+    )
 
-    if not event_type or data is None:
-        raise InvalidRequestError("Invalid Stripe event payload.")
+    return CustomerPortalSessionResponse(portal_url=portal_url)
+
+
+async def request_pack_refund(
+    *,
+    polar_order_id: str,
+    auth: AuthContext,
+    settings: Settings,
+) -> PackRefundResponse:
+    admin_client = await create_supabase_admin_client(settings)
+    order = await fetch_billing_order_for_user(
+        admin_client,
+        user_id=auth.user_id,
+        polar_order_id=polar_order_id,
+    )
+    if not order:
+        raise InvalidRequestError("Pack order not found.")
+
+    if order.get("plan_type") != "pack":
+        raise InvalidRequestError("Only pack orders can be refunded from this endpoint.")
+
+    status = _as_str(order.get("status")) or "paid"
+    if status == "refund_pending":
+        raise InvalidRequestError("Refund is already in progress for this order.")
+    if status == "refunded":
+        raise InvalidRequestError("This order has already been refunded.")
+
+    lot = await fetch_credit_lot_by_source(
+        admin_client,
+        lot_type="pack_order",
+        source_key=polar_order_id,
+    )
+    if not lot:
+        raise InvalidRequestError("Pack lot not found for this order.")
+
+    granted_seconds = int(lot.get("granted_seconds") or 0)
+    remaining_seconds = remaining_seconds_from_lot(lot)
+    paid_amount_cents = int(order.get("paid_amount_cents") or 0)
+
+    if granted_seconds <= 0 or paid_amount_cents <= 0:
+        raise InvalidRequestError("Order is not refundable.")
+    if remaining_seconds <= 0:
+        raise InvalidRequestError("No refundable amount remaining for this pack order.")
+
+    refundable_amount_cents = (paid_amount_cents * remaining_seconds) // granted_seconds
+    if refundable_amount_cents <= 0:
+        raise InvalidRequestError("No refundable amount remaining for this pack order.")
+
+    await update_billing_order(
+        admin_client,
+        order_id=str(order["id"]),
+        values={"status": "refund_pending"},
+    )
+    try:
+        refund = await polar.create_order_refund(
+            settings,
+            polar_order_id=polar_order_id,
+            amount_cents=refundable_amount_cents,
+        )
+    except Exception:
+        await update_billing_order(
+            admin_client,
+            order_id=str(order["id"]),
+            values={"status": "paid"},
+        )
+        raise
+
+    refund_id = _as_str(refund.get("id"))
+    return PackRefundResponse(
+        polar_order_id=polar_order_id,
+        refund_id=refund_id,
+        requested_amount_cents=refundable_amount_cents,
+        remaining_seconds_before_refund=remaining_seconds,
+        status="pending_webhook_confirmation",
+    )
+
+
+async def handle_polar_webhook(payload: bytes, headers: Mapping[str, str], settings: Settings) -> None:
+    event = polar.verify_and_parse_webhook(payload, headers, settings)
+    event_id, event_type, data = _extract_event_fields(event)
 
     admin_client = await create_supabase_admin_client(settings)
-
-    if event_type == "checkout.session.completed":
-        await _handle_checkout_completed(admin_client, stripe_client, data)
+    inserted = await record_webhook_event_received(
+        admin_client,
+        event_id=event_id,
+        provider="polar",
+        event_type=event_type,
+        payload=event,
+    )
+    if not inserted:
+        logger.info("polar webhook duplicate ignored", extra={"event_id": event_id, "event_type": event_type})
         return
 
-    if event_type in {
-        "customer.subscription.created",
-        "customer.subscription.updated",
-        "customer.subscription.deleted",
-    }:
-        await _handle_subscription_event(admin_client, data)
+    try:
+        if event_type == "order.paid":
+            await _handle_order_paid(admin_client, data, settings)
+        elif event_type == "order.refunded":
+            await _handle_order_refunded(admin_client, data, settings)
+        elif event_type in {"subscription.updated", "subscription.revoked"}:
+            await _handle_subscription_event(admin_client, data, settings)
+        elif event_type in {"customer.created", "customer.state_changed"}:
+            await _handle_customer_event(admin_client, data)
+        else:
+            logger.info("polar webhook ignored", extra={"event_type": event_type})
+
+        await mark_webhook_event_processed(admin_client, event_id)
+    except Exception as exc:
+        await mark_webhook_event_failed(admin_client, event_id, str(exc))
+        raise
+
+
+async def _handle_customer_event(admin_client: Any, data: dict[str, Any]) -> None:
+    external_customer_id = _as_str(data.get("external_id"))
+    if not external_customer_id:
         return
 
-    logger.info("stripe webhook ignored", extra={"event_type": event_type})
+    billing_address = data.get("billing_address")
+    country = None
+    if isinstance(billing_address, dict):
+        country = _as_str(billing_address.get("country"))
+
+    await upsert_polar_customer(
+        admin_client,
+        user_id=external_customer_id,
+        external_customer_id=external_customer_id,
+        polar_customer_id=_as_str(data.get("id")),
+        email=_as_str(data.get("email")),
+        country=country,
+    )
 
 
-async def _handle_checkout_completed(
-    admin_client: Any,
-    stripe_client: Any,
-    session: dict[str, Any],
-) -> None:
-    customer_id = _get_value(session, "customer")
-    metadata = _get_value(session, "metadata") or {}
-    user_id = _get_value(session, "client_reference_id") or _get_value(metadata, "user_id")
-    if customer_id and user_id:
-        await upsert_stripe_customer(admin_client, user_id=user_id, stripe_customer_id=customer_id)
+async def _handle_order_paid(admin_client: Any, order: dict[str, Any], settings: Settings) -> None:
+    polar_order_id = _as_str(order.get("id"))
+    if not polar_order_id:
+        raise InvalidRequestError("Polar order payload is missing id.")
 
-    mode = _get_value(session, "mode")
-    if mode == "subscription":
-        subscription_id = _get_value(session, "subscription")
-        if not subscription_id:
-            return
-        subscription = stripe_client.v1.subscriptions.retrieve(subscription_id)
-        await _apply_subscription(admin_client, subscription)
-        return
+    user_id = _as_str(order.get("customer_external_id"))
+    if not user_id:
+        metadata = order.get("metadata")
+        if isinstance(metadata, dict):
+            user_id = _as_str(metadata.get("user_id"))
+    if not user_id:
+        raise InvalidRequestError("Polar order payload is missing external customer id.")
 
-    if mode == "payment":
-        price_id = _get_value(metadata, "price_id")
-        if not price_id:
-            return
-        plan = await fetch_plan_by_price_id(admin_client, price_id)
-        if not user_id and customer_id:
-            mapping = await fetch_stripe_customer_by_customer_id(admin_client, customer_id)
-            user_id = mapping["user_id"] if mapping else None
-        if not user_id:
-            raise InvalidRequestError("Stripe session missing user mapping.")
-        existing = await fetch_entitlement(admin_client, user_id)
-        await add_pack_credits(
+    product_id = _as_str(order.get("product_id"))
+    if not product_id:
+        raise InvalidRequestError("Polar order payload is missing product mapping.")
+
+    plan = await fetch_plan_by_product_id(admin_client, product_id)
+    plan_type = str(plan["plan_type"])
+    paid_amount_cents = int(_as_int(order.get("amount")) or 0)
+    currency = _as_str(order.get("currency")) or str(plan.get("currency") or "usd")
+    subscription_id = _as_str(order.get("subscription_id"))
+
+    order_row = await upsert_billing_order(
+        admin_client,
+        polar_order_id=polar_order_id,
+        user_id=user_id,
+        plan_id=str(plan["id"]),
+        plan_type=plan_type,
+        polar_product_id=product_id,
+        polar_subscription_id=subscription_id,
+        currency=currency,
+        paid_amount_cents=paid_amount_cents,
+        status="paid",
+    )
+
+    await upsert_polar_customer(
+        admin_client,
+        user_id=user_id,
+        external_customer_id=user_id,
+        polar_customer_id=_as_str(order.get("customer_id")),
+        email=_as_str(order.get("customer", {}).get("email")) if isinstance(order.get("customer"), dict) else None,
+    )
+
+    if plan_type == "pack":
+        granted_seconds = int(plan.get("quota_seconds") or 0)
+        pack_expiry_days = int(plan.get("pack_expiry_days") or 0)
+        pack_expires_at = datetime.now(UTC) + timedelta(days=pack_expiry_days)
+
+        lot = await upsert_credit_lot(
             admin_client,
             user_id=user_id,
-            plan=plan,
-            purchased_at=datetime.now(UTC),
-            existing=existing,
+            plan_id=str(plan["id"]),
+            lot_type="pack_order",
+            source_key=polar_order_id,
+            granted_seconds=granted_seconds,
+            pack_expires_at=pack_expires_at,
+            status="active",
+        )
+
+        debt_after_paydown = await _apply_debt_paydown_for_lot(
+            admin_client,
+            user_id=user_id,
+            lot_id=str(lot["id"]),
+            settings=settings,
+        )
+        await _sync_entitlement_snapshot(
+            admin_client,
+            user_id=user_id,
+            settings=settings,
+            debt_seconds=debt_after_paydown,
+        )
+        return
+
+    # Subscription orders are tracked for payment history. Entitlements are reconciled from subscription events.
+    await _sync_entitlement_snapshot(
+        admin_client,
+        user_id=user_id,
+        settings=settings,
+    )
+
+    logger.info("polar order tracked", extra={"polar_order_id": polar_order_id, "order_id": order_row.get("id")})
+
+
+async def _handle_order_refunded(admin_client: Any, refund: dict[str, Any], settings: Settings) -> None:
+    polar_order_id = _as_str(refund.get("order_id"))
+    if not polar_order_id:
+        raise InvalidRequestError("Polar refund payload is missing order id.")
+
+    order = await fetch_billing_order_by_polar_id(admin_client, polar_order_id)
+    if not order:
+        logger.info("polar refund ignored: order not tracked", extra={"polar_order_id": polar_order_id})
+        return
+
+    refund_amount_cents = int(_as_int(refund.get("amount")) or 0)
+    await update_billing_order(
+        admin_client,
+        order_id=str(order["id"]),
+        values={
+            "status": "refunded",
+            "refunded_amount_cents": refund_amount_cents,
+        },
+    )
+
+    if order.get("plan_type") == "pack":
+        lot = await fetch_credit_lot_by_source(
+            admin_client,
+            lot_type="pack_order",
+            source_key=polar_order_id,
+        )
+        if lot:
+            await revoke_remaining_credit_lot(admin_client, lot_id=str(lot["id"]))
+
+    user_id = _as_str(order.get("user_id"))
+    if user_id:
+        await _sync_entitlement_snapshot(
+            admin_client,
+            user_id=user_id,
+            settings=settings,
         )
 
 
-async def _handle_subscription_event(admin_client: Any, subscription: dict[str, Any]) -> None:
-    await _apply_subscription(admin_client, subscription)
+async def _handle_subscription_event(admin_client: Any, subscription: dict[str, Any], settings: Settings) -> None:
+    user_id = _as_str(subscription.get("customer_external_id"))
+    if not user_id:
+        raise InvalidRequestError("Polar subscription payload is missing external customer id.")
 
+    product_id = _as_str(subscription.get("product_id"))
+    if not product_id:
+        raise InvalidRequestError("Polar subscription payload is missing product mapping.")
 
-async def _apply_subscription(admin_client: Any, subscription: dict[str, Any]) -> None:
-    customer_id = _get_value(subscription, "customer")
-    if not customer_id:
-        return
-    mapping = await fetch_stripe_customer_by_customer_id(admin_client, customer_id)
-    if not mapping:
-        return
+    plan = await fetch_plan_by_product_id(admin_client, product_id)
+    existing = await fetch_entitlement(admin_client, user_id)
 
-    items = _get_value(subscription, "items") or {}
-    data_items = _get_value(items, "data") or []
-    items_list = list(data_items)
-    if not items_list:
-        return
-    price_obj = _get_value(items_list[0], "price")
-    price_id = _get_value(price_obj, "id")
-    if not price_id:
-        return
+    status = _as_str(subscription.get("status")) or "unknown"
+    period_start = _parse_dt(subscription.get("current_period_start"))
+    period_end = _parse_dt(subscription.get("current_period_end"))
+    subscription_id = _as_str(subscription.get("id")) or _as_str(subscription.get("subscription_id"))
 
-    plan = await fetch_plan_by_price_id(admin_client, price_id)
-    status = _get_value(subscription, "status") or "unknown"
-    period_start = _get_value(subscription, "current_period_start")
-    period_end = _get_value(subscription, "current_period_end")
-    start_dt = datetime.fromtimestamp(period_start, UTC) if isinstance(period_start, int) else None
-    end_dt = datetime.fromtimestamp(period_end, UTC) if isinstance(period_end, int) else None
+    quota_seconds = int(plan.get("quota_seconds") or 0)
+    rollover_cap = int(plan.get("rollover_cap_seconds") or 0)
+    existing_subscription_remaining = int(existing.get("subscription_available_seconds") or 0) if existing else 0
+    rollover_seconds = min(existing_subscription_remaining, rollover_cap)
 
-    existing = await fetch_entitlement(admin_client, mapping["user_id"])
-    await upsert_subscription_entitlement(
+    debt_after_paydown: int | None = None
+
+    if status in {"revoked", "canceled", "cancelled", "ended", "inactive"}:
+        await expire_active_subscription_lots(admin_client, user_id=user_id)
+    elif period_start and period_end:
+        source_key = f"{subscription_id or 'subscription'}:{period_start.isoformat()}"
+        await expire_active_subscription_lots(admin_client, user_id=user_id)
+
+        lot = await upsert_credit_lot(
+            admin_client,
+            user_id=user_id,
+            plan_id=str(plan["id"]),
+            lot_type="subscription_cycle",
+            source_key=source_key,
+            granted_seconds=quota_seconds + rollover_seconds,
+            pack_expires_at=period_end,
+            status="active",
+        )
+        debt_after_paydown = await _apply_debt_paydown_for_lot(
+            admin_client,
+            user_id=user_id,
+            lot_id=str(lot["id"]),
+            settings=settings,
+        )
+
+    await upsert_subscription_entitlement_state(
         admin_client,
-        user_id=mapping["user_id"],
-        plan=plan,
-        status=status,
-        period_start=start_dt,
-        period_end=end_dt,
-        existing=existing,
+        user_id=user_id,
+        subscription_plan_id=str(plan["id"]),
+        subscription_status=status,
+        period_start=period_start,
+        period_end=period_end,
+        subscription_cycle_grant_seconds=quota_seconds,
+        subscription_rollover_seconds=rollover_seconds,
+        subscription_available_seconds=max(quota_seconds + rollover_seconds, 0),
+    )
+
+    await upsert_polar_customer(
+        admin_client,
+        user_id=user_id,
+        external_customer_id=user_id,
+        polar_customer_id=_as_str(subscription.get("customer_id")),
+    )
+
+    await _sync_entitlement_snapshot(
+        admin_client,
+        user_id=user_id,
+        settings=settings,
+        debt_seconds=debt_after_paydown,
     )

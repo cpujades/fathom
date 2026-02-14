@@ -16,12 +16,24 @@ type PlanGroup = {
   plans: PlanResponse[];
 };
 
+const formatPrice = (amountCents: number, currency: string, billingInterval: string | null): string => {
+  if (amountCents <= 0) {
+    return "Free";
+  }
+  const amount = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: currency.toUpperCase()
+  }).format(amountCents / 100);
+  return billingInterval ? `${amount}/${billingInterval}` : amount;
+};
+
 export default function BillingPage() {
   const router = useRouter();
   const [plans, setPlans] = useState<PlanResponse[]>([]);
   const [usage, setUsage] = useState<UsageOverviewResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
+  const [portalLoading, setPortalLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -107,6 +119,39 @@ export default function BillingPage() {
     }
   };
 
+  const handlePortal = async () => {
+    if (portalLoading) {
+      return;
+    }
+    setPortalLoading(true);
+    setError(null);
+
+    try {
+      const supabase = getSupabaseClient();
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) {
+        router.replace("/signin");
+        return;
+      }
+
+      const api = createApiClient(sessionData.session.access_token);
+      const { data, error: apiError } = await api.POST("/billing/portal");
+
+      if (apiError) {
+        setError(getApiErrorMessage(apiError, "Unable to open billing portal."));
+        return;
+      }
+
+      if (data?.portal_url) {
+        window.location.href = data.portal_url;
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong.");
+    } finally {
+      setPortalLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className={styles.page}>
@@ -134,6 +179,9 @@ export default function BillingPage() {
           Fathom
         </div>
         <div className={styles.headerActions}>
+          <button className={styles.secondaryButton} type="button" onClick={handlePortal} disabled={portalLoading}>
+            {portalLoading ? "Opening portal…" : "Manage billing"}
+          </button>
           <Link className={styles.button} href="/app">
             Back to app
           </Link>
@@ -169,6 +217,11 @@ export default function BillingPage() {
                 <p className={styles.usageValue}>{formatDuration(usage.pack_remaining_seconds)}</p>
                 <p className={styles.cardText}>Expires: {formatDate(usage.pack_expires_at)}</p>
               </div>
+              <div className={styles.usageCard}>
+                <p className={styles.usageLabel}>Debt / Status</p>
+                <p className={styles.usageValue}>{formatDuration(usage.debt_seconds)}</p>
+                <p className={styles.cardText}>{usage.is_blocked ? "Blocked until top-up" : "Account active"}</p>
+              </div>
             </div>
           ) : null}
         </section>
@@ -190,6 +243,7 @@ export default function BillingPage() {
                 <div className={styles.planCard} key={plan.plan_id}>
                   <div>
                     <h3 className={styles.planTitle}>{plan.name}</h3>
+                    <p className={styles.cardText}>{formatPrice(plan.amount_cents, plan.currency, plan.billing_interval)}</p>
                     <p className={styles.cardText}>
                       {formatDuration(plan.quota_seconds ?? 0)} included
                     </p>
@@ -200,7 +254,7 @@ export default function BillingPage() {
                     onClick={() => handleCheckout(plan.plan_id)}
                     disabled={checkoutLoading === plan.plan_id}
                   >
-                    {checkoutLoading === plan.plan_id ? "Opening Stripe…" : "Choose"}
+                    {checkoutLoading === plan.plan_id ? "Opening Polar…" : "Choose"}
                   </button>
                 </div>
               ))}
