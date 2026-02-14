@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.10.0](https://github.com/cpujades/fathom/compare/v0.9.0...v0.10.0) (2026-02-14)
+
+
+### Features
+
+* **billing:** add Stripe checkout and webhook integration ([#68](https://github.com/cpujades/fathom/issues/68)) ([7639ad1](https://github.com/cpujades/fathom/commit/7639ad11ce0fc85502751a0ad3f44b44f3c09729))
+* **billing:** add usage enforcement, billing APIs, and app billing UI ([#69](https://github.com/cpujades/fathom/issues/69)) ([ea4856a](https://github.com/cpujades/fathom/commit/ea4856a47cabcf44d5292b252f287130868ee523))
+
+
+### Chores
+
+* **deps:** bump cryptography in the uv group across 1 directory ([#70](https://github.com/cpujades/fathom/issues/70)) ([506271c](https://github.com/cpujades/fathom/commit/506271cce12b00d9f242c81e6e64cf808a344cd7))
+* **deps:** bump pillow in the uv group across 1 directory ([#71](https://github.com/cpujades/fathom/issues/71)) ([6d006e1](https://github.com/cpujades/fathom/commit/6d006e161e9f741e16060f38deabfc128f9694bc))
+* **stripe:** add script to seed billing plans from Stripe ([#67](https://github.com/cpujades/fathom/issues/67)) ([a645e8c](https://github.com/cpujades/fathom/commit/a645e8c9dd0c57be2cc11621aac808fddc84084d))
+* **supabase:** add migration for billing tables ([#65](https://github.com/cpujades/fathom/issues/65)) ([3ff039a](https://github.com/cpujades/fathom/commit/3ff039a873c837cc9a5c35149733ca2a08efbe1b))
+
 ## [0.9.0](https://github.com/cpujades/fathom/compare/v0.8.0...v0.9.0) (2026-01-31)
 
 
