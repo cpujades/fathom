@@ -58,8 +58,9 @@ create unique index if not exists plans_polar_product_id_key
   on public.plans (polar_product_id)
   where polar_product_id is not null;
 
-create unique index if not exists plans_plan_code_key
-  on public.plans (plan_code);
+drop index if exists public.plans_plan_code_key;
+create unique index if not exists plans_plan_code_version_key
+  on public.plans (plan_code, version);
 
 -- ---------------------------------------------------------------------------
 -- customer mapping: Stripe -> Polar

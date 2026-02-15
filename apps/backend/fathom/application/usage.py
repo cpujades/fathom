@@ -9,6 +9,7 @@ from fathom.core.config import Settings
 from fathom.core.errors import ExternalServiceError, InvalidRequestError
 from fathom.core.logging import log_context
 from fathom.crud.supabase.billing import (
+    adjust_entitlement_debt,
     consume_credit_lots,
     fetch_entitlement,
     fetch_plan_by_id,
@@ -100,7 +101,7 @@ async def _ensure_free_entitlement(admin_client: Any, user_id: str, settings: Se
     period_start = now
     period_end = now + timedelta(days=30)
 
-    source_key = f"internal_free:{period_start.date().isoformat()}"
+    source_key = f"internal_free:{user_id}:{period_start.date().isoformat()}"
     await upsert_credit_lot(
         admin_client,
         user_id=user_id,
@@ -154,12 +155,23 @@ async def get_usage_snapshot(
     pack_remaining = int(entitlement.get("pack_available_seconds") or 0)
     debt_seconds = int(entitlement.get("debt_seconds") or 0)
     is_blocked = bool(entitlement.get("is_blocked"))
+    pack_expires_at = _parse_dt(entitlement.get("pack_expires_at"))
+
+    # Expired packs should never be considered spendable during pre-checks.
+    now = datetime.now(UTC)
+    if pack_remaining > 0 and pack_expires_at and pack_expires_at <= now:
+        return await _sync_entitlement_snapshot(
+            admin_client,
+            user_id=user_id,
+            settings=settings,
+            debt_seconds=debt_seconds,
+        )
 
     return UsageSnapshot(
         subscription_remaining=subscription_remaining,
         pack_remaining=pack_remaining,
         total_remaining=subscription_remaining + pack_remaining,
-        pack_expires_at=_parse_dt(entitlement.get("pack_expires_at")),
+        pack_expires_at=pack_expires_at,
         debt_seconds=debt_seconds,
         is_blocked=is_blocked,
     )
@@ -254,7 +266,16 @@ async def record_usage_for_job(
 
         current_debt = int(entitlement.get("debt_seconds") or 0)
         unmet_seconds = max(remaining, 0)
-        new_debt = current_debt + unmet_seconds
+        if unmet_seconds > 0:
+            new_debt = await adjust_entitlement_debt(
+                admin_client,
+                user_id=user_id,
+                delta_seconds=unmet_seconds,
+                debt_cap_seconds=settings.billing_debt_cap_seconds,
+            )
+        else:
+            refreshed_entitlement = await fetch_entitlement(admin_client, user_id)
+            new_debt = int(refreshed_entitlement.get("debt_seconds") or current_debt) if refreshed_entitlement else 0
 
         await _sync_entitlement_snapshot(
             admin_client,

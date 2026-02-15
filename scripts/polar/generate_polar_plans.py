@@ -246,7 +246,7 @@ def sync_plans(*, dry_run: bool, deactivate_missing: bool, server: str) -> list[
         return rows
 
     assert supabase is not None
-    result = supabase.table("plans").upsert(payload, on_conflict="plan_code").execute()
+    result = supabase.table("plans").upsert(payload, on_conflict="plan_code,version").execute()
     if getattr(result, "error", None):
         raise ValueError(f"Failed to upsert plans: {result.error}")
 

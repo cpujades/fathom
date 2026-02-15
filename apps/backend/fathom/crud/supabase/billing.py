@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 from postgrest import APIError
+from postgrest.types import CountMethod, ReturnMethod
 
 from fathom.core.errors import ExternalServiceError
 from fathom.services.supabase.helpers import first_row, raise_for_postgrest_error
@@ -132,6 +133,48 @@ async def record_webhook_event_received(
     return True
 
 
+async def claim_webhook_event_for_processing(client: AsyncClient, *, event_id: str) -> bool:
+    stale_before = (datetime.now(UTC) - timedelta(minutes=5)).isoformat()
+    try:
+        await (
+            client.table("billing_webhook_events")
+            .update(
+                {
+                    "status": "failed",
+                    "error": "stale processing state reclaimed",
+                }
+            )
+            .eq("event_id", event_id)
+            .eq("status", "processing")
+            .is_("processed_at", "null")
+            .lt("received_at", stale_before)
+            .execute()
+        )
+    except APIError as exc:
+        raise_for_postgrest_error(exc, "Failed to reclaim stale webhook processing state.")
+
+    try:
+        response = (
+            await client.table("billing_webhook_events")
+            .update(
+                {
+                    "status": "processing",
+                    "processed_at": None,
+                    "error": None,
+                },
+                count=CountMethod.exact,
+                returning=ReturnMethod.minimal,
+            )
+            .eq("event_id", event_id)
+            .in_("status", ["received", "failed"])
+            .execute()
+        )
+    except APIError as exc:
+        raise_for_postgrest_error(exc, "Failed to claim webhook event for processing.")
+
+    return int(response.count or 0) > 0
+
+
 async def mark_webhook_event_processed(client: AsyncClient, event_id: str) -> None:
     try:
         await (
@@ -258,6 +301,31 @@ async def update_billing_order(
         raise_for_postgrest_error(exc, "Failed to update billing order.")
 
 
+async def transition_billing_order_status(
+    client: AsyncClient,
+    *,
+    order_id: str,
+    from_status: str,
+    to_status: str,
+) -> bool:
+    try:
+        response = (
+            await client.table("billing_orders")
+            .update(
+                {"status": to_status},
+                count=CountMethod.exact,
+                returning=ReturnMethod.minimal,
+            )
+            .eq("id", order_id)
+            .eq("status", from_status)
+            .execute()
+        )
+    except APIError as exc:
+        raise_for_postgrest_error(exc, "Failed to transition billing order status.")
+
+    return int(response.count or 0) > 0
+
+
 async def upsert_credit_lot(
     client: AsyncClient,
     *,
@@ -336,6 +404,35 @@ async def update_credit_lot(
         await client.table("credit_lots").update(values).eq("id", lot_id).execute()
     except APIError as exc:
         raise_for_postgrest_error(exc, "Failed to update credit lot.")
+
+
+async def _compare_and_update_credit_lot(
+    client: AsyncClient,
+    *,
+    lot_id: str,
+    expected_consumed_seconds: int,
+    expected_revoked_seconds: int,
+    expected_status: str,
+    values: dict[str, Any],
+) -> bool:
+    try:
+        response = (
+            await client.table("credit_lots")
+            .update(
+                values,
+                count=CountMethod.exact,
+                returning=ReturnMethod.minimal,
+            )
+            .eq("id", lot_id)
+            .eq("consumed_seconds", expected_consumed_seconds)
+            .eq("revoked_seconds", expected_revoked_seconds)
+            .eq("status", expected_status)
+            .execute()
+        )
+    except APIError as exc:
+        raise_for_postgrest_error(exc, "Failed to atomically update credit lot.")
+
+    return int(response.count or 0) > 0
 
 
 def _parse_timestamp(value: Any) -> datetime | None:
@@ -417,46 +514,120 @@ async def consume_credit_lots(
     consumed_total = 0
 
     for lot in lots:
-        available = int(lot.get("remaining_seconds") or 0)
-        if available <= 0:
-            continue
-
-        consume = min(available, remaining)
-        new_consumed = int(lot.get("consumed_seconds") or 0) + consume
-        await update_credit_lot(
-            client,
-            lot_id=str(lot["id"]),
-            values={"consumed_seconds": new_consumed},
-        )
-
-        consumed_total += consume
-        remaining -= consume
         if remaining <= 0:
             break
+        consumed = await consume_credit_lot_by_id(
+            client,
+            lot_id=str(lot["id"]),
+            seconds_to_consume=remaining,
+            now=now,
+        )
+        if consumed <= 0:
+            continue
+        consumed_total += consumed
+        remaining -= consumed
 
     return consumed_total
 
 
+async def consume_credit_lot_by_id(
+    client: AsyncClient,
+    *,
+    lot_id: str,
+    seconds_to_consume: int,
+    now: datetime,
+    max_retries: int = 5,
+) -> int:
+    if seconds_to_consume <= 0:
+        return 0
+
+    lot = await fetch_credit_lot_by_id(client, lot_id)
+    for _ in range(max_retries):
+        if not lot:
+            return 0
+
+        status = str(lot.get("status") or "")
+        if status != "active":
+            return 0
+
+        expiry = _parse_timestamp(lot.get("pack_expires_at"))
+        if expiry and expiry <= now:
+            consumed = int(lot.get("consumed_seconds") or 0)
+            revoked = int(lot.get("revoked_seconds") or 0)
+            await _compare_and_update_credit_lot(
+                client,
+                lot_id=lot_id,
+                expected_consumed_seconds=consumed,
+                expected_revoked_seconds=revoked,
+                expected_status="active",
+                values={"status": "expired"},
+            )
+            return 0
+
+        granted = int(lot.get("granted_seconds") or 0)
+        consumed = int(lot.get("consumed_seconds") or 0)
+        revoked = int(lot.get("revoked_seconds") or 0)
+        remaining = max(granted - consumed - revoked, 0)
+        if remaining <= 0:
+            return 0
+
+        consume = min(remaining, seconds_to_consume)
+        updated = await _compare_and_update_credit_lot(
+            client,
+            lot_id=lot_id,
+            expected_consumed_seconds=consumed,
+            expected_revoked_seconds=revoked,
+            expected_status="active",
+            values={"consumed_seconds": consumed + consume},
+        )
+        if updated:
+            return consume
+
+        lot = await fetch_credit_lot_by_id(client, lot_id)
+
+    return 0
+
+
 async def revoke_remaining_credit_lot(client: AsyncClient, *, lot_id: str) -> int:
     lot = await fetch_credit_lot_by_id(client, lot_id)
-    if not lot:
-        return 0
+    for _ in range(5):
+        if not lot:
+            return 0
 
-    remaining = remaining_seconds_from_lot(lot)
-    if remaining <= 0:
-        await update_credit_lot(client, lot_id=lot_id, values={"status": "revoked"})
-        return 0
+        status = str(lot.get("status") or "")
+        consumed = int(lot.get("consumed_seconds") or 0)
+        revoked = int(lot.get("revoked_seconds") or 0)
+        granted = int(lot.get("granted_seconds") or 0)
+        remaining = max(granted - consumed - revoked, 0)
+        if remaining <= 0:
+            if status == "active":
+                await _compare_and_update_credit_lot(
+                    client,
+                    lot_id=lot_id,
+                    expected_consumed_seconds=consumed,
+                    expected_revoked_seconds=revoked,
+                    expected_status="active",
+                    values={"status": "revoked"},
+                )
+            return 0
 
-    new_revoked = int(lot.get("revoked_seconds") or 0) + remaining
-    await update_credit_lot(
-        client,
-        lot_id=lot_id,
-        values={
-            "revoked_seconds": new_revoked,
-            "status": "revoked",
-        },
-    )
-    return remaining
+        updated = await _compare_and_update_credit_lot(
+            client,
+            lot_id=lot_id,
+            expected_consumed_seconds=consumed,
+            expected_revoked_seconds=revoked,
+            expected_status="active",
+            values={
+                "revoked_seconds": revoked + remaining,
+                "status": "revoked",
+            },
+        )
+        if updated:
+            return remaining
+
+        lot = await fetch_credit_lot_by_id(client, lot_id)
+
+    return 0
 
 
 async def expire_active_subscription_lots(client: AsyncClient, *, user_id: str) -> None:
@@ -609,6 +780,54 @@ async def update_entitlement_debt(client: AsyncClient, *, user_id: str, debt_sec
         await client.table("entitlements").update(payload).eq("user_id", user_id).execute()
     except APIError as exc:
         raise_for_postgrest_error(exc, "Failed to update entitlement debt.")
+
+
+async def adjust_entitlement_debt(
+    client: AsyncClient,
+    *,
+    user_id: str,
+    delta_seconds: int,
+    debt_cap_seconds: int,
+    max_retries: int = 5,
+) -> int:
+    if delta_seconds == 0:
+        entitlement = await fetch_entitlement(client, user_id)
+        return int(entitlement.get("debt_seconds") or 0) if entitlement else 0
+
+    for _ in range(max_retries):
+        entitlement = await fetch_entitlement(client, user_id)
+        if not entitlement:
+            await client.table("entitlements").upsert({"user_id": user_id}).execute()
+            entitlement = await fetch_entitlement(client, user_id)
+            if not entitlement:
+                continue
+
+        current_debt = int(entitlement.get("debt_seconds") or 0)
+        new_debt = max(current_debt + delta_seconds, 0)
+        payload: dict[str, Any] = {
+            "debt_seconds": new_debt,
+            "is_blocked": new_debt >= debt_cap_seconds,
+            "last_balance_sync_at": datetime.now(UTC).isoformat(),
+        }
+        try:
+            response = (
+                await client.table("entitlements")
+                .update(
+                    payload,
+                    count=CountMethod.exact,
+                    returning=ReturnMethod.minimal,
+                )
+                .eq("user_id", user_id)
+                .eq("debt_seconds", current_debt)
+                .execute()
+            )
+        except APIError as exc:
+            raise_for_postgrest_error(exc, "Failed to adjust entitlement debt.")
+
+        if int(response.count or 0) > 0:
+            return new_debt
+
+    raise ExternalServiceError("Failed to adjust entitlement debt due to concurrent updates.")
 
 
 async def fetch_usage_history(
