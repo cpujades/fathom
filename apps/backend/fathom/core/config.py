@@ -51,10 +51,13 @@ class Settings(BaseSettings):
     # ---------------------------------------------------------------------------
     cors_allow_origins: list[str] = Field(default_factory=list, validation_alias="CORS_ALLOW_ORIGINS")
     rate_limit: int = Field(default=0, validation_alias="RATE_LIMIT")  # requests/min, 0 = disabled
-    stripe_secret_key: str | None = Field(default=None, validation_alias="STRIPE_SECRET_KEY")
-    stripe_webhook_secret: str | None = Field(default=None, validation_alias="STRIPE_WEBHOOK_SECRET")
-    stripe_success_url: str | None = Field(default=None, validation_alias="STRIPE_SUCCESS_URL")
-    stripe_cancel_url: str | None = Field(default=None, validation_alias="STRIPE_CANCEL_URL")
+    polar_access_token: str | None = Field(default=None, validation_alias="POLAR_ACCESS_TOKEN")
+    polar_webhook_secret: str | None = Field(default=None, validation_alias="POLAR_WEBHOOK_SECRET")
+    polar_success_url: str | None = Field(default=None, validation_alias="POLAR_SUCCESS_URL")
+    polar_checkout_return_url: str | None = Field(default=None, validation_alias="POLAR_CHECKOUT_RETURN_URL")
+    polar_portal_return_url: str | None = Field(default=None, validation_alias="POLAR_PORTAL_RETURN_URL")
+    polar_server: str = Field(default="sandbox", validation_alias="POLAR_SERVER")
+    billing_debt_cap_seconds: int = Field(default=600, validation_alias="BILLING_DEBT_CAP_SECONDS")
     worker_max_concurrent_jobs: int = Field(default=10, validation_alias="WORKER_MAX_CONCURRENT_JOBS")
     worker_job_notify_timeout_seconds: float = Field(
         default=10.0,
@@ -73,10 +76,12 @@ class Settings(BaseSettings):
         "supabase_db_name",
         "supabase_db_host",
         "app_env",
-        "stripe_secret_key",
-        "stripe_webhook_secret",
-        "stripe_success_url",
-        "stripe_cancel_url",
+        "polar_access_token",
+        "polar_webhook_secret",
+        "polar_success_url",
+        "polar_checkout_return_url",
+        "polar_portal_return_url",
+        "polar_server",
         mode="before",
     )
     @classmethod
@@ -107,6 +112,18 @@ class Settings(BaseSettings):
     def _clamp_worker_timeout(cls, value: object) -> object:
         if isinstance(value, (int, float)):
             return max(1.0, float(value))
+        return value
+
+    @field_validator("billing_debt_cap_seconds", mode="before")
+    @classmethod
+    def _clamp_billing_debt_cap(cls, value: object) -> object:
+        if isinstance(value, int):
+            return max(0, value)
+        if isinstance(value, str):
+            try:
+                return max(0, int(value))
+            except ValueError:
+                return value
         return value
 
 

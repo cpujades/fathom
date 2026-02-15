@@ -262,6 +262,7 @@ export default function JobDetailPage() {
       ? "We ran into an issue. You can try again or start a fresh summary."
       : "We are translating the audio into a clean, structured briefing.";
   const isCached = job?.stage === "cached";
+  const isStreaming = !isComplete && !isFailed && !isCached;
   const showProgressPanel = !hasMarkdown && !isComplete && !isFailed && !isCached;
 
   const statusFallbackStage = job?.status === "running" ? "summarizing" : job?.status ?? "queued";

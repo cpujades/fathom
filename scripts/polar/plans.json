@@ -1,0 +1,86 @@
+[
+  {
+    "plan_code": "free",
+    "version": 1,
+    "name": "Free",
+    "plan_type": "subscription",
+    "polar_product_id": "internal_free",
+    "currency": "usd",
+    "amount_cents": 0,
+    "billing_interval": "month",
+    "quota_seconds": 3600,
+    "rollover_cap_seconds": 7200
+  },
+  {
+    "plan_code": "starter",
+    "version": 1,
+    "name": "Starter",
+    "plan_type": "subscription",
+    "polar_product_id": null,
+    "currency": "usd",
+    "amount_cents": 900,
+    "billing_interval": "month",
+    "quota_seconds": 21600,
+    "rollover_cap_seconds": 43200
+  },
+  {
+    "plan_code": "pro",
+    "version": 1,
+    "name": "Pro",
+    "plan_type": "subscription",
+    "polar_product_id": null,
+    "currency": "usd",
+    "amount_cents": 1900,
+    "billing_interval": "month",
+    "quota_seconds": 54000,
+    "rollover_cap_seconds": 108000
+  },
+  {
+    "plan_code": "agency",
+    "version": 1,
+    "name": "Agency",
+    "plan_type": "subscription",
+    "polar_product_id": null,
+    "currency": "usd",
+    "amount_cents": 4900,
+    "billing_interval": "month",
+    "quota_seconds": 180000,
+    "rollover_cap_seconds": 360000
+  },
+  {
+    "plan_code": "trial_pack",
+    "version": 1,
+    "name": "Trial Pack",
+    "plan_type": "pack",
+    "polar_product_id": null,
+    "currency": "usd",
+    "amount_cents": 500,
+    "billing_interval": null,
+    "quota_seconds": 10800,
+    "pack_expiry_days": 180
+  },
+  {
+    "plan_code": "creator_pack",
+    "version": 1,
+    "name": "Creator Pack",
+    "plan_type": "pack",
+    "polar_product_id": null,
+    "currency": "usd",
+    "amount_cents": 1500,
+    "billing_interval": null,
+    "quota_seconds": 36000,
+    "pack_expiry_days": 180
+  },
+  {
+    "plan_code": "studio_pack",
+    "version": 1,
+    "name": "Studio Pack",
+    "plan_type": "pack",
+    "polar_product_id": null,
+    "currency": "usd",
+    "amount_cents": 5000,
+    "billing_interval": null,
+    "quota_seconds": 144000,
+    "pack_expiry_days": 180
+  }
+]

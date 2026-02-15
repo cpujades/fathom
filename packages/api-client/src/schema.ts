@@ -72,23 +72,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/jobs/{job_id}/events": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Server Sent Events */
-        get: operations["server_sent_events_jobs__job_id__events_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/summarize": {
         parameters: {
             query?: never;
@@ -157,6 +140,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/billing/portal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Portal */
+        post: operations["create_portal_billing_portal_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/billing/packs/{polar_order_id}/refund": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Refund Pack */
+        post: operations["refund_pack_billing_packs__polar_order_id__refund_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/billing/plans": {
         parameters: {
             query?: never;
@@ -208,10 +225,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/webhooks/polar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Polar Webhook */
+        post: operations["polar_webhook_webhooks_polar_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** CheckoutSessionRequest */
+        CheckoutSessionRequest: {
+            /**
+             * Plan Id
+             * Format: uuid
+             */
+            plan_id: string;
+        };
+        /** CheckoutSessionResponse */
+        CheckoutSessionResponse: {
+            /**
+             * Checkout Url
+             * Format: uri
+             */
+            checkout_url: string;
+        };
+        /** CustomerPortalSessionResponse */
+        CustomerPortalSessionResponse: {
+            /**
+             * Portal Url
+             * Format: uri
+             */
+            portal_url: string;
+        };
         /** ErrorDetail */
         ErrorDetail: {
             /** Code */
@@ -257,6 +315,51 @@ export interface components {
             progress?: number | null;
             /** Status Message */
             status_message?: string | null;
+        };
+        /** PackRefundResponse */
+        PackRefundResponse: {
+            /** Polar Order Id */
+            polar_order_id: string;
+            /** Refund Id */
+            refund_id: string | null;
+            /** Requested Amount Cents */
+            requested_amount_cents: number;
+            /** Remaining Seconds Before Refund */
+            remaining_seconds_before_refund: number;
+            /** Status */
+            status: string;
+        };
+        /** PlanResponse */
+        PlanResponse: {
+            /**
+             * Plan Id
+             * Format: uuid
+             */
+            plan_id: string;
+            /** Plan Code */
+            plan_code: string;
+            /** Name */
+            name: string;
+            /** Plan Type */
+            plan_type: string;
+            /** Polar Product Id */
+            polar_product_id: string | null;
+            /** Currency */
+            currency: string;
+            /** Amount Cents */
+            amount_cents: number;
+            /** Billing Interval */
+            billing_interval: string | null;
+            /** Version */
+            version: number;
+            /** Quota Seconds */
+            quota_seconds: number | null;
+            /** Rollover Cap Seconds */
+            rollover_cap_seconds: number | null;
+            /** Pack Expiry Days */
+            pack_expiry_days: number | null;
+            /** Is Active */
+            is_active: boolean;
         };
         /** ReadyResponse */
         ReadyResponse: {
@@ -310,32 +413,24 @@ export interface components {
             /** Pdf Url */
             pdf_url: string | null;
         };
-        /** PlanResponse */
-        PlanResponse: {
+        /** UsageHistoryEntry */
+        UsageHistoryEntry: {
+            /** Job Id */
+            job_id: string | null;
+            /** Seconds Used */
+            seconds_used: number;
+            /** Source */
+            source: string;
             /**
-             * Plan Id
-             * Format: uuid
+             * Created At
+             * Format: date-time
              */
-            plan_id: string;
-            /** Name */
-            name: string;
-            /** Plan Type */
-            plan_type: string;
-            /** Stripe Price Id */
-            stripe_price_id?: string | null;
-            /** Quota Seconds */
-            quota_seconds?: number | null;
-            /** Rollover Cap Seconds */
-            rollover_cap_seconds?: number | null;
-            /** Pack Expiry Days */
-            pack_expiry_days?: number | null;
-            /** Is Active */
-            is_active: boolean;
+            created_at: string;
         };
         /** UsageOverviewResponse */
         UsageOverviewResponse: {
             /** Subscription Plan Name */
-            subscription_plan_name?: string | null;
+            subscription_plan_name: string | null;
             /** Subscription Remaining Seconds */
             subscription_remaining_seconds: number;
             /** Pack Remaining Seconds */
@@ -343,31 +438,11 @@ export interface components {
             /** Total Remaining Seconds */
             total_remaining_seconds: number;
             /** Pack Expires At */
-            pack_expires_at?: string | null;
-        };
-        /** UsageHistoryEntry */
-        UsageHistoryEntry: {
-            /** Job Id */
-            job_id?: string | null;
-            /** Seconds Used */
-            seconds_used: number;
-            /** Source */
-            source: string;
-            /** Created At */
-            created_at: string;
-        };
-        /** CheckoutSessionRequest */
-        CheckoutSessionRequest: {
-            /**
-             * Plan Id
-             * Format: uuid
-             */
-            plan_id: string;
-        };
-        /** CheckoutSessionResponse */
-        CheckoutSessionResponse: {
-            /** Checkout Url */
-            checkout_url: string;
+            pack_expires_at: string | null;
+            /** Debt Seconds */
+            debt_seconds: number;
+            /** Is Blocked */
+            is_blocked: boolean;
         };
         /** ValidationError */
         ValidationError: {
@@ -465,82 +540,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["JobStatusResponse"];
-                };
-            };
-            /** @description Invalid job id. */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Missing or invalid auth token. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Job not found. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Unexpected server error. */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Upstream provider failed. */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    server_sent_events_jobs__job_id__events_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                job_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
                 };
             };
             /** @description Invalid job id. */
@@ -842,6 +841,165 @@ export interface operations {
                     "application/json": components["schemas"]["CheckoutSessionResponse"];
                 };
             };
+            /** @description Invalid request payload. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or invalid auth token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Unexpected server error. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Upstream provider failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_portal_billing_portal_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerPortalSessionResponse"];
+                };
+            };
+            /** @description Missing or invalid auth token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected server error. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Upstream provider failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    refund_pack_billing_packs__polar_order_id__refund_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                polar_order_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PackRefundResponse"];
+                };
+            };
+            /** @description Invalid request payload. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or invalid auth token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Unexpected server error. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Upstream provider failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
     list_plans_billing_plans_get: {
@@ -860,6 +1018,33 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PlanResponse"][];
+                };
+            };
+            /** @description Missing or invalid auth token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected server error. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Upstream provider failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };
@@ -882,6 +1067,24 @@ export interface operations {
                     "application/json": components["schemas"]["UsageOverviewResponse"];
                 };
             };
+            /** @description Missing or invalid auth token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected server error. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
     get_history_billing_history_get: {
@@ -900,6 +1103,64 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UsageHistoryEntry"][];
+                };
+            };
+            /** @description Missing or invalid auth token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected server error. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    polar_webhook_webhooks_polar_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Invalid webhook payload or signature. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected server error. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };

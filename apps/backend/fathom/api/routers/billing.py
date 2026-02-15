@@ -1,14 +1,16 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Path
 
 from fathom.api.deps.auth import AuthContext, get_auth_context
-from fathom.application.billing import create_checkout_session
+from fathom.application.billing import create_checkout_session, create_portal_session, request_pack_refund
 from fathom.application.usage import get_usage_history, get_usage_overview
 from fathom.core.config import Settings, get_settings
 from fathom.schemas.billing import (
     CheckoutSessionRequest,
     CheckoutSessionResponse,
+    CustomerPortalSessionResponse,
+    PackRefundResponse,
     PlanResponse,
     UsageHistoryEntry,
     UsageOverviewResponse,
@@ -36,6 +38,44 @@ async def create_checkout(
     return await create_checkout_session(request, auth, settings)
 
 
+@router.post(
+    "/portal",
+    response_model=CustomerPortalSessionResponse,
+    responses={
+        401: {"model": ErrorResponse, "description": "Missing or invalid auth token."},
+        500: {"model": ErrorResponse, "description": "Unexpected server error."},
+        502: {"model": ErrorResponse, "description": "Upstream provider failed."},
+    },
+)
+async def create_portal(
+    auth: Annotated[AuthContext, Depends(get_auth_context)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> CustomerPortalSessionResponse:
+    return await create_portal_session(auth, settings)
+
+
+@router.post(
+    "/packs/{polar_order_id}/refund",
+    response_model=PackRefundResponse,
+    responses={
+        401: {"model": ErrorResponse, "description": "Missing or invalid auth token."},
+        400: {"model": ErrorResponse, "description": "Invalid request payload."},
+        500: {"model": ErrorResponse, "description": "Unexpected server error."},
+        502: {"model": ErrorResponse, "description": "Upstream provider failed."},
+    },
+)
+async def refund_pack(
+    polar_order_id: Annotated[str, Path(min_length=1)],
+    auth: Annotated[AuthContext, Depends(get_auth_context)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> PackRefundResponse:
+    return await request_pack_refund(
+        polar_order_id=polar_order_id,
+        auth=auth,
+        settings=settings,
+    )
+
+
 @router.get(
     "/plans",
     response_model=list[PlanResponse],
@@ -57,9 +97,14 @@ async def list_plans(
     return [
         PlanResponse(
             plan_id=plan["id"],
+            plan_code=plan["plan_code"],
             name=plan["name"],
             plan_type=plan["plan_type"],
-            stripe_price_id=plan.get("stripe_price_id"),
+            polar_product_id=plan.get("polar_product_id"),
+            currency=str(plan.get("currency") or "usd"),
+            amount_cents=int(plan.get("amount_cents") or 0),
+            billing_interval=plan.get("billing_interval"),
+            version=int(plan.get("version") or 1),
             quota_seconds=plan.get("quota_seconds"),
             rollover_cap_seconds=plan.get("rollover_cap_seconds"),
             pack_expiry_days=plan.get("pack_expiry_days"),
@@ -88,6 +133,8 @@ async def get_usage(
         pack_remaining_seconds=overview.pack_remaining,
         total_remaining_seconds=overview.total_remaining,
         pack_expires_at=overview.pack_expires_at,
+        debt_seconds=overview.debt_seconds,
+        is_blocked=overview.is_blocked,
     )
 
 

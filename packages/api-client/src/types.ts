@@ -14,6 +14,8 @@ type UsageOverviewResponse = components["schemas"]["UsageOverviewResponse"];
 type UsageHistoryEntry = components["schemas"]["UsageHistoryEntry"];
 type CheckoutSessionRequest = components["schemas"]["CheckoutSessionRequest"];
 type CheckoutSessionResponse = components["schemas"]["CheckoutSessionResponse"];
+type CustomerPortalSessionResponse = components["schemas"]["CustomerPortalSessionResponse"];
+type PackRefundResponse = components["schemas"]["PackRefundResponse"];
 
 type ErrorResponse = components["schemas"]["ErrorResponse"];
 type HTTPValidationError = components["schemas"]["HTTPValidationError"];
@@ -31,6 +33,8 @@ export type {
   SummarizeResponse,
   CheckoutSessionRequest,
   CheckoutSessionResponse,
+  CustomerPortalSessionResponse,
+  PackRefundResponse,
   SummaryPdfResponse,
   SummaryResponse,
   PlanResponse,
