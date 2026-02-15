@@ -144,9 +144,6 @@ async def _apply_debt_paydown_for_lot(
         return 0
 
     paydown = debt_seconds
-    if paydown <= 0:
-        return debt_seconds
-
     consumed_for_paydown = await consume_credit_lot_by_id(
         admin_client,
         lot_id=lot_id,
