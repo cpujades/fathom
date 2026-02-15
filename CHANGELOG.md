@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.11.0](https://github.com/cpujades/fathom/compare/v0.10.0...v0.11.0) (2026-02-15)
+
+
+### Features
+
+* **billing:** harden refund flow, add refund constraint, and free tier usage ([#75](https://github.com/cpujades/fathom/issues/75)) ([eb077ee](https://github.com/cpujades/fathom/commit/eb077ee883bd0a629f037520b0b6bd127771dbf2))
+* **polar:** add User-Agent and align product creation with Polar API ([#74](https://github.com/cpujades/fathom/issues/74)) ([eea438c](https://github.com/cpujades/fathom/commit/eea438cf62645f2dac530773b68a3d75ffafcf75))
+
+
+### Refactoring
+
+* **billing:** replace Stripe with Polar as billing provider ([#72](https://github.com/cpujades/fathom/issues/72)) ([a430547](https://github.com/cpujades/fathom/commit/a43054786b0225737807a6893471c9f8f2ba9db9))
+
 ## [0.10.0](https://github.com/cpujades/fathom/compare/v0.9.0...v0.10.0) (2026-02-14)
 
 
