@@ -9,7 +9,15 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from dotenv import load_dotenv
+
 from supabase import create_client
+
+# Load .env from project root so os.getenv() sees SUPABASE_* and POLAR_* when run as script.
+_project_root = Path(__file__).resolve().parent.parent.parent
+_env_file = _project_root / ".env"
+if _env_file.exists():
+    load_dotenv(_env_file)
 
 PLANS_PATH = Path(__file__).parent / "plans.json"
 OUTPUT_JSON = Path(__file__).parent / "plan_seed.json"
@@ -66,6 +74,7 @@ def _polar_request(
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
             "Accept": "application/json",
+            "User-Agent": "Fathom-PolarSync/1.0",
         },
         data=data,
     )
@@ -93,19 +102,21 @@ def _create_polar_product(
     token: str,
     api_base: str,
     plan: PlanRow,
-    organization_id: str | None,
 ) -> str:
+    is_subscription = plan.plan_type == "subscription"
     price_payload: dict[str, Any] = {
+        "type": "recurring" if is_subscription else "one_time",
         "amount_type": "fixed",
         "price_amount": plan.amount_cents,
         "price_currency": plan.currency,
     }
-    if plan.plan_type == "subscription":
+    if is_subscription:
         price_payload["recurring_interval"] = "month"
 
     payload: dict[str, Any] = {
         "name": plan.name,
         "description": f"Fathom plan {plan.plan_code} v{plan.version}",
+        "is_recurring": is_subscription,
         "prices": [price_payload],
         "metadata": {
             "plan_code": plan.plan_code,
@@ -113,8 +124,9 @@ def _create_polar_product(
             "managed_by": "generate_polar_plans.py",
         },
     }
-    if organization_id:
-        payload["organization_id"] = organization_id
+    if is_subscription:
+        payload["recurring_interval"] = "month"
+    # Do not set organization_id when using an organization token; Polar forbids it.
 
     response = _polar_request(
         token=token,
@@ -198,7 +210,6 @@ def sync_plans(*, dry_run: bool, deactivate_missing: bool, server: str) -> list[
         existing_products = _load_existing_plan_products(supabase)
 
     token = os.getenv("POLAR_ACCESS_TOKEN", "").strip()
-    organization_id = os.getenv("POLAR_ORGANIZATION_ID", "").strip() or None
     api_base = _api_base(server)
 
     rows: list[PlanRow] = []
@@ -220,7 +231,6 @@ def sync_plans(*, dry_run: bool, deactivate_missing: bool, server: str) -> list[
                     token=token,
                     api_base=api_base,
                     plan=plan,
-                    organization_id=organization_id,
                 )
 
         rows.append(

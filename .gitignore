@@ -11,4 +11,4 @@ __pycache__/
 node_modules/
 .next/
 dist/
-scripts/stripe/*.json
+scripts/polar/*.json
