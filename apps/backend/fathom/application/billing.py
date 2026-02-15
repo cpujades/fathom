@@ -85,8 +85,11 @@ def _extract_amount_cents(payload: Mapping[str, Any], *, candidates: tuple[str, 
     return 0
 
 
-def _extract_event_fields(event: dict[str, Any]) -> tuple[str, str, dict[str, Any]]:
-    event_id = _as_str(event.get("id"))
+def _extract_event_fields(
+    event: dict[str, Any],
+    headers: Mapping[str, str],
+) -> tuple[str, str, dict[str, Any]]:
+    event_id = _as_str(headers.get("webhook-id")) or _as_str(event.get("id"))
     event_type = _as_str(event.get("type"))
     data = event.get("data")
 
@@ -313,7 +316,7 @@ async def request_pack_refund(
 
 async def handle_polar_webhook(payload: bytes, headers: Mapping[str, str], settings: Settings) -> None:
     event = polar.verify_and_parse_webhook(payload, headers, settings)
-    event_id, event_type, data = _extract_event_fields(event)
+    event_id, event_type, data = _extract_event_fields(event, headers)
 
     admin_client = await create_supabase_admin_client(settings)
     inserted = await record_webhook_event_received(

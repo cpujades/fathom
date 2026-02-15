@@ -54,6 +54,7 @@ class Settings(BaseSettings):
     polar_access_token: str | None = Field(default=None, validation_alias="POLAR_ACCESS_TOKEN")
     polar_webhook_secret: str | None = Field(default=None, validation_alias="POLAR_WEBHOOK_SECRET")
     polar_success_url: str | None = Field(default=None, validation_alias="POLAR_SUCCESS_URL")
+    polar_checkout_return_url: str | None = Field(default=None, validation_alias="POLAR_CHECKOUT_RETURN_URL")
     polar_portal_return_url: str | None = Field(default=None, validation_alias="POLAR_PORTAL_RETURN_URL")
     polar_server: str = Field(default="sandbox", validation_alias="POLAR_SERVER")
     billing_debt_cap_seconds: int = Field(default=600, validation_alias="BILLING_DEBT_CAP_SECONDS")
@@ -78,6 +79,7 @@ class Settings(BaseSettings):
         "polar_access_token",
         "polar_webhook_secret",
         "polar_success_url",
+        "polar_checkout_return_url",
         "polar_portal_return_url",
         "polar_server",
         mode="before",

@@ -9,7 +9,6 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 from fathom.core.config import Settings
@@ -34,6 +33,10 @@ def get_polar_success_url(settings: Settings) -> str:
     if not settings.polar_success_url:
         raise ConfigurationError("POLAR_SUCCESS_URL is not configured.")
     return settings.polar_success_url
+
+
+def get_polar_checkout_return_url(settings: Settings) -> str | None:
+    return settings.polar_checkout_return_url
 
 
 def get_polar_portal_return_url(settings: Settings) -> str:
@@ -133,6 +136,9 @@ async def create_checkout_session(
         "external_customer_id": external_customer_id,
         "metadata": metadata,
     }
+    checkout_return_url = get_polar_checkout_return_url(settings)
+    if checkout_return_url:
+        payload["return_url"] = checkout_return_url
 
     response = await asyncio.to_thread(
         _polar_request,
@@ -177,9 +183,10 @@ async def create_order_refund(
     *,
     polar_order_id: str,
     amount_cents: int,
-    reason: str = "requested_by_customer",
+    reason: str = "customer_request",
 ) -> dict[str, Any]:
     payload = {
+        "order_id": polar_order_id,
         "amount": amount_cents,
         "reason": reason,
     }
@@ -188,7 +195,7 @@ async def create_order_refund(
         _polar_request,
         settings,
         method="POST",
-        path=f"/v1/orders/{quote(polar_order_id, safe='')}/refund",
+        path="/v1/refunds",
         payload=payload,
     )
 
