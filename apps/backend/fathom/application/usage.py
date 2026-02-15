@@ -10,7 +10,10 @@ from fathom.core.errors import ExternalServiceError, InvalidRequestError
 from fathom.core.logging import log_context
 from fathom.crud.supabase.billing import (
     adjust_entitlement_debt,
+    consume_credit_lot_by_id,
     consume_credit_lots,
+    expire_active_subscription_lots,
+    fetch_credit_lot_by_source,
     fetch_entitlement,
     fetch_plan_by_id,
     fetch_plan_by_product_id,
@@ -25,6 +28,9 @@ from fathom.crud.supabase.billing import (
 from fathom.services.supabase import create_supabase_admin_client
 
 logger = logging.getLogger(__name__)
+
+FREE_TIER_PRODUCT_ID = "internal_free"
+FREE_TIER_CYCLE_DAYS = 30
 
 
 def _parse_dt(value: Any) -> datetime | None:
@@ -68,6 +74,10 @@ async def _sync_entitlement_snapshot(
     debt_seconds: int,
     exclude_pack_source_keys: set[str] | None = None,
 ) -> UsageSnapshot:
+    if exclude_pack_source_keys is None:
+        refund_pending_ids = await fetch_polar_order_ids_refund_pending(admin_client, user_id)
+        exclude_pack_source_keys = set(refund_pending_ids) if refund_pending_ids else None
+
     now = datetime.now(UTC)
     subscription_remaining, pack_remaining, pack_expires_at = await summarize_credit_lots(
         admin_client,
@@ -98,13 +108,122 @@ async def _sync_entitlement_snapshot(
     )
 
 
+def _advance_cycle_start_to_now(period_start: datetime, *, now: datetime) -> datetime:
+    cycle = timedelta(days=FREE_TIER_CYCLE_DAYS)
+    aligned = period_start
+    while aligned + cycle <= now:
+        aligned += cycle
+    return aligned
+
+
+async def _apply_debt_paydown_for_lot(
+    admin_client: Any,
+    *,
+    user_id: str,
+    lot_id: str,
+    settings: Settings,
+) -> int:
+    entitlement = await fetch_entitlement(admin_client, user_id)
+    debt_seconds = int(entitlement.get("debt_seconds") or 0) if entitlement else 0
+    if debt_seconds <= 0:
+        return 0
+
+    consumed_for_paydown = await consume_credit_lot_by_id(
+        admin_client,
+        lot_id=lot_id,
+        seconds_to_consume=debt_seconds,
+        now=datetime.now(UTC),
+    )
+    if consumed_for_paydown <= 0:
+        return debt_seconds
+
+    return await adjust_entitlement_debt(
+        admin_client,
+        user_id=user_id,
+        delta_seconds=-consumed_for_paydown,
+        debt_cap_seconds=settings.billing_debt_cap_seconds,
+    )
+
+
+async def _refresh_free_entitlement_if_needed(
+    admin_client: Any,
+    *,
+    user_id: str,
+    settings: Settings,
+    entitlement: dict[str, Any],
+) -> dict[str, Any]:
+    subscription_plan_id = entitlement.get("subscription_plan_id")
+    if not isinstance(subscription_plan_id, str) or not subscription_plan_id:
+        return entitlement
+
+    now = datetime.now(UTC)
+    current_period_end = _parse_dt(entitlement.get("period_end"))
+    if current_period_end and current_period_end > now:
+        return entitlement
+
+    free_plan = await fetch_plan_by_product_id(admin_client, FREE_TIER_PRODUCT_ID)
+    if subscription_plan_id != str(free_plan["id"]):
+        return entitlement
+
+    period_start = _advance_cycle_start_to_now(current_period_end or now, now=now)
+    period_end = period_start + timedelta(days=FREE_TIER_CYCLE_DAYS)
+    source_key = f"{FREE_TIER_PRODUCT_ID}:{user_id}:{period_start.isoformat()}"
+    existing_cycle_lot = await fetch_credit_lot_by_source(
+        admin_client,
+        lot_type="subscription_cycle",
+        source_key=source_key,
+    )
+
+    await expire_active_subscription_lots(admin_client, user_id=user_id)
+    lot = await upsert_credit_lot(
+        admin_client,
+        user_id=user_id,
+        plan_id=str(free_plan["id"]),
+        lot_type="subscription_cycle",
+        source_key=source_key,
+        granted_seconds=int(free_plan.get("quota_seconds") or 0),
+        pack_expires_at=period_end,
+        status="active",
+    )
+
+    debt_seconds = int(entitlement.get("debt_seconds") or 0)
+    if not existing_cycle_lot:
+        debt_seconds = await _apply_debt_paydown_for_lot(
+            admin_client,
+            user_id=user_id,
+            lot_id=str(lot["id"]),
+            settings=settings,
+        )
+
+    await upsert_subscription_entitlement_state(
+        admin_client,
+        user_id=user_id,
+        subscription_plan_id=str(free_plan["id"]),
+        subscription_status="active",
+        period_start=period_start,
+        period_end=period_end,
+        subscription_cycle_grant_seconds=int(free_plan.get("quota_seconds") or 0),
+        subscription_rollover_seconds=0,
+        subscription_available_seconds=int(free_plan.get("quota_seconds") or 0),
+    )
+
+    await _sync_entitlement_snapshot(
+        admin_client,
+        user_id=user_id,
+        settings=settings,
+        debt_seconds=debt_seconds,
+    )
+    refreshed = await fetch_entitlement(admin_client, user_id)
+    return refreshed or entitlement
+
+
 async def _ensure_free_entitlement(admin_client: Any, user_id: str, settings: Settings) -> dict[str, Any]:
-    free_plan = await fetch_plan_by_product_id(admin_client, "internal_free")
+    free_plan = await fetch_plan_by_product_id(admin_client, FREE_TIER_PRODUCT_ID)
     now = datetime.now(UTC)
     period_start = now
-    period_end = now + timedelta(days=30)
+    period_end = now + timedelta(days=FREE_TIER_CYCLE_DAYS)
 
-    source_key = f"internal_free:{user_id}:{period_start.date().isoformat()}"
+    source_key = f"{FREE_TIER_PRODUCT_ID}:{user_id}:{period_start.isoformat()}"
     await upsert_credit_lot(
         admin_client,
         user_id=user_id,
@@ -153,30 +272,28 @@ async def get_usage_snapshot(
     entitlement = await fetch_entitlement(admin_client, user_id)
     if not entitlement:
         entitlement = await _ensure_free_entitlement(admin_client, user_id, settings)
+    entitlement = await _refresh_free_entitlement_if_needed(
+        admin_client,
+        user_id=user_id,
+        settings=settings,
+        entitlement=entitlement,
+    )
 
     debt_seconds = int(entitlement.get("debt_seconds") or 0)
     is_blocked = bool(entitlement.get("is_blocked"))
 
-    # Use spendable credits (exclude refund_pending pack lots) so allowance checks
-    # match what record_usage_for_job will actually consume.
-    now = datetime.now(UTC)
-    refund_pending_ids = await fetch_polar_order_ids_refund_pending(admin_client, user_id)
-    exclude_pack_keys = set(refund_pending_ids) if refund_pending_ids else None
-    subscription_remaining, pack_remaining, pack_expires_at = await summarize_credit_lots(
-        admin_client,
-        user_id=user_id,
-        now=now,
-        exclude_pack_source_keys=exclude_pack_keys,
-    )
+    subscription_remaining = int(entitlement.get("subscription_available_seconds") or 0)
+    pack_remaining = int(entitlement.get("pack_available_seconds") or 0)
+    pack_expires_at = _parse_dt(entitlement.get("pack_expires_at"))
 
-    # Expired packs should never be considered spendable during pre-checks.
+    # Fast path: read snapshot only. Refresh only when snapshot shows an expired pack.
+    now = datetime.now(UTC)
     if pack_remaining > 0 and pack_expires_at and pack_expires_at <= now:
         return await _sync_entitlement_snapshot(
             admin_client,
             user_id=user_id,
             settings=settings,
             debt_seconds=debt_seconds,
-            exclude_pack_source_keys=exclude_pack_keys,
         )
 
     return UsageSnapshot(

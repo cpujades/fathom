@@ -141,6 +141,73 @@ def _create_polar_product(
     return product_id
 
 
+def _extract_prices_from_product(product: dict[str, Any]) -> list[dict[str, Any]]:
+    prices = product.get("prices")
+    if isinstance(prices, list):
+        return [price for price in prices if isinstance(price, dict)]
+    if isinstance(prices, dict):
+        nested = prices.get("items") or prices.get("nodes")
+        if isinstance(nested, list):
+            return [price for price in nested if isinstance(price, dict)]
+    return []
+
+
+def _as_int(value: Any) -> int | None:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return None
+    return None
+
+
+def _normalize_price(price: dict[str, Any]) -> tuple[int | None, str | None, str | None]:
+    amount = _as_int(price.get("price_amount"))
+    if amount is None:
+        amount = _as_int(price.get("amount"))
+    if amount is None:
+        amount = _as_int(price.get("unit_amount"))
+
+    currency_raw = price.get("price_currency") or price.get("currency")
+    currency = str(currency_raw).lower() if isinstance(currency_raw, str) and currency_raw else None
+
+    interval_raw = price.get("recurring_interval") or price.get("interval")
+    interval = str(interval_raw).lower() if isinstance(interval_raw, str) and interval_raw else None
+    return amount, currency, interval
+
+
+def _ensure_existing_product_matches_plan(
+    *,
+    token: str,
+    api_base: str,
+    product_id: str,
+    plan: PlanRow,
+) -> None:
+    product = _polar_request(
+        token=token,
+        api_base=api_base,
+        method="GET",
+        path=f"/v1/products/{product_id}/",
+    )
+    prices = _extract_prices_from_product(product)
+    if not prices:
+        raise ValueError(f"Polar product {product_id} for {plan.plan_code}@v{plan.version} has no readable prices.")
+
+    expected_interval = "month" if plan.plan_type == "subscription" else None
+    for price in prices:
+        amount, currency, interval = _normalize_price(price)
+        if amount == plan.amount_cents and currency == plan.currency and interval == expected_interval:
+            return
+
+    raise ValueError(
+        f"Polar product {product_id} for {plan.plan_code}@v{plan.version} has no matching price "
+        f"(amount={plan.amount_cents}, currency={plan.currency}, interval={expected_interval}). "
+        "Bump plan version or update Polar catalog."
+    )
+
+
 def _validate_plan(raw: dict[str, Any]) -> PlanRow:
     plan_type = raw.get("plan_type")
     amount_cents = raw.get("amount_cents")
@@ -195,6 +262,32 @@ def _load_existing_plan_products(supabase: Any) -> dict[tuple[str, int], str]:
     return existing
 
 
+def _deactivate_missing_plan_versions(supabase: Any, *, keep_keys: set[tuple[str, int]]) -> None:
+    response = supabase.table("plans").select("id,plan_code,version,is_active").execute()
+    rows = response.data or []
+    ids_to_deactivate: list[str] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        row_id = row.get("id")
+        plan_code = row.get("plan_code")
+        version = row.get("version")
+        if not (isinstance(row_id, str) and isinstance(plan_code, str) and isinstance(version, int)):
+            continue
+        if not bool(row.get("is_active")):
+            continue
+        if (plan_code, version) not in keep_keys:
+            ids_to_deactivate.append(row_id)
+
+    if not ids_to_deactivate:
+        return
+
+    chunk_size = 100
+    for start in range(0, len(ids_to_deactivate), chunk_size):
+        chunk = ids_to_deactivate[start : start + chunk_size]
+        supabase.table("plans").update({"is_active": False}).in_("id", chunk).execute()
+
+
 def sync_plans(*, dry_run: bool, deactivate_missing: bool, server: str) -> list[PlanRow]:
     raw_plans = _load_plans()
     plans = [_validate_plan(raw) for raw in raw_plans]
@@ -211,6 +304,8 @@ def sync_plans(*, dry_run: bool, deactivate_missing: bool, server: str) -> list[
 
     token = os.getenv("POLAR_ACCESS_TOKEN", "").strip()
     api_base = _api_base(server)
+    if not dry_run and not token:
+        raise ValueError("POLAR_ACCESS_TOKEN is required for non-dry-run catalog sync.")
 
     rows: list[PlanRow] = []
     for plan in plans:
@@ -232,6 +327,13 @@ def sync_plans(*, dry_run: bool, deactivate_missing: bool, server: str) -> list[
                     api_base=api_base,
                     plan=plan,
                 )
+        elif not dry_run and product_id != "internal_free":
+            _ensure_existing_product_matches_plan(
+                token=token,
+                api_base=api_base,
+                product_id=product_id,
+                plan=plan,
+            )
 
         rows.append(
             PlanRow(
@@ -261,9 +363,8 @@ def sync_plans(*, dry_run: bool, deactivate_missing: bool, server: str) -> list[
         raise ValueError(f"Failed to upsert plans: {result.error}")
 
     if deactivate_missing:
-        plan_codes = [row.plan_code for row in rows]
-        if plan_codes:
-            supabase.table("plans").update({"is_active": False}).not_.in_("plan_code", plan_codes).execute()
+        keep_keys = {(row.plan_code, row.version) for row in rows}
+        _deactivate_missing_plan_versions(supabase, keep_keys=keep_keys)
 
     return rows
 
