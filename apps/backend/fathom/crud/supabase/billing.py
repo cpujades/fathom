@@ -661,6 +661,7 @@ async def summarize_credit_lots(
     *,
     user_id: str,
     now: datetime,
+    exclude_pack_source_keys: set[str] | None = None,
 ) -> tuple[int, int, datetime | None]:
     try:
         response = (
@@ -677,6 +678,13 @@ async def summarize_credit_lots(
         raise_for_postgrest_error(exc, "Failed to summarize credit lots.")
 
     rows = [cast(dict[str, Any], row) for row in (response.data or []) if isinstance(row, dict)]
+    if exclude_pack_source_keys:
+        rows = [
+            r
+            for r in rows
+            if str(r.get("lot_type") or "") != "pack_order"
+            or str(r.get("source_key") or "") not in exclude_pack_source_keys
+        ]
     subscription_remaining = 0
     pack_remaining = 0
     next_pack_expiry: datetime | None = None

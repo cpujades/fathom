@@ -119,6 +119,11 @@ class Settings(BaseSettings):
     def _clamp_billing_debt_cap(cls, value: object) -> object:
         if isinstance(value, int):
             return max(0, value)
+        if isinstance(value, str):
+            try:
+                return max(0, int(value))
+            except ValueError:
+                return value
         return value
 
 

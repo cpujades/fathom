@@ -66,12 +66,14 @@ async def _sync_entitlement_snapshot(
     user_id: str,
     settings: Settings,
     debt_seconds: int,
+    exclude_pack_source_keys: set[str] | None = None,
 ) -> UsageSnapshot:
     now = datetime.now(UTC)
     subscription_remaining, pack_remaining, pack_expires_at = await summarize_credit_lots(
         admin_client,
         user_id=user_id,
         now=now,
+        exclude_pack_source_keys=exclude_pack_source_keys,
     )
     blocked = debt_seconds >= settings.billing_debt_cap_seconds
 
@@ -152,20 +154,29 @@ async def get_usage_snapshot(
     if not entitlement:
         entitlement = await _ensure_free_entitlement(admin_client, user_id, settings)
 
-    subscription_remaining = int(entitlement.get("subscription_available_seconds") or 0)
-    pack_remaining = int(entitlement.get("pack_available_seconds") or 0)
     debt_seconds = int(entitlement.get("debt_seconds") or 0)
     is_blocked = bool(entitlement.get("is_blocked"))
-    pack_expires_at = _parse_dt(entitlement.get("pack_expires_at"))
+
+    # Use spendable credits (exclude refund_pending pack lots) so allowance checks
+    # match what record_usage_for_job will actually consume.
+    now = datetime.now(UTC)
+    refund_pending_ids = await fetch_polar_order_ids_refund_pending(admin_client, user_id)
+    exclude_pack_keys = set(refund_pending_ids) if refund_pending_ids else None
+    subscription_remaining, pack_remaining, pack_expires_at = await summarize_credit_lots(
+        admin_client,
+        user_id=user_id,
+        now=now,
+        exclude_pack_source_keys=exclude_pack_keys,
+    )
 
     # Expired packs should never be considered spendable during pre-checks.
-    now = datetime.now(UTC)
     if pack_remaining > 0 and pack_expires_at and pack_expires_at <= now:
         return await _sync_entitlement_snapshot(
             admin_client,
             user_id=user_id,
             settings=settings,
             debt_seconds=debt_seconds,
+            exclude_pack_source_keys=exclude_pack_keys,
         )
 
     return UsageSnapshot(
