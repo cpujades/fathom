@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 from postgrest import APIError
@@ -195,6 +195,38 @@ async def mark_webhook_event_failed(client: AsyncClient, event_id: str, error: s
         )
     except APIError as exc:
         raise_for_postgrest_error(exc, "Failed to mark webhook event as failed.")
+
+
+async def reclaim_stale_webhook_processing(
+    client: AsyncClient,
+    *,
+    stale_minutes: int = 15,
+) -> int:
+    """Move events stuck in processing (e.g. after a crash) to failed so Polar retries can claim them.
+    Call from a scheduled job (cron), not from the webhook request path. Use a stale_minutes
+    high enough that in-flight handlers (which complete in seconds) are never reclaimed.
+    """
+    stale_before = (datetime.now(UTC) - timedelta(minutes=stale_minutes)).isoformat()
+    try:
+        response = (
+            await client.table("billing_webhook_events")
+            .update(
+                {
+                    "status": "failed",
+                    "processed_at": datetime.now(UTC).isoformat(),
+                    "error": "stale processing state reclaimed by scheduled job",
+                },
+                count=CountMethod.exact,
+                returning=ReturnMethod.minimal,
+            )
+            .eq("status", "processing")
+            .is_("processed_at", "null")
+            .lt("received_at", stale_before)
+            .execute()
+        )
+    except APIError as exc:
+        raise_for_postgrest_error(exc, "Failed to reclaim stale webhook processing state.")
+    return int(response.count or 0)
 
 
 async def upsert_billing_order(
