@@ -161,6 +161,36 @@ async def claim_webhook_event_for_processing(client: AsyncClient, *, event_id: s
     return int(response.count or 0) > 0
 
 
+async def reclaim_stale_processing_webhook_event(
+    client: AsyncClient,
+    *,
+    event_id: str,
+    stale_before: datetime,
+) -> bool:
+    """Move stale in-flight webhook events back to failed so they can be retried."""
+    try:
+        response = (
+            await client.table("billing_webhook_events")
+            .update(
+                {
+                    "status": "failed",
+                    "processed_at": datetime.now(UTC).isoformat(),
+                    "error": "stale_processing_reclaimed",
+                },
+                count=CountMethod.exact,
+                returning=ReturnMethod.minimal,
+            )
+            .eq("event_id", event_id)
+            .eq("status", "processing")
+            .lt("received_at", stale_before.isoformat())
+            .execute()
+        )
+    except APIError as exc:
+        raise_for_postgrest_error(exc, "Failed to reclaim stale processing webhook event.")
+
+    return int(response.count or 0) > 0
+
+
 async def mark_webhook_event_processed(client: AsyncClient, event_id: str) -> None:
     try:
         await (

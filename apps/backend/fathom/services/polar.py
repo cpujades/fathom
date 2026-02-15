@@ -15,6 +15,15 @@ from fathom.core.config import Settings
 from fathom.core.errors import ConfigurationError, ExternalServiceError, InvalidRequestError
 
 WEBHOOK_TOLERANCE_SECONDS = 300
+WEBHOOK_SECRET_PREFIXES = ("whsec_", "polar_whs_", "polar_whsec_")
+
+
+class PolarInvalidRequestError(InvalidRequestError):
+    """Polar returned a 4xx response with preserved HTTP status context."""
+
+    def __init__(self, detail: str, *, http_status: int) -> None:
+        super().__init__(detail)
+        self.http_status = http_status
 
 
 def get_polar_access_token(settings: Settings) -> str:
@@ -105,7 +114,10 @@ def _polar_request(
         raw_error = exc.read().decode("utf-8", errors="replace")
         message = _extract_error_message(raw_error)
         if 400 <= exc.code < 500:
-            raise InvalidRequestError(f"Polar request failed: {message}") from exc
+            raise PolarInvalidRequestError(
+                f"Polar request failed ({exc.code}): {message}",
+                http_status=exc.code,
+            ) from exc
         raise ExternalServiceError(f"Polar request failed: {message}") from exc
     except URLError as exc:
         raise ExternalServiceError("Polar API is unreachable.") from exc
@@ -203,14 +215,19 @@ async def create_order_refund(
 
 def _decode_webhook_secret(secret: str) -> bytes:
     encoded = secret.strip()
-    if encoded.startswith("whsec_"):
-        encoded = encoded[len("whsec_") :]
+    for prefix in WEBHOOK_SECRET_PREFIXES:
+        if encoded.startswith(prefix):
+            encoded = encoded[len(prefix) :]
+            break
 
     padded = encoded + ("=" * ((4 - (len(encoded) % 4)) % 4))
     try:
         return base64.urlsafe_b64decode(padded)
-    except Exception as exc:  # noqa: BLE001
-        raise InvalidRequestError("Invalid Polar webhook secret format.") from exc
+    except Exception:  # noqa: BLE001
+        try:
+            return base64.b64decode(padded)
+        except Exception as inner_exc:  # noqa: BLE001
+            raise InvalidRequestError("Invalid Polar webhook secret format.") from inner_exc
 
 
 def _parse_signatures(signature_header: str) -> list[bytes]:
@@ -224,8 +241,9 @@ def _parse_signatures(signature_header: str) -> list[bytes]:
         version, signature = components
         if version != "v1":
             continue
+        padded = signature + ("=" * ((4 - (len(signature) % 4)) % 4))
         try:
-            signatures.append(base64.b64decode(signature))
+            signatures.append(base64.b64decode(padded))
         except Exception:  # noqa: BLE001
             continue
     return signatures

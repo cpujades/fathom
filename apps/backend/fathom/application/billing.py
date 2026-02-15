@@ -7,7 +7,7 @@ from typing import Any
 
 from fathom.api.deps.auth import AuthContext
 from fathom.core.config import Settings
-from fathom.core.errors import InvalidRequestError
+from fathom.core.errors import ExternalServiceError, InvalidRequestError
 from fathom.core.logging import log_context
 from fathom.crud.supabase.billing import (
     adjust_entitlement_debt,
@@ -20,8 +20,10 @@ from fathom.crud.supabase.billing import (
     fetch_entitlement,
     fetch_plan_by_id,
     fetch_plan_by_product_id,
+    fetch_polar_order_ids_refund_pending,
     mark_webhook_event_failed,
     mark_webhook_event_processed,
+    reclaim_stale_processing_webhook_event,
     record_webhook_event_received,
     remaining_seconds_from_lot,
     revoke_remaining_credit_lot,
@@ -44,6 +46,7 @@ from fathom.services import polar
 from fathom.services.supabase import create_supabase_admin_client
 
 logger = logging.getLogger(__name__)
+WEBHOOK_PROCESSING_STALE_SECONDS = 300
 
 
 def _as_str(value: Any) -> str | None:
@@ -99,6 +102,20 @@ def _extract_event_fields(
     return event_id, event_type, data
 
 
+def _is_definitive_duplicate_refund_error(detail: str) -> bool:
+    normalized = detail.lower()
+    duplicate_markers = (
+        "already refunded",
+        "already been refunded",
+        "already has a refund",
+        "refund already",
+        "duplicate refund",
+        "refund exists",
+        "already exists",
+    )
+    return any(marker in normalized for marker in duplicate_markers)
+
+
 async def _sync_entitlement_snapshot(
     admin_client: Any,
     *,
@@ -112,10 +129,13 @@ async def _sync_entitlement_snapshot(
         effective_debt = max(debt_seconds, 0)
 
     now = datetime.now(UTC)
+    refund_pending_order_ids = await fetch_polar_order_ids_refund_pending(admin_client, user_id)
+    exclude_pack_keys = set(refund_pending_order_ids) if refund_pending_order_ids else None
     subscription_remaining, pack_remaining, next_pack_expiry = await summarize_credit_lots(
         admin_client,
         user_id=user_id,
         now=now,
+        exclude_pack_source_keys=exclude_pack_keys,
     )
     is_blocked = effective_debt >= settings.billing_debt_cap_seconds
 
@@ -286,19 +306,49 @@ async def request_pack_refund(
             raise InvalidRequestError("Refund is already in progress for this order.")
         raise InvalidRequestError("Order is not refundable at this time.")
 
+    # From this point the pack is frozen for consumption while refund is in-flight.
+    await _sync_entitlement_snapshot(
+        admin_client,
+        user_id=auth.user_id,
+        settings=settings,
+    )
+
     try:
         refund = await polar.create_order_refund(
             settings,
             polar_order_id=polar_order_id,
             amount_cents=refundable_amount_cents,
         )
-    except Exception:
+    except polar.PolarInvalidRequestError as exc:
+        # Duplicate/conflict-like provider responses can indicate the refund may
+        # already exist remotely; keep refund_pending to prevent double refunds.
+        if exc.http_status == 409 or _is_definitive_duplicate_refund_error(exc.detail):
+            logger.warning(
+                "polar refund rejected as duplicate/conflict; keeping refund_pending",
+                extra={"polar_order_id": polar_order_id, "http_status": exc.http_status},
+            )
+            raise InvalidRequestError(
+                "Refund request already exists or may have already been processed. "
+                "Please wait for webhook confirmation."
+            ) from exc
+
+        # Clearly rejected client-side requests can be reopened safely.
         await transition_billing_order_status(
             admin_client,
             order_id=str(order["id"]),
             from_status="refund_pending",
             to_status="paid",
         )
+        await _sync_entitlement_snapshot(
+            admin_client,
+            user_id=auth.user_id,
+            settings=settings,
+        )
+        raise
+    except Exception:
+        # Unknown network/provider outcome: keep refund_pending to avoid a
+        # second refund request that could double-refund the same order.
+        logger.exception("polar refund request outcome unknown; keeping order in refund_pending")
         raise
 
     refund_id = _as_str(refund.get("id"))
@@ -324,6 +374,15 @@ async def handle_polar_webhook(payload: bytes, headers: Mapping[str, str], setti
         payload=event,
     )
     claimed = await claim_webhook_event_for_processing(admin_client, event_id=event_id)
+    if not claimed:
+        cutoff = datetime.now(UTC) - timedelta(seconds=WEBHOOK_PROCESSING_STALE_SECONDS)
+        reclaimed = await reclaim_stale_processing_webhook_event(
+            admin_client,
+            event_id=event_id,
+            stale_before=cutoff,
+        )
+        if reclaimed:
+            claimed = await claim_webhook_event_for_processing(admin_client, event_id=event_id)
     if not claimed:
         logger.info("polar webhook duplicate ignored", extra={"event_id": event_id, "event_type": event_type})
         return
@@ -496,19 +555,25 @@ async def _handle_order_refunded(admin_client: Any, refund: dict[str, Any], sett
             break
 
     if not order:
-        logger.info(
-            "polar refund ignored: order not tracked",
-            extra={"candidates": candidate_order_ids},
-        )
-        return
+        raise ExternalServiceError(f"Polar refund payload references unknown order ids: {candidate_order_ids}")
 
-    this_refund_cents = _extract_amount_cents(
-        refund,
-        candidates=("refunded_amount", "refund_amount", "total_amount", "amount"),
-    )
+    provider_total_refunded: int | None = None
+    for key in ("refunded_amount", "total_refunded_amount"):
+        value = _as_int(refund.get(key))
+        if value is not None:
+            provider_total_refunded = max(value, 0)
+            break
+    refund_delta_cents = _extract_amount_cents(refund, candidates=("refund_amount", "amount"))
+
     paid_amount_cents = int(order.get("paid_amount_cents") or 0)
     existing_refunded = int(order.get("refunded_amount_cents") or 0)
-    new_refunded_cents = min(existing_refunded + this_refund_cents, paid_amount_cents)
+    if provider_total_refunded is not None:
+        # `order.refunded` payloads report order-level refunded totals.
+        new_refunded_cents = min(max(existing_refunded, provider_total_refunded), paid_amount_cents)
+    else:
+        # Backward-compatible fallback for payloads that only expose a delta.
+        new_refunded_cents = min(existing_refunded + refund_delta_cents, paid_amount_cents)
+
     plan_type = order.get("plan_type")
     # Product rules: only packs are refundable (full or proportional). Subscriptions
     # are not refunded in-app (cancel at period end only). Pack: one refund webhook
@@ -516,20 +581,22 @@ async def _handle_order_refunded(admin_client: Any, refund: dict[str, Any], sett
     # we don't offer refunds; if Polar sends order.refunded we only update order row
     # when total refunded >= paid (no lot/entitlement changes).
     is_pack = plan_type == "pack"
-    pack_refund_completed = is_pack and this_refund_cents > 0
+    pack_refund_completed = is_pack and new_refunded_cents > 0
     non_pack_full_refund = not is_pack and paid_amount_cents > 0 and new_refunded_cents >= paid_amount_cents
     set_refunded = pack_refund_completed or non_pack_full_refund
+    current_status = _as_str(order.get("status")) or "paid"
+    next_status = "refunded" if set_refunded else current_status
 
     await update_billing_order(
         admin_client,
         order_id=str(order["id"]),
         values={
-            "status": "refunded" if set_refunded else "paid",
+            "status": next_status,
             "refunded_amount_cents": new_refunded_cents,
         },
     )
 
-    if is_pack and this_refund_cents > 0:
+    if is_pack and set_refunded:
         lot = await fetch_credit_lot_by_source(
             admin_client,
             lot_type="pack_order",
@@ -592,7 +659,8 @@ async def _handle_subscription_event(
         rollover_seconds = 0
         await expire_active_subscription_lots(admin_client, user_id=user_id)
     elif period_start and period_end:
-        source_key = f"{subscription_id or 'subscription'}:{period_start.isoformat()}"
+        subscription_key = subscription_id or f"user:{user_id}"
+        source_key = f"{subscription_key}:{period_start.isoformat()}"
         existing_cycle_lot = await fetch_credit_lot_by_source(
             admin_client,
             lot_type="subscription_cycle",
