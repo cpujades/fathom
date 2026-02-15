@@ -14,6 +14,7 @@ from fathom.crud.supabase.billing import (
     fetch_entitlement,
     fetch_plan_by_id,
     fetch_plan_by_product_id,
+    fetch_polar_order_ids_refund_pending,
     fetch_usage_history,
     insert_usage_entry,
     summarize_credit_lots,
@@ -247,12 +248,15 @@ async def record_usage_for_job(
 
         consumed_pack = 0
         if remaining > 0:
+            refund_pending_order_ids = await fetch_polar_order_ids_refund_pending(admin_client, user_id)
+            exclude_pack_keys = set(refund_pending_order_ids) if refund_pending_order_ids else None
             consumed_pack = await consume_credit_lots(
                 admin_client,
                 user_id=user_id,
                 lot_type="pack_order",
                 seconds_to_consume=remaining,
                 now=datetime.now(UTC),
+                exclude_pack_source_keys=exclude_pack_keys,
             )
             if consumed_pack > 0:
                 await insert_usage_entry(

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any, cast
 
 from postgrest import APIError
@@ -134,25 +134,11 @@ async def record_webhook_event_received(
 
 
 async def claim_webhook_event_for_processing(client: AsyncClient, *, event_id: str) -> bool:
-    stale_before = (datetime.now(UTC) - timedelta(minutes=5)).isoformat()
-    try:
-        await (
-            client.table("billing_webhook_events")
-            .update(
-                {
-                    "status": "failed",
-                    "error": "stale processing state reclaimed",
-                }
-            )
-            .eq("event_id", event_id)
-            .eq("status", "processing")
-            .is_("processed_at", "null")
-            .lt("received_at", stale_before)
-            .execute()
-        )
-    except APIError as exc:
-        raise_for_postgrest_error(exc, "Failed to reclaim stale webhook processing state.")
-
+    """Claim an event for processing by transitioning it from received or failed to processing.
+    Only received/failed rows are updated; in-flight (processing) rows are left alone so a
+    duplicate delivery cannot steal the event and cause double processing. Stale processing
+    events should be reclaimed by a separate scheduled job, not in the webhook request path.
+    """
     try:
         response = (
             await client.table("billing_webhook_events")
@@ -287,6 +273,22 @@ async def fetch_billing_order_for_user(
     if not data:
         return None
     return cast(dict[str, Any], data[0])
+
+
+async def fetch_polar_order_ids_refund_pending(client: AsyncClient, user_id: str) -> list[str]:
+    try:
+        response = (
+            await client.table("billing_orders")
+            .select("polar_order_id")
+            .eq("user_id", user_id)
+            .eq("status", "refund_pending")
+            .execute()
+        )
+    except APIError as exc:
+        raise_for_postgrest_error(exc, "Failed to fetch refund-pending orders.")
+
+    data = response.data or []
+    return [str(row["polar_order_id"]) for row in data if isinstance(row, dict) and row.get("polar_order_id")]
 
 
 async def update_billing_order(
@@ -460,6 +462,7 @@ async def list_credit_lots_for_consumption(
     user_id: str,
     lot_type: str,
     now: datetime,
+    exclude_pack_source_keys: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     try:
         response = (
@@ -476,6 +479,8 @@ async def list_credit_lots_for_consumption(
         raise_for_postgrest_error(exc, "Failed to fetch credit lots for consumption.")
 
     rows = [cast(dict[str, Any], row) for row in (response.data or []) if isinstance(row, dict)]
+    if lot_type == "pack_order" and exclude_pack_source_keys:
+        rows = [r for r in rows if str(r.get("source_key") or "") not in exclude_pack_source_keys]
     lots: list[dict[str, Any]] = []
     for row in rows:
         expiry = _parse_timestamp(row.get("pack_expires_at"))
@@ -505,11 +510,18 @@ async def consume_credit_lots(
     lot_type: str,
     seconds_to_consume: int,
     now: datetime,
+    exclude_pack_source_keys: set[str] | None = None,
 ) -> int:
     if seconds_to_consume <= 0:
         return 0
 
-    lots = await list_credit_lots_for_consumption(client, user_id=user_id, lot_type=lot_type, now=now)
+    lots = await list_credit_lots_for_consumption(
+        client,
+        user_id=user_id,
+        lot_type=lot_type,
+        now=now,
+        exclude_pack_source_keys=exclude_pack_source_keys,
+    )
     remaining = seconds_to_consume
     consumed_total = 0
 

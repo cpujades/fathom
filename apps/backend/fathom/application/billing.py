@@ -505,28 +505,41 @@ async def _handle_order_refunded(admin_client: Any, refund: dict[str, Any], sett
         )
         return
 
-    refund_amount_cents = _extract_amount_cents(
+    this_refund_cents = _extract_amount_cents(
         refund,
         candidates=("refunded_amount", "refund_amount", "total_amount", "amount"),
     )
+    paid_amount_cents = int(order.get("paid_amount_cents") or 0)
+    existing_refunded = int(order.get("refunded_amount_cents") or 0)
+    new_refunded_cents = min(existing_refunded + this_refund_cents, paid_amount_cents)
+    plan_type = order.get("plan_type")
+    # Product rules: only packs are refundable (full or proportional). Subscriptions
+    # are not refunded in-app (cancel at period end only). Pack: one refund webhook
+    # (full $30 or partial e.g. $10) → mark refunded and revoke lot. Subscription:
+    # we don't offer refunds; if Polar sends order.refunded we only update order row
+    # when total refunded >= paid (no lot/entitlement changes).
+    is_pack = plan_type == "pack"
+    pack_refund_completed = is_pack and this_refund_cents > 0
+    non_pack_full_refund = not is_pack and paid_amount_cents > 0 and new_refunded_cents >= paid_amount_cents
+    set_refunded = pack_refund_completed or non_pack_full_refund
+
     await update_billing_order(
         admin_client,
         order_id=str(order["id"]),
         values={
-            "status": "refunded" if refund_amount_cents > 0 else "paid",
-            "refunded_amount_cents": refund_amount_cents,
+            "status": "refunded" if set_refunded else "paid",
+            "refunded_amount_cents": new_refunded_cents,
         },
     )
 
-    if order.get("plan_type") == "pack":
-        if refund_amount_cents > 0:
-            lot = await fetch_credit_lot_by_source(
-                admin_client,
-                lot_type="pack_order",
-                source_key=str(order.get("polar_order_id") or ""),
-            )
-            if lot:
-                await revoke_remaining_credit_lot(admin_client, lot_id=str(lot["id"]))
+    if is_pack and this_refund_cents > 0:
+        lot = await fetch_credit_lot_by_source(
+            admin_client,
+            lot_type="pack_order",
+            source_key=str(order.get("polar_order_id") or ""),
+        )
+        if lot:
+            await revoke_remaining_credit_lot(admin_client, lot_id=str(lot["id"]))
 
     user_id = _as_str(order.get("user_id"))
     if user_id:
