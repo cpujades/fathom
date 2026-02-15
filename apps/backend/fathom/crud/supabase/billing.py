@@ -770,18 +770,6 @@ async def update_entitlement_snapshot(
         raise_for_postgrest_error(exc, "Failed to update entitlement snapshot.")
 
 
-async def update_entitlement_debt(client: AsyncClient, *, user_id: str, debt_seconds: int, is_blocked: bool) -> None:
-    payload: dict[str, Any] = {
-        "debt_seconds": max(0, debt_seconds),
-        "is_blocked": is_blocked,
-        "last_balance_sync_at": datetime.now(UTC).isoformat(),
-    }
-    try:
-        await client.table("entitlements").update(payload).eq("user_id", user_id).execute()
-    except APIError as exc:
-        raise_for_postgrest_error(exc, "Failed to update entitlement debt.")
-
-
 async def adjust_entitlement_debt(
     client: AsyncClient,
     *,

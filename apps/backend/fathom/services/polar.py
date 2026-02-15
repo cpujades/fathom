@@ -251,8 +251,13 @@ def verify_and_parse_webhook(
     if abs(now_seconds - timestamp_seconds) > WEBHOOK_TOLERANCE_SECONDS:
         raise InvalidRequestError("Polar webhook timestamp is outside allowed tolerance.")
 
+    try:
+        payload_str = payload.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise InvalidRequestError("Polar webhook payload is not valid UTF-8.") from exc
+
     secret = _decode_webhook_secret(get_polar_webhook_secret(settings))
-    signed_content = f"{webhook_id}.{webhook_timestamp}.{payload.decode('utf-8')}".encode()
+    signed_content = f"{webhook_id}.{webhook_timestamp}.{payload_str}".encode()
     expected_signature = hmac.new(secret, signed_content, hashlib.sha256).digest()
 
     signatures = _parse_signatures(webhook_signature)
@@ -263,7 +268,7 @@ def verify_and_parse_webhook(
         raise InvalidRequestError("Polar webhook signature verification failed.")
 
     try:
-        event = json.loads(payload.decode("utf-8"))
+        event = json.loads(payload_str)
     except json.JSONDecodeError as exc:
         raise InvalidRequestError("Polar webhook payload is invalid JSON.") from exc
 
