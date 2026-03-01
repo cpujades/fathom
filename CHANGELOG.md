@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.11.0](https://github.com/cpujades/fathom/compare/v0.10.0...v0.11.0) (2026-03-01)
+
+
+### Features
+
+* **billing:** add billing account API, account UI, and Polar webhook robustness ([#77](https://github.com/cpujades/fathom/issues/77)) ([61bce60](https://github.com/cpujades/fathom/commit/61bce60e961df06358e4867145963e822d243a49))
+* **billing:** harden refund flow, add refund constraint, and free tier usage ([#75](https://github.com/cpujades/fathom/issues/75)) ([eb077ee](https://github.com/cpujades/fathom/commit/eb077ee883bd0a629f037520b0b6bd127771dbf2))
+* **polar:** add User-Agent and align product creation with Polar API ([#74](https://github.com/cpujades/fathom/issues/74)) ([eea438c](https://github.com/cpujades/fathom/commit/eea438cf62645f2dac530773b68a3d75ffafcf75))
+
+
+### Refactoring
+
+* **billing:** replace Stripe with Polar as billing provider ([#72](https://github.com/cpujades/fathom/issues/72)) ([a430547](https://github.com/cpujades/fathom/commit/a43054786b0225737807a6893471c9f8f2ba9db9))
+
+
+### Chores
+
+* **deps:** bump minimatch in the npm_and_yarn group across 1 directory ([#76](https://github.com/cpujades/fathom/issues/76)) ([b4ce231](https://github.com/cpujades/fathom/commit/b4ce23101fbf35d9fdaffbdb4ee30a3cd76e28f9))
+* **security:** bump minimatch override to 3.1.4 and remove temporary GHSA allowlist ([#78](https://github.com/cpujades/fathom/issues/78)) ([88e0a3c](https://github.com/cpujades/fathom/commit/88e0a3cc8f8d7078c9b44a2ef63b0388bf10cb0c))
+
 ## [0.10.0](https://github.com/cpujades/fathom/compare/v0.9.0...v0.10.0) (2026-02-14)
 
 
