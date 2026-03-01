@@ -52,7 +52,7 @@ export default function Home() {
           <div className={`${styles.heroCard} ${styles.reveal} ${styles.revealDelay2}`}>
             <div className={styles.heroCardHeader}>
               <span className={styles.heroCardTitle}>
-                Dwarkesh Patel - Andrej Karpathy: We're summoning ghosts, not building animals
+                Dwarkesh Patel - Andrej Karpathy: We&rsquo;re summoning ghosts, not building animals
               </span>
               <span className={styles.pill}>96% complete</span>
             </div>
@@ -106,7 +106,7 @@ export default function Home() {
 
         <section className={`${styles.section} ${styles.reveal}`} id="signal">
           <div className={styles.sectionHeader}>
-            <h2 className={styles.sectionTitle}>Everything you need, nothing you don't</h2>
+            <h2 className={styles.sectionTitle}>Everything you need, nothing you don&rsquo;t</h2>
             <p className={styles.sectionText}>
               Structured summaries keep the insight density high: key takeaways, quotes,
               frameworks, and recommended next actions.
@@ -183,7 +183,7 @@ export default function Home() {
             <div className={styles.faqItem}>
               <h3 className={styles.cardTitle}>Can I export and share summaries?</h3>
               <p className={styles.cardText}>
-                You'll get clean Markdown and a PDF export for every completed job.
+                You&rsquo;ll get clean Markdown and a PDF export for every completed job.
               </p>
             </div>
             <div className={styles.faqItem}>

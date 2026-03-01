@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -9,7 +9,7 @@ import styles from "../[jobId]/job.module.css";
 import { getApiErrorMessage } from "../../../lib/apiErrors";
 import { getSupabaseClient } from "../../../lib/supabaseClient";
 
-export default function JobCreatePage() {
+function JobCreatePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [error, setError] = useState<string | null>(null);
@@ -107,5 +107,33 @@ export default function JobCreatePage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function JobCreatePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className={styles.page}>
+          <main className={styles.main}>
+            <div className={styles.container}>
+              <section className={styles.loadingSection}>
+                <div className={styles.loadingCard}>
+                  <div className={styles.loadingTop}>
+                    <span className={styles.spinner} aria-hidden="true" />
+                    <div>
+                      <h2 className={styles.loadingTitle}>Starting your briefing</h2>
+                      <p className={styles.loadingSubtitle}>Preparing request details.</p>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </main>
+        </div>
+      }
+    >
+      <JobCreatePageContent />
+    </Suspense>
   );
 }

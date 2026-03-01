@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 
@@ -13,6 +13,18 @@ import { getSupabaseClient } from "../../../lib/supabaseClient";
 import { StreamingMarkdown } from "../../../components/StreamingMarkdown";
 
 const POLL_INTERVAL_MS = 2000;
+const STAGE_FALLBACK: Record<string, number> = {
+  queued: 8,
+  running: 20,
+  warming: 15,
+  transcribing: 35,
+  checking_cache: 50,
+  summarizing: 65,
+  rendering: 85,
+  completed: 100,
+  cached: 100,
+  failed: 100
+};
 
 export default function JobDetailPage() {
   const router = useRouter();
@@ -29,24 +41,11 @@ export default function JobDetailPage() {
   const realtimeChannelRef = useRef<RealtimeChannel | null>(null);
   const realtimeClientRef = useRef<SupabaseClient | null>(null);
 
-  const stageFallback: Record<string, number> = {
-    queued: 8,
-    running: 20,
-    warming: 15,
-    transcribing: 35,
-    checking_cache: 50,
-    summarizing: 65,
-    rendering: 85,
-    completed: 100,
-    cached: 100,
-    failed: 100
-  };
-
-  const updateProgress = (payload: JobStatusResponse) => {
+  const updateProgress = useCallback((payload: JobStatusResponse) => {
     if (typeof payload.progress === "number") {
       setProgress(payload.progress);
-    } else if (payload.stage && stageFallback[payload.stage]) {
-      setProgress(stageFallback[payload.stage]);
+    } else if (payload.stage && STAGE_FALLBACK[payload.stage]) {
+      setProgress(STAGE_FALLBACK[payload.stage]);
     } else {
       switch (payload.status) {
         case "queued":
@@ -63,9 +62,9 @@ export default function JobDetailPage() {
           break;
       }
     }
-  };
+  }, []);
 
-  const fetchSummary = async (summaryId: string, accessToken: string) => {
+  const fetchSummary = useCallback(async (summaryId: string, accessToken: string) => {
     const api = createApiClient(accessToken);
     const { data: summaryData, error: summaryError } = await api.GET("/summaries/{summary_id}", {
       params: {
@@ -84,9 +83,9 @@ export default function JobDetailPage() {
       setSummary(summaryData);
       setPdfUrl(summaryData.pdf_url ?? null);
     }
-  };
+  }, []);
 
-  const handleJobPayload = async (payload: JobStatusResponse, accessToken: string) => {
+  const handleJobPayload = useCallback(async (payload: JobStatusResponse, accessToken: string) => {
     setJob(payload);
     updateProgress(payload);
 
@@ -102,9 +101,9 @@ export default function JobDetailPage() {
     }
 
     return false;
-  };
+  }, [fetchSummary, updateProgress]);
 
-  const startPolling = (accessToken: string) => {
+  const startPolling = useCallback((accessToken: string) => {
     if (pollingRef.current) {
       return;
     }
@@ -145,7 +144,7 @@ export default function JobDetailPage() {
     };
 
     void poll();
-  };
+  }, [handleJobPayload, jobId]);
 
   useEffect(() => {
     if (!jobId) {
@@ -242,7 +241,7 @@ export default function JobDetailPage() {
         realtimeChannelRef.current = null;
       }
     };
-  }, [jobId, router]);
+  }, [handleJobPayload, jobId, router, startPolling]);
 
   const isComplete = job?.status === "succeeded" || job?.stage === "completed" || job?.stage === "cached";
   const isFailed = job?.status === "failed";

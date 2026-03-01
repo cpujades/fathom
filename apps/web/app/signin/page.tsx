@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -198,7 +199,14 @@ export default function SignInPage() {
         <div className={styles.divider}>or</div>
 
         <button className={`${styles.button} ${styles.buttonGhost}`} onClick={handleGoogle} disabled={loading}>
-          <img className={styles.googleIcon} src="/google-logo.webp" alt="" aria-hidden="true" />
+          <Image
+            className={styles.googleIcon}
+            src="/google-logo.webp"
+            alt=""
+            aria-hidden="true"
+            width={18}
+            height={18}
+          />
           Continue with Google
         </button>
 
