@@ -225,6 +225,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/billing/account": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Account */
+        get: operations["get_account_billing_account_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/webhooks/polar": {
         parameters: {
             query?: never;
@@ -246,6 +263,36 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** BillingAccountResponse */
+        BillingAccountResponse: {
+            subscription: components["schemas"]["SubscriptionBillingState"];
+            /** Packs */
+            packs: components["schemas"]["PackBillingState"][];
+            /** Orders */
+            orders: components["schemas"]["BillingOrderHistoryEntry"][];
+        };
+        /** BillingOrderHistoryEntry */
+        BillingOrderHistoryEntry: {
+            /** Polar Order Id */
+            polar_order_id: string;
+            /** Plan Name */
+            plan_name: string | null;
+            /** Plan Type */
+            plan_type: string;
+            /** Status */
+            status: string;
+            /** Currency */
+            currency: string;
+            /** Paid Amount Cents */
+            paid_amount_cents: number;
+            /** Refunded Amount Cents */
+            refunded_amount_cents: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
         /** CheckoutSessionRequest */
         CheckoutSessionRequest: {
             /**
@@ -316,6 +363,38 @@ export interface components {
             /** Status Message */
             status_message?: string | null;
         };
+        /** PackBillingState */
+        PackBillingState: {
+            /** Polar Order Id */
+            polar_order_id: string;
+            /** Plan Name */
+            plan_name: string | null;
+            /** Status */
+            status: string;
+            /** Currency */
+            currency: string;
+            /** Paid Amount Cents */
+            paid_amount_cents: number;
+            /** Refunded Amount Cents */
+            refunded_amount_cents: number;
+            /** Granted Seconds */
+            granted_seconds: number;
+            /** Consumed Seconds */
+            consumed_seconds: number;
+            /** Remaining Seconds */
+            remaining_seconds: number;
+            /** Expires At */
+            expires_at: string | null;
+            /** Refundable Amount Cents */
+            refundable_amount_cents: number;
+            /** Is Refundable */
+            is_refundable: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
         /** PackRefundResponse */
         PackRefundResponse: {
             /** Polar Order Id */
@@ -374,6 +453,17 @@ export interface components {
             version?: string | null;
             /** Uptime Seconds */
             uptime_seconds?: number | null;
+        };
+        /** SubscriptionBillingState */
+        SubscriptionBillingState: {
+            /** Plan Name */
+            plan_name: string | null;
+            /** Status */
+            status: string | null;
+            /** Period Start */
+            period_start: string | null;
+            /** Period End */
+            period_end: string | null;
         };
         /** SummarizeRequest */
         SummarizeRequest: {
@@ -1103,6 +1193,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UsageHistoryEntry"][];
+                };
+            };
+            /** @description Missing or invalid auth token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected server error. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_account_billing_account_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingAccountResponse"];
                 };
             };
             /** @description Missing or invalid auth token. */

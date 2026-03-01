@@ -18,9 +18,12 @@ from fathom.crud.supabase.billing import (
     fetch_billing_order_for_user,
     fetch_credit_lot_by_source,
     fetch_entitlement,
+    fetch_pack_lots_by_order_ids,
     fetch_plan_by_id,
     fetch_plan_by_product_id,
+    fetch_plan_names_by_ids,
     fetch_polar_order_ids_refund_pending,
+    list_billing_orders_for_user,
     mark_webhook_event_failed,
     mark_webhook_event_processed,
     reclaim_stale_processing_webhook_event,
@@ -37,16 +40,22 @@ from fathom.crud.supabase.billing import (
     upsert_subscription_entitlement_state,
 )
 from fathom.schemas.billing import (
+    BillingAccountResponse,
+    BillingOrderHistoryEntry,
     CheckoutSessionRequest,
     CheckoutSessionResponse,
     CustomerPortalSessionResponse,
+    PackBillingState,
     PackRefundResponse,
+    SubscriptionBillingState,
 )
 from fathom.services import polar
 from fathom.services.supabase import create_supabase_admin_client
 
 logger = logging.getLogger(__name__)
 WEBHOOK_PROCESSING_STALE_SECONDS = 300
+WEBHOOK_ID_HEADERS = ("webhook-id", "svix-id")
+FREE_TIER_PRODUCT_ID = "internal_free"
 
 
 def _as_str(value: Any) -> str | None:
@@ -92,7 +101,12 @@ def _extract_event_fields(
     event: dict[str, Any],
     headers: Mapping[str, str],
 ) -> tuple[str, str, dict[str, Any]]:
-    event_id = _as_str(headers.get("webhook-id")) or _as_str(event.get("id"))
+    event_id = None
+    for header_name in WEBHOOK_ID_HEADERS:
+        event_id = _as_str(headers.get(header_name))
+        if event_id:
+            break
+    event_id = event_id or _as_str(event.get("id"))
     event_type = _as_str(event.get("type"))
     data = event.get("data")
 
@@ -242,6 +256,107 @@ async def create_portal_session(auth: AuthContext, settings: Settings) -> Custom
     return CustomerPortalSessionResponse(portal_url=portal_url)
 
 
+async def get_billing_account(
+    *,
+    auth: AuthContext,
+    settings: Settings,
+) -> BillingAccountResponse:
+    admin_client = await create_supabase_admin_client(settings)
+    entitlement = await fetch_entitlement(admin_client, auth.user_id)
+    orders = await list_billing_orders_for_user(admin_client, user_id=auth.user_id, limit=50)
+
+    plan_ids: set[str] = {
+        str(order["plan_id"]) for order in orders if isinstance(order.get("plan_id"), str) and order.get("plan_id")
+    }
+    subscription_plan_id = _as_str(entitlement.get("subscription_plan_id")) if entitlement else None
+    if subscription_plan_id:
+        plan_ids.add(subscription_plan_id)
+    plan_names = await fetch_plan_names_by_ids(admin_client, plan_ids=plan_ids)
+
+    pack_order_ids = {
+        str(order["polar_order_id"])
+        for order in orders
+        if str(order.get("plan_type") or "") == "pack" and order.get("polar_order_id")
+    }
+    pack_lots = await fetch_pack_lots_by_order_ids(
+        admin_client,
+        user_id=auth.user_id,
+        order_ids=pack_order_ids,
+    )
+    now = datetime.now(UTC)
+
+    packs: list[PackBillingState] = []
+    order_entries: list[BillingOrderHistoryEntry] = []
+    for order in orders:
+        polar_order_id = str(order.get("polar_order_id") or "")
+        plan_id = _as_str(order.get("plan_id"))
+        plan_name = plan_names.get(plan_id) if plan_id else None
+        plan_type = str(order.get("plan_type") or "unknown")
+        status = _as_str(order.get("status")) or "unknown"
+        currency = _as_str(order.get("currency")) or "usd"
+        paid_amount_cents = int(order.get("paid_amount_cents") or 0)
+        refunded_amount_cents = int(order.get("refunded_amount_cents") or 0)
+        created_at = _parse_dt(order.get("created_at")) or now
+
+        order_entries.append(
+            BillingOrderHistoryEntry(
+                polar_order_id=polar_order_id,
+                plan_name=plan_name,
+                plan_type=plan_type,
+                status=status,
+                currency=currency,
+                paid_amount_cents=paid_amount_cents,
+                refunded_amount_cents=refunded_amount_cents,
+                created_at=created_at,
+            )
+        )
+
+        if plan_type != "pack":
+            continue
+
+        lot = pack_lots.get(polar_order_id)
+        granted_seconds = int(lot.get("granted_seconds") or 0) if lot else 0
+        consumed_seconds = int(lot.get("consumed_seconds") or 0) if lot else 0
+        expires_at = _parse_dt(lot.get("pack_expires_at")) if lot else None
+        remaining_seconds = 0
+        if lot and (not expires_at or expires_at > now):
+            remaining_seconds = remaining_seconds_from_lot(lot)
+
+        refundable_amount_cents = 0
+        if status == "paid" and granted_seconds > 0 and remaining_seconds > 0 and paid_amount_cents > 0:
+            refundable_amount_cents = (paid_amount_cents * remaining_seconds) // granted_seconds
+        is_refundable = status == "paid" and refundable_amount_cents > 0
+
+        packs.append(
+            PackBillingState(
+                polar_order_id=polar_order_id,
+                plan_name=plan_name,
+                status=status,
+                currency=currency,
+                paid_amount_cents=paid_amount_cents,
+                refunded_amount_cents=refunded_amount_cents,
+                granted_seconds=granted_seconds,
+                consumed_seconds=consumed_seconds,
+                remaining_seconds=remaining_seconds,
+                expires_at=expires_at,
+                refundable_amount_cents=refundable_amount_cents,
+                is_refundable=is_refundable,
+                created_at=created_at,
+            )
+        )
+
+    return BillingAccountResponse(
+        subscription=SubscriptionBillingState(
+            plan_name=plan_names.get(subscription_plan_id) if subscription_plan_id else None,
+            status=_as_str(entitlement.get("subscription_status")) if entitlement else None,
+            period_start=_parse_dt(entitlement.get("period_start")) if entitlement else None,
+            period_end=_parse_dt(entitlement.get("period_end")) if entitlement else None,
+        ),
+        packs=packs,
+        orders=order_entries,
+    )
+
+
 async def request_pack_refund(
     *,
     polar_order_id: str,
@@ -362,7 +477,19 @@ async def request_pack_refund(
 
 
 async def handle_polar_webhook(payload: bytes, headers: Mapping[str, str], settings: Settings) -> None:
-    event = polar.verify_and_parse_webhook(payload, headers, settings)
+    try:
+        event = polar.verify_and_parse_webhook(payload, headers, settings)
+    except InvalidRequestError as exc:
+        logger.warning(
+            "polar webhook rejected before processing",
+            extra={
+                "has_webhook_id": bool(headers.get("webhook-id") or headers.get("svix-id")),
+                "has_webhook_timestamp": bool(headers.get("webhook-timestamp") or headers.get("svix-timestamp")),
+                "has_webhook_signature": bool(headers.get("webhook-signature") or headers.get("svix-signature")),
+                "reason": exc.detail,
+            },
+        )
+        raise
     event_id, event_type, data = _extract_event_fields(event, headers)
 
     admin_client = await create_supabase_admin_client(settings)
@@ -643,6 +770,8 @@ async def _handle_subscription_event(
 
     plan = await fetch_plan_by_product_id(admin_client, product_id)
     existing = await fetch_entitlement(admin_client, user_id)
+    existing_plan_id = _as_str(existing.get("subscription_plan_id")) if existing else None
+    same_subscription_plan = existing_plan_id == str(plan["id"])
 
     status = _as_str(subscription.get("status")) or "unknown"
     period_start = _parse_dt(subscription.get("current_period_start"))
@@ -670,12 +799,16 @@ async def _handle_subscription_event(
             granted_seconds = int(existing_cycle_lot.get("granted_seconds") or 0)
             rollover_seconds = max(granted_seconds - quota_seconds, 0)
         else:
-            current_subscription_remaining, _, _ = await summarize_credit_lots(
-                admin_client,
-                user_id=user_id,
-                now=datetime.now(UTC),
-            )
-            rollover_seconds = min(current_subscription_remaining, rollover_cap)
+            if same_subscription_plan and product_id != FREE_TIER_PRODUCT_ID:
+                current_subscription_remaining, _, _ = await summarize_credit_lots(
+                    admin_client,
+                    user_id=user_id,
+                    now=datetime.now(UTC),
+                )
+                rollover_seconds = min(current_subscription_remaining, rollover_cap)
+            else:
+                # Do not carry free-tier or cross-plan credits into a paid cycle.
+                rollover_seconds = 0
             await expire_active_subscription_lots(admin_client, user_id=user_id)
 
             lot = await upsert_credit_lot(

@@ -12,6 +12,10 @@ type JobStatus = JobStatusResponse["status"];
 type PlanResponse = components["schemas"]["PlanResponse"];
 type UsageOverviewResponse = components["schemas"]["UsageOverviewResponse"];
 type UsageHistoryEntry = components["schemas"]["UsageHistoryEntry"];
+type BillingAccountResponse = components["schemas"]["BillingAccountResponse"];
+type BillingOrderHistoryEntry = components["schemas"]["BillingOrderHistoryEntry"];
+type PackBillingState = components["schemas"]["PackBillingState"];
+type SubscriptionBillingState = components["schemas"]["SubscriptionBillingState"];
 type CheckoutSessionRequest = components["schemas"]["CheckoutSessionRequest"];
 type CheckoutSessionResponse = components["schemas"]["CheckoutSessionResponse"];
 type CustomerPortalSessionResponse = components["schemas"]["CustomerPortalSessionResponse"];
@@ -38,6 +42,10 @@ export type {
   SummaryPdfResponse,
   SummaryResponse,
   PlanResponse,
+  BillingAccountResponse,
+  BillingOrderHistoryEntry,
+  PackBillingState,
+  SubscriptionBillingState,
   UsageOverviewResponse,
   UsageHistoryEntry
 };
