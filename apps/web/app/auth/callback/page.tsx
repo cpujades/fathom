@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import styles from "../auth.module.css";
 import { getSupabaseClient } from "../../lib/supabaseClient";
 
-export default function AuthCallbackPage() {
+function AuthCallbackPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [message, setMessage] = useState("Finalizing your session...");
@@ -67,5 +67,28 @@ export default function AuthCallbackPage() {
         {error ? <div className={styles.error}>{error}</div> : null}
       </div>
     </div>
+  );
+}
+
+export default function AuthCallbackPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className={styles.page}>
+          <div className={styles.card}>
+            <div className={styles.brand}>
+              <span className={styles.brandMark} aria-hidden="true" />
+              Fathom
+            </div>
+            <div>
+              <h1 className={styles.title}>Signing you in</h1>
+              <p className={styles.subtitle}>Finalizing your session...</p>
+            </div>
+          </div>
+        </div>
+      }
+    >
+      <AuthCallbackPageContent />
+    </Suspense>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import type {
@@ -33,7 +33,7 @@ const formatPrice = (amountCents: number, currency: string, billingInterval: str
   return billingInterval ? `${amount}/${billingInterval}` : amount;
 };
 
-export default function BillingPage() {
+function BillingPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const checkoutStatus = searchParams.get("checkout");
@@ -372,7 +372,7 @@ export default function BillingPage() {
       return "Active";
     }
     return status.replaceAll("_", " ");
-  }, [account?.subscription.status, usage?.subscription_plan_name]);
+  }, [account?.subscription.status]);
 
   if (loading) {
     return (
@@ -597,5 +597,24 @@ export default function BillingPage() {
         {error ? <p className={styles.status}>{error}</p> : null}
       </main>
     </div>
+  );
+}
+
+export default function BillingPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className={styles.page}>
+          <main className={styles.main}>
+            <section className={styles.card}>
+              <h1 className={styles.cardTitle}>Loading billing…</h1>
+              <p className={styles.cardText}>Preparing your billing details.</p>
+            </section>
+          </main>
+        </div>
+      }
+    >
+      <BillingPageContent />
+    </Suspense>
   );
 }

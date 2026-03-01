@@ -23,6 +23,10 @@ jobs:
         uses: actions/checkout@v6
       - name: Dependency Review
         uses: actions/dependency-review-action@v4
+        with:
+          # Temporary exception: minimatch@3 is pulled by current ESLint transitive deps.
+          # Remove this allowlist once lint toolchain migration eliminates minimatch v3.
+          allow-ghsas: GHSA-23c5-xmqv-rm74
 
   codeql:
     name: 🔎 CodeQL
