@@ -5,10 +5,12 @@ import base64
 import hashlib
 import hmac
 import json
+import re
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
 from urllib.error import HTTPError, URLError
+from urllib.parse import urljoin
 from urllib.request import Request, urlopen
 
 from fathom.core.config import Settings
@@ -16,6 +18,9 @@ from fathom.core.errors import ConfigurationError, ExternalServiceError, Invalid
 
 WEBHOOK_TOLERANCE_SECONDS = 300
 WEBHOOK_SECRET_PREFIXES = ("whsec_", "polar_whs_", "polar_whsec_")
+WEBHOOK_ID_HEADERS = ("webhook-id", "svix-id")
+WEBHOOK_TIMESTAMP_HEADERS = ("webhook-timestamp", "svix-timestamp")
+WEBHOOK_SIGNATURE_HEADERS = ("webhook-signature", "svix-signature")
 
 
 class PolarInvalidRequestError(InvalidRequestError):
@@ -105,22 +110,36 @@ def _polar_request(
     if payload is not None:
         data = json.dumps(payload).encode("utf-8")
 
-    request = Request(url=url, method=method.upper(), data=data, headers=headers)
+    raw = ""
+    current_url = url
+    max_redirects = 2
+    for _ in range(max_redirects + 1):
+        request = Request(url=current_url, method=method.upper(), data=data, headers=headers)
+        try:
+            with urlopen(request, timeout=30) as response:
+                raw = response.read().decode("utf-8")
+                break
+        except HTTPError as exc:
+            # Polar may redirect /v1/resource -> /v1/resource/ with 307/308.
+            if exc.code in {307, 308}:
+                location = exc.headers.get("Location")
+                if location:
+                    current_url = urljoin(current_url, location)
+                    continue
+                raise ExternalServiceError(f"Polar request redirect ({exc.code}) missing Location header.") from exc
 
-    try:
-        with urlopen(request, timeout=30) as response:
-            raw = response.read().decode("utf-8")
-    except HTTPError as exc:
-        raw_error = exc.read().decode("utf-8", errors="replace")
-        message = _extract_error_message(raw_error)
-        if 400 <= exc.code < 500:
-            raise PolarInvalidRequestError(
-                f"Polar request failed ({exc.code}): {message}",
-                http_status=exc.code,
-            ) from exc
-        raise ExternalServiceError(f"Polar request failed: {message}") from exc
-    except URLError as exc:
-        raise ExternalServiceError("Polar API is unreachable.") from exc
+            raw_error = exc.read().decode("utf-8", errors="replace")
+            message = _extract_error_message(raw_error)
+            if 400 <= exc.code < 500:
+                raise PolarInvalidRequestError(
+                    f"Polar request failed ({exc.code}): {message}",
+                    http_status=exc.code,
+                ) from exc
+            raise ExternalServiceError(f"Polar request failed ({exc.code}): {message}") from exc
+        except URLError as exc:
+            raise ExternalServiceError("Polar API is unreachable.") from exc
+    else:
+        raise ExternalServiceError("Polar request failed due to redirect loop.")
 
     if not raw:
         return {}
@@ -208,45 +227,67 @@ async def create_order_refund(
         _polar_request,
         settings,
         method="POST",
-        path="/v1/refunds",
+        path="/v1/refunds/",
         payload=payload,
     )
 
 
-def _decode_webhook_secret(secret: str) -> bytes:
-    encoded = secret.strip()
+def _candidate_webhook_secrets(secret: str) -> list[bytes]:
+    raw_secret = secret.strip()
+    if not raw_secret:
+        raise InvalidRequestError("Invalid Polar webhook secret format.")
+
+    encoded = raw_secret
     for prefix in WEBHOOK_SECRET_PREFIXES:
         if encoded.startswith(prefix):
             encoded = encoded[len(prefix) :]
             break
 
-    padded = encoded + ("=" * ((4 - (len(encoded) % 4)) % 4))
-    try:
-        return base64.urlsafe_b64decode(padded)
-    except Exception:  # noqa: BLE001
-        try:
-            return base64.b64decode(padded)
-        except Exception as inner_exc:  # noqa: BLE001
-            raise InvalidRequestError("Invalid Polar webhook secret format.") from inner_exc
+    candidates: list[bytes] = []
+    seen: set[bytes] = set()
+
+    for candidate in (raw_secret, encoded):
+        raw_bytes = candidate.encode("utf-8")
+        if raw_bytes and raw_bytes not in seen:
+            candidates.append(raw_bytes)
+            seen.add(raw_bytes)
+
+        padded = candidate + ("=" * ((4 - (len(candidate) % 4)) % 4))
+        for decoder in (base64.urlsafe_b64decode, base64.b64decode):
+            try:
+                decoded = decoder(padded)
+            except Exception:  # noqa: BLE001
+                continue
+            if decoded and decoded not in seen:
+                candidates.append(decoded)
+                seen.add(decoded)
+
+    if not candidates:
+        raise InvalidRequestError("Invalid Polar webhook secret format.")
+    return candidates
 
 
 def _parse_signatures(signature_header: str) -> list[bytes]:
     signatures: list[bytes] = []
-    for token in signature_header.strip().split(" "):
-        if not token:
-            continue
-        components = token.split(",", 1)
-        if len(components) != 2:
-            continue
-        version, signature = components
-        if version != "v1":
-            continue
+    matches = re.findall(r"(?:^|[\s,])v1[=,]([A-Za-z0-9+/=_-]+)", signature_header.strip())
+    for signature in matches:
         padded = signature + ("=" * ((4 - (len(signature) % 4)) % 4))
         try:
-            signatures.append(base64.b64decode(padded))
+            signatures.append(base64.urlsafe_b64decode(padded))
         except Exception:  # noqa: BLE001
-            continue
+            try:
+                signatures.append(base64.b64decode(padded))
+            except Exception:  # noqa: BLE001
+                continue
     return signatures
+
+
+def _get_header(headers: Mapping[str, str], names: tuple[str, ...]) -> str | None:
+    for name in names:
+        value = headers.get(name)
+        if value:
+            return value
+    return None
 
 
 def verify_and_parse_webhook(
@@ -254,9 +295,9 @@ def verify_and_parse_webhook(
     headers: Mapping[str, str],
     settings: Settings,
 ) -> dict[str, Any]:
-    webhook_id = headers.get("webhook-id")
-    webhook_timestamp = headers.get("webhook-timestamp")
-    webhook_signature = headers.get("webhook-signature")
+    webhook_id = _get_header(headers, WEBHOOK_ID_HEADERS)
+    webhook_timestamp = _get_header(headers, WEBHOOK_TIMESTAMP_HEADERS)
+    webhook_signature = _get_header(headers, WEBHOOK_SIGNATURE_HEADERS)
 
     if not webhook_id or not webhook_timestamp or not webhook_signature:
         raise InvalidRequestError("Missing required Polar webhook headers.")
@@ -275,15 +316,18 @@ def verify_and_parse_webhook(
     except UnicodeDecodeError as exc:
         raise InvalidRequestError("Polar webhook payload is not valid UTF-8.") from exc
 
-    secret = _decode_webhook_secret(get_polar_webhook_secret(settings))
+    secrets = _candidate_webhook_secrets(get_polar_webhook_secret(settings))
     signed_content = f"{webhook_id}.{webhook_timestamp}.{payload_str}".encode()
-    expected_signature = hmac.new(secret, signed_content, hashlib.sha256).digest()
 
     signatures = _parse_signatures(webhook_signature)
     if not signatures:
         raise InvalidRequestError("Polar webhook signature header is invalid.")
 
-    if not any(hmac.compare_digest(signature, expected_signature) for signature in signatures):
+    expected_signatures = [hmac.new(secret, signed_content, hashlib.sha256).digest() for secret in secrets]
+    is_valid_signature = any(
+        hmac.compare_digest(signature, expected) for signature in signatures for expected in expected_signatures
+    )
+    if not is_valid_signature:
         raise InvalidRequestError("Polar webhook signature verification failed.")
 
     try:

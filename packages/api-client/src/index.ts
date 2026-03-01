@@ -16,6 +16,10 @@ export type {
   SummaryPdfResponse,
   SummaryResponse,
   PlanResponse,
+  BillingAccountResponse,
+  BillingOrderHistoryEntry,
+  PackBillingState,
+  SubscriptionBillingState,
   UsageOverviewResponse,
   UsageHistoryEntry
 } from "./types";
