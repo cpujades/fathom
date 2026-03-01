@@ -337,6 +337,41 @@ async def fetch_billing_order_for_user(
     return cast(dict[str, Any], data[0])
 
 
+async def list_billing_orders_for_user(
+    client: AsyncClient,
+    *,
+    user_id: str,
+    limit: int = 50,
+) -> list[dict[str, Any]]:
+    try:
+        response = (
+            await client.table("billing_orders")
+            .select(ORDER_SELECT_FIELDS)
+            .eq("user_id", user_id)
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+    except APIError as exc:
+        raise_for_postgrest_error(exc, "Failed to list billing orders for user.")
+
+    data = response.data or []
+    return [cast(dict[str, Any], row) for row in data if isinstance(row, dict)]
+
+
+async def fetch_plan_names_by_ids(client: AsyncClient, *, plan_ids: set[str]) -> dict[str, str]:
+    if not plan_ids:
+        return {}
+
+    try:
+        response = await client.table("plans").select("id,name").in_("id", list(plan_ids)).execute()
+    except APIError as exc:
+        raise_for_postgrest_error(exc, "Failed to fetch plan names.")
+
+    rows = [cast(dict[str, Any], row) for row in (response.data or []) if isinstance(row, dict)]
+    return {str(row["id"]): str(row["name"]) for row in rows if row.get("id") and row.get("name")}
+
+
 async def fetch_polar_order_ids_refund_pending(client: AsyncClient, user_id: str) -> list[str]:
     try:
         response = (
@@ -351,6 +386,31 @@ async def fetch_polar_order_ids_refund_pending(client: AsyncClient, user_id: str
 
     data = response.data or []
     return [str(row["polar_order_id"]) for row in data if isinstance(row, dict) and row.get("polar_order_id")]
+
+
+async def fetch_pack_lots_by_order_ids(
+    client: AsyncClient,
+    *,
+    user_id: str,
+    order_ids: set[str],
+) -> dict[str, dict[str, Any]]:
+    if not order_ids:
+        return {}
+
+    try:
+        response = (
+            await client.table("credit_lots")
+            .select(LOT_SELECT_FIELDS)
+            .eq("user_id", user_id)
+            .eq("lot_type", "pack_order")
+            .in_("source_key", list(order_ids))
+            .execute()
+        )
+    except APIError as exc:
+        raise_for_postgrest_error(exc, "Failed to fetch pack lots by order ids.")
+
+    rows = [cast(dict[str, Any], row) for row in (response.data or []) if isinstance(row, dict)]
+    return {str(row["source_key"]): row for row in rows if row.get("source_key")}
 
 
 async def update_billing_order(

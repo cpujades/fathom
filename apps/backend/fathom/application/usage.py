@@ -272,6 +272,11 @@ async def get_usage_snapshot(
     entitlement = await fetch_entitlement(admin_client, user_id)
     if not entitlement:
         entitlement = await _ensure_free_entitlement(admin_client, user_id, settings)
+    subscription_plan_id = entitlement.get("subscription_plan_id")
+    if not isinstance(subscription_plan_id, str) or not subscription_plan_id:
+        # Self-heal legacy/corrupted rows so every account always has a valid
+        # baseline subscription lot for guard checks.
+        entitlement = await _ensure_free_entitlement(admin_client, user_id, settings)
     entitlement = await _refresh_free_entitlement_if_needed(
         admin_client,
         user_id=user_id,

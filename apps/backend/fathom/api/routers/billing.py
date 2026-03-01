@@ -3,10 +3,16 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Path
 
 from fathom.api.deps.auth import AuthContext, get_auth_context
-from fathom.application.billing import create_checkout_session, create_portal_session, request_pack_refund
+from fathom.application.billing import (
+    create_checkout_session,
+    create_portal_session,
+    get_billing_account,
+    request_pack_refund,
+)
 from fathom.application.usage import get_usage_history, get_usage_overview
 from fathom.core.config import Settings, get_settings
 from fathom.schemas.billing import (
+    BillingAccountResponse,
     CheckoutSessionRequest,
     CheckoutSessionResponse,
     CustomerPortalSessionResponse,
@@ -160,3 +166,18 @@ async def get_history(
         )
         for entry in entries
     ]
+
+
+@router.get(
+    "/account",
+    response_model=BillingAccountResponse,
+    responses={
+        401: {"model": ErrorResponse, "description": "Missing or invalid auth token."},
+        500: {"model": ErrorResponse, "description": "Unexpected server error."},
+    },
+)
+async def get_account(
+    auth: Annotated[AuthContext, Depends(get_auth_context)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> BillingAccountResponse:
+    return await get_billing_account(auth=auth, settings=settings)

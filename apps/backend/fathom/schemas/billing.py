@@ -57,3 +57,43 @@ class UsageHistoryEntry(BaseModel):
     seconds_used: int
     source: str
     created_at: datetime
+
+
+class SubscriptionBillingState(BaseModel):
+    plan_name: str | None
+    status: str | None
+    period_start: datetime | None
+    period_end: datetime | None
+
+
+class PackBillingState(BaseModel):
+    polar_order_id: str
+    plan_name: str | None
+    status: str
+    currency: str
+    paid_amount_cents: int
+    refunded_amount_cents: int
+    granted_seconds: int
+    consumed_seconds: int
+    remaining_seconds: int
+    expires_at: datetime | None
+    refundable_amount_cents: int
+    is_refundable: bool
+    created_at: datetime
+
+
+class BillingOrderHistoryEntry(BaseModel):
+    polar_order_id: str
+    plan_name: str | None
+    plan_type: str
+    status: str
+    currency: str
+    paid_amount_cents: int
+    refunded_amount_cents: int
+    created_at: datetime
+
+
+class BillingAccountResponse(BaseModel):
+    subscription: SubscriptionBillingState
+    packs: list[PackBillingState]
+    orders: list[BillingOrderHistoryEntry]
