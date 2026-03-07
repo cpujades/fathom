@@ -11,6 +11,7 @@ type PricingCopy = {
   headline: string;
   subhead: string;
   footnote: string;
+  secondary_cta: string;
   footnoteMuted?: string;
   benefits?: string[];
 };
@@ -97,6 +98,7 @@ const pricingCopy: Record<"packs" | "subscriptions", PricingCopy> = {
     headline: "Not ready to subscribe? Looking for one-time credits?",
     subhead:
       "Buy a pack and skip the subscription. No monthly fees. Pay only for the hours you listen to. Credits are valid for 6 months and extend with top-ups.",
+    secondary_cta: "Try Fathom free first",
     footnote:
       "Credits last 6 months. If you top up before expiry, remaining hours roll into the new 6-month window.",
     footnoteMuted:
@@ -106,6 +108,7 @@ const pricingCopy: Record<"packs" | "subscriptions", PricingCopy> = {
     headline: "Prefer a predictable monthly plan?",
     subhead:
       "Best for steady listeners. Monthly hours with rollover protection, so unused time carries forward.",
+    secondary_cta: "Go straight to paid checkout",
     benefits: [
       "Rollover — Don't lose your hours.",
       "Peace of mind — Always ready when you need it.",

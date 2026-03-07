@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import styles from "../auth.module.css";
 import { getSupabaseClient } from "../../lib/supabaseClient";
+import { getSafeNextPath } from "../../lib/url";
 
 function AuthCallbackPageContent() {
   const router = useRouter();
@@ -17,6 +18,7 @@ function AuthCallbackPageContent() {
       const errorParam = searchParams.get("error");
       const errorDescription = searchParams.get("error_description");
       const code = searchParams.get("code");
+      const nextPath = getSafeNextPath(searchParams.get("next"));
 
       if (errorParam) {
         setError(errorDescription || "Authentication failed.");
@@ -38,7 +40,7 @@ function AuthCallbackPageContent() {
 
         const { data } = await supabase.auth.getSession();
         if (data.session) {
-          router.replace("/app");
+          router.replace(nextPath);
           return;
         }
 

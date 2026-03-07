@@ -3,15 +3,47 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import styles from "../auth/auth.module.css";
 import { mapAuthError } from "../lib/authErrors";
 import { getSupabaseClient } from "../lib/supabaseClient";
-import { getSiteUrl } from "../lib/url";
+import { buildAuthCallbackUrl, getSafeNextPath } from "../lib/url";
 
 export default function SignInPage() {
   const router = useRouter();
+
+  const [nextPath, setNextPath] = useState("/app");
+  const [intent, setIntent] = useState<string | null>(null);
+  const [plan, setPlan] = useState<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setNextPath(getSafeNextPath(params.get("next")));
+    setIntent(params.get("intent"));
+    setPlan(params.get("plan"));
+  }, []);
+
+  const callbackUrl = useMemo(() => {
+    return buildAuthCallbackUrl(nextPath);
+  }, [nextPath]);
+
+  const signUpHref = useMemo(() => {
+    const params = new URLSearchParams();
+    if (nextPath !== "/app") {
+      params.set("next", nextPath);
+    }
+    if (intent) {
+      params.set("intent", intent);
+    }
+    if (plan) {
+      params.set("plan", plan);
+    }
+
+    const query = params.toString();
+    return query ? `/signup?${query}` : "/signup";
+  }, [intent, nextPath, plan]);
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mode, setMode] = useState<"password" | "magic">("password");
@@ -31,7 +63,7 @@ export default function SignInPage() {
         const { error: otpError } = await supabase.auth.signInWithOtp({
           email,
           options: {
-            emailRedirectTo: `${getSiteUrl()}/auth/callback`,
+            emailRedirectTo: callbackUrl,
             shouldCreateUser: false
           }
         });
@@ -52,7 +84,7 @@ export default function SignInPage() {
       if (signInError) {
         setError(mapAuthError(signInError, "Unable to sign you in."));
       } else {
-        router.replace("/app");
+        router.replace(nextPath);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
@@ -75,7 +107,7 @@ export default function SignInPage() {
     try {
       const supabase = getSupabaseClient();
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${getSiteUrl()}/auth/callback`
+        redirectTo: callbackUrl
       });
 
       if (resetError) {
@@ -100,7 +132,7 @@ export default function SignInPage() {
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${getSiteUrl()}/auth/callback`
+          redirectTo: callbackUrl
         }
       });
 
@@ -116,106 +148,107 @@ export default function SignInPage() {
 
   return (
     <div className={styles.page}>
-      <div className={styles.card}>
-        <div className={styles.brand}>
-          <span className={styles.brandMark} aria-hidden="true" />
-          Fathom
-        </div>
-
-        <div>
-          <h1 className={styles.title}>Welcome back</h1>
-          <p className={styles.subtitle}>Sign in to continue building your briefing library.</p>
-        </div>
-
-        {error ? <div className={styles.error}>{error}</div> : null}
-        {message ? <div className={styles.notice}>{message}</div> : null}
-
-      <form className={styles.form} onSubmit={handleSignIn}>
-        <div className={styles.field}>
-          <label className={styles.label} htmlFor="email">
-            Email
-          </label>
-          <input
-              className={styles.input}
-              id="email"
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder="you@company.com"
-            required
-          />
-        </div>
-
-        {mode === "password" ? (
-          <div className={styles.field}>
-            <label className={styles.label} htmlFor="password">
-              Password
-            </label>
-            <input
-              className={styles.input}
-              id="password"
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              placeholder="••••••••"
-              required
-            />
+      <div className={styles.shell}>
+        <aside className={styles.panel}>
+          <div className={styles.brand}>
+            <span className={styles.brandMark} aria-hidden="true" />
+            Fathom
           </div>
-        ) : null}
+          <h1 className={styles.panelTitle}>Welcome back</h1>
+          <p className={styles.panelText}>Sign in to resume your briefings and keep your listening workflow focused.</p>
+          <ul className={styles.panelList}>
+            <li>Fast checkout and billing controls</li>
+            <li>Credit usage and history in one place</li>
+            <li>Structured summaries ready to export</li>
+          </ul>
+          <p className={styles.panelFooter}>Need a new account? Create one in under a minute.</p>
+        </aside>
 
-        <div className={styles.actions}>
-          <button className={`${styles.button} ${styles.buttonPrimary}`} type="submit" disabled={loading}>
-            {loading
-              ? "Working..."
-              : mode === "magic"
-                ? "Email me a sign-in link"
-                : "Sign in"}
-          </button>
-        </div>
-
-        {mode === "password" ? (
-          <div className={styles.modeToggle}>
-            <button className={styles.linkButton} type="button" onClick={handleResetPassword} disabled={loading}>
-              Forgot password?
-            </button>
+        <section className={styles.card}>
+          <div>
+            <h2 className={styles.title}>Sign in</h2>
+            <p className={styles.subtitle}>Use password or magic link. Google sign-in is also available.</p>
           </div>
-        ) : null}
 
-        <div className={styles.modeToggle}>
-          {mode === "magic" ? "Prefer a password?" : "Prefer a magic link?"}
-          <button
-            type="button"
-            className={styles.linkButton}
-            onClick={() => setMode(mode === "magic" ? "password" : "magic")}
-            disabled={loading}
-          >
-            {mode === "magic" ? "Use password" : "Use magic link"}
+          {error ? <div className={styles.error}>{error}</div> : null}
+          {message ? <div className={styles.notice}>{message}</div> : null}
+
+          <form className={styles.form} onSubmit={handleSignIn}>
+            <div className={styles.field}>
+              <label className={styles.label} htmlFor="email">
+                Email
+              </label>
+              <input
+                className={styles.input}
+                id="email"
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="you@company.com"
+                required
+              />
+            </div>
+
+            {mode === "password" ? (
+              <div className={styles.field}>
+                <label className={styles.label} htmlFor="password">
+                  Password
+                </label>
+                <input
+                  className={styles.input}
+                  id="password"
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="Your password"
+                  required
+                />
+              </div>
+            ) : null}
+
+            <div className={styles.actions}>
+              <button className={`${styles.button} ${styles.buttonPrimary}`} type="submit" disabled={loading}>
+                {loading ? "Working..." : mode === "magic" ? "Email sign-in link" : "Sign in"}
+              </button>
+            </div>
+
+            {mode === "password" ? (
+              <div className={styles.modeToggle}>
+                <button className={styles.linkButton} type="button" onClick={handleResetPassword} disabled={loading}>
+                  Forgot password?
+                </button>
+              </div>
+            ) : null}
+
+            <div className={styles.modeToggle}>
+              {mode === "magic" ? "Prefer a password?" : "Prefer a magic link?"}
+              <button
+                type="button"
+                className={styles.linkButton}
+                onClick={() => setMode(mode === "magic" ? "password" : "magic")}
+                disabled={loading}
+              >
+                {mode === "magic" ? "Use password" : "Use magic link"}
+              </button>
+            </div>
+          </form>
+
+          <div className={styles.divider}>or</div>
+
+          <button className={`${styles.button} ${styles.buttonGhost}`} onClick={handleGoogle} disabled={loading}>
+            <Image className={styles.googleIcon} src="/google-logo.webp" alt="" aria-hidden="true" width={18} height={18} />
+            Continue with Google
           </button>
-        </div>
-      </form>
 
-        <div className={styles.divider}>or</div>
-
-        <button className={`${styles.button} ${styles.buttonGhost}`} onClick={handleGoogle} disabled={loading}>
-          <Image
-            className={styles.googleIcon}
-            src="/google-logo.webp"
-            alt=""
-            aria-hidden="true"
-            width={18}
-            height={18}
-          />
-          Continue with Google
-        </button>
-
-        <div className={styles.links}>
-          <span>
-            New here? <Link href="/signup">Create an account</Link>
-          </span>
-          <Link href="/">Back to home</Link>
-        </div>
+          <div className={styles.links}>
+            <span>
+              New here? <Link href={signUpHref}>Create an account</Link>
+            </span>
+            <Link href="/">Back to home</Link>
+          </div>
+        </section>
       </div>
     </div>
   );
