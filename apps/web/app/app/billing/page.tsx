@@ -12,13 +12,15 @@ import type {
 } from "@fathom/api-client";
 import { createApiClient } from "@fathom/api-client";
 
-import styles from "../app.module.css";
+import styles from "./billing.module.css";
 import { formatDate, formatDuration } from "../../lib/format";
-import { getSupabaseClient } from "../../lib/supabaseClient";
 import { getApiErrorMessage } from "../../lib/apiErrors";
+import { getSupabaseClient } from "../../lib/supabaseClient";
 
 type PlanGroup = {
+  key: "subscription" | "pack";
   label: string;
+  description: string;
   plans: PlanResponse[];
 };
 
@@ -26,11 +28,29 @@ const formatPrice = (amountCents: number, currency: string, billingInterval: str
   if (amountCents <= 0) {
     return "Free";
   }
+
   const amount = new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: currency.toUpperCase()
   }).format(amountCents / 100);
+
   return billingInterval ? `${amount}/${billingInterval}` : amount;
+};
+
+const describeSubscriptionStatus = (status: string | null): string => {
+  if (!status) {
+    return "No active subscription";
+  }
+  if (status === "active") {
+    return "Active";
+  }
+  if (status === "canceled") {
+    return "Cancels at period end";
+  }
+  if (status === "revoked") {
+    return "Revoked";
+  }
+  return status.replaceAll("_", " ");
 };
 
 function BillingPageContent() {
@@ -38,22 +58,28 @@ function BillingPageContent() {
   const searchParams = useSearchParams();
   const checkoutStatus = searchParams.get("checkout");
   const customerSessionToken = searchParams.get("customer_session_token");
+
   const [plans, setPlans] = useState<PlanResponse[]>([]);
   const [usage, setUsage] = useState<UsageOverviewResponse | null>(null);
   const [account, setAccount] = useState<BillingAccountResponse | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
   const [refundLoading, setRefundLoading] = useState<string | null>(null);
+
+  const [syncStatus, setSyncStatus] = useState<"syncing" | "synced" | "delayed" | null>(null);
   const [refundSyncOrderId, setRefundSyncOrderId] = useState<string | null>(null);
   const [refundSyncStatus, setRefundSyncStatus] = useState<"syncing" | "delayed" | null>(null);
-  const [syncStatus, setSyncStatus] = useState<"syncing" | "synced" | "delayed" | null>(null);
   const [error, setError] = useState<string | null>(null);
+
   const checkoutStartRef = useRef<number | null>(null);
   const refundPollRef = useRef<number | null>(null);
 
   const loadBilling = useCallback(
-    async (showLoading: boolean): Promise<{
+    async (
+      showLoading: boolean
+    ): Promise<{
       plansData: PlanResponse[];
       usageData: UsageOverviewResponse | null;
       accountData: BillingAccountResponse | null;
@@ -61,6 +87,7 @@ function BillingPageContent() {
       if (showLoading) {
         setLoading(true);
       }
+
       try {
         const supabase = getSupabaseClient();
         const { data: sessionData } = await supabase.auth.getSession();
@@ -74,20 +101,18 @@ function BillingPageContent() {
           { data: plansData, error: plansError },
           { data: usageData, error: usageError },
           { data: accountData, error: accountError }
-        ] = await Promise.all([
-          api.GET("/billing/plans"),
-          api.GET("/billing/usage"),
-          api.GET("/billing/account")
-        ]);
+        ] = await Promise.all([api.GET("/billing/plans"), api.GET("/billing/usage"), api.GET("/billing/account")]);
 
         if (plansError) {
           setError(getApiErrorMessage(plansError, "Unable to load plans."));
           return null;
         }
+
         if (usageError) {
           setError(getApiErrorMessage(usageError, "Unable to load usage."));
           return null;
         }
+
         if (accountError) {
           setError(getApiErrorMessage(accountError, "Unable to load billing account."));
           return null;
@@ -125,33 +150,37 @@ function BillingPageContent() {
     if (checkoutStatus !== "success") {
       return;
     }
+
     if (!checkoutStartRef.current) {
       checkoutStartRef.current = Date.now();
     }
+
     setSyncStatus("syncing");
 
     let attempts = 0;
     const maxAttempts = 20;
-    const timer = setInterval(async () => {
+    const timer = window.setInterval(async () => {
       attempts += 1;
       const result = await loadBilling(false);
       const recentOrderFound = (result?.accountData?.orders ?? []).some((entry) => {
         const createdAt = new Date(entry.created_at).getTime();
         return createdAt >= (checkoutStartRef.current ?? 0) - 120_000;
       });
+
       if (recentOrderFound) {
         setSyncStatus("synced");
-        clearInterval(timer);
+        window.clearInterval(timer);
         return;
       }
+
       if (attempts >= maxAttempts) {
         setSyncStatus("delayed");
-        clearInterval(timer);
+        window.clearInterval(timer);
       }
     }, 2500);
 
     return () => {
-      clearInterval(timer);
+      window.clearInterval(timer);
     };
   }, [checkoutStatus, customerSessionToken, loadBilling]);
 
@@ -163,19 +192,62 @@ function BillingPageContent() {
     };
   }, []);
 
-  const groupedPlans = useMemo<PlanGroup[]>(() => {
+  const planGroups = useMemo<PlanGroup[]>(() => {
     const subscriptions = plans.filter((plan) => plan.plan_type === "subscription");
     const packs = plans.filter((plan) => plan.plan_type === "pack");
+
     return [
-      { label: "Subscriptions", plans: subscriptions },
-      { label: "Packs (no commitment)", plans: packs }
+      {
+        key: "subscription",
+        label: "Subscriptions",
+        description: "Recurring monthly credits with predictable usage coverage.",
+        plans: subscriptions
+      },
+      {
+        key: "pack",
+        label: "Credit packs",
+        description: "One-time top ups. Useful for spikes and seasonal demand.",
+        plans: packs
+      }
     ];
   }, [plans]);
+
+  const activePackCount = useMemo(() => {
+    return (account?.packs ?? []).filter((pack) => pack.remaining_seconds > 0 && pack.status !== "refunded").length;
+  }, [account?.packs]);
+  const canManageBilling = useMemo(() => {
+    return (account?.orders ?? []).some((order) => order.paid_amount_cents > 0);
+  }, [account?.orders]);
+
+  const subscriptionStatusText = describeSubscriptionStatus(account?.subscription.status ?? null);
+  const overviewMetaText = useMemo(() => {
+    const parts: string[] = [];
+    parts.push(activePackCount > 0 ? `${activePackCount} active pack(s)` : "No active packs");
+
+    if (activePackCount > 0 && usage?.pack_expires_at) {
+      parts.push(`Next pack expiry ${formatDate(usage.pack_expires_at)}`);
+    }
+
+    const subscriptionPlanName = account?.subscription.plan_name ?? usage?.subscription_plan_name;
+    const hasPaidPlan = Boolean(subscriptionPlanName && subscriptionPlanName.toLowerCase() !== "free");
+    if (hasPaidPlan && account?.subscription.period_end) {
+      parts.push(`Current period ends ${formatDate(account.subscription.period_end)}`);
+    }
+
+    return parts.join(" - ");
+  }, [
+    activePackCount,
+    usage?.pack_expires_at,
+    usage?.subscription_plan_name,
+    account?.subscription.plan_name,
+    account?.subscription.period_end
+  ]);
 
   const handleCheckout = async (planId: string) => {
     if (checkoutLoading) {
       return;
     }
+
     setCheckoutLoading(planId);
     setError(null);
 
@@ -213,6 +285,7 @@ function BillingPageContent() {
     if (portalLoading) {
       return;
     }
+
     setPortalLoading(true);
     setError(null);
 
@@ -246,6 +319,7 @@ function BillingPageContent() {
     if (refundLoading) {
       return;
     }
+
     setRefundLoading(polarOrderId);
     setError(null);
 
@@ -275,6 +349,7 @@ function BillingPageContent() {
         if (!previous) {
           return previous;
         }
+
         return {
           ...previous,
           packs: previous.packs.map((pack) =>
@@ -297,6 +372,7 @@ function BillingPageContent() {
           )
         };
       });
+
       setRefundSyncOrderId(polarOrderId);
       setRefundSyncStatus("syncing");
 
@@ -311,6 +387,7 @@ function BillingPageContent() {
         const result = await loadBilling(false);
         const status =
           (result?.accountData?.orders ?? []).find((order) => order.polar_order_id === polarOrderId)?.status ?? null;
+
         if (status === "refunded") {
           if (refundPollRef.current !== null) {
             window.clearInterval(refundPollRef.current);
@@ -320,6 +397,7 @@ function BillingPageContent() {
           setRefundSyncStatus(null);
           return;
         }
+
         if (attempts >= maxAttempts) {
           if (refundPollRef.current !== null) {
             window.clearInterval(refundPollRef.current);
@@ -337,13 +415,15 @@ function BillingPageContent() {
 
   const renderRefundAction = (pack: PackBillingState) => {
     if (pack.status === "refund_pending") {
-      return <p className={styles.cardText}>Refund pending confirmation</p>;
+      return <span className={styles.inlineState}>Refund pending confirmation</span>;
     }
+
     if (pack.status === "refunded") {
-      return <p className={styles.cardText}>Refund completed</p>;
+      return <span className={styles.inlineState}>Refund completed</span>;
     }
+
     if (!pack.is_refundable) {
-      return <p className={styles.cardText}>Refund unavailable</p>;
+      return <span className={styles.inlineState}>Refund unavailable</span>;
     }
 
     return (
@@ -354,40 +434,20 @@ function BillingPageContent() {
         disabled={refundLoading === pack.polar_order_id}
       >
         {refundLoading === pack.polar_order_id
-          ? "Requesting refund…"
+          ? "Requesting refund..."
           : `Refund ${formatPrice(pack.refundable_amount_cents, pack.currency, null)}`}
       </button>
     );
   };
 
-  const subscriptionStatusText = useMemo(() => {
-    const status = account?.subscription.status ?? null;
-    if (!status) {
-      return "No active subscription";
-    }
-    if (status === "canceled") {
-      return "Cancels at period end";
-    }
-    if (status === "active") {
-      return "Active";
-    }
-    return status.replaceAll("_", " ");
-  }, [account?.subscription.status]);
-
   if (loading) {
     return (
       <div className={styles.page}>
-        <header className={styles.header}>
-          <div className={styles.brand}>
-            <span className={styles.brandMark} aria-hidden="true" />
-            Fathom
-          </div>
-        </header>
         <main className={styles.main}>
-          <div className={styles.card}>
-            <h1 className={styles.cardTitle}>Loading billing…</h1>
-            <p className={styles.cardText}>Fetching your plans and usage.</p>
-          </div>
+          <section className={styles.panel}>
+            <h1 className={styles.panelTitle}>Loading billing workspace...</h1>
+            <p className={styles.panelText}>Fetching plans, usage, and billing state.</p>
+          </section>
         </main>
       </div>
     );
@@ -395,206 +455,225 @@ function BillingPageContent() {
 
   return (
     <div className={styles.page}>
+      <div className={styles.backgroundGlow} aria-hidden="true" />
+      <div className={styles.backgroundGrid} aria-hidden="true" />
+
       <header className={styles.header}>
-        <div className={styles.brand}>
-          <span className={styles.brandMark} aria-hidden="true" />
-          Fathom
-        </div>
-        <div className={styles.headerActions}>
-          <button className={styles.secondaryButton} type="button" onClick={handlePortal} disabled={portalLoading}>
-            {portalLoading ? "Opening portal…" : "Manage billing"}
-          </button>
-          <Link className={styles.button} href="/app">
-            Back to app
-          </Link>
+        <div className={styles.headerInner}>
+          <div className={styles.brandBlock}>
+            <p className={styles.eyebrow}>Fathom</p>
+            <h1 className={styles.pageTitle}>Billing</h1>
+            <p className={styles.pageSubtitle}>Manage your plan, top up credits, and handle refunds in one place.</p>
+          </div>
+          <div className={styles.headerActions}>
+            <div
+              className={styles.portalControl}
+              title={!canManageBilling ? "Available after your first paid purchase." : undefined}
+            >
+              <button
+                className={styles.primaryButton}
+                type="button"
+                onClick={handlePortal}
+                disabled={portalLoading || !canManageBilling}
+                aria-describedby={!canManageBilling ? "portal-disabled-hint" : undefined}
+              >
+                {portalLoading ? "Opening portal..." : "Manage subscription"}
+              </button>
+              {!canManageBilling ? (
+                <span id="portal-disabled-hint" role="tooltip" className={styles.portalHintTooltip}>
+                  Available after your first paid purchase.
+                </span>
+              ) : null}
+            </div>
+            <Link className={styles.ghostButton} href="/app">
+              Back to app
+            </Link>
+          </div>
         </div>
       </header>
 
       <main className={styles.main}>
-        <section className={styles.card}>
-          <div className={styles.sectionHeader}>
-            <div>
-              <h1 className={styles.cardTitle}>Usage overview</h1>
-              <p className={styles.cardText}>Track remaining time and renew before you run out.</p>
-            </div>
-            <div className={styles.usageSummary}>
-              <div className={styles.usageValue}>
-                {usage ? formatDuration(usage.total_remaining_seconds) : "—"}
-              </div>
-              <div className={styles.usageLabel}>Total remaining</div>
-            </div>
-          </div>
-
-          {usage ? (
-            <div className={styles.usageGrid}>
-              <div className={styles.usageCard}>
-                <p className={styles.usageLabel}>Subscription</p>
-                <p className={styles.usageValue}>{formatDuration(usage.subscription_remaining_seconds)}</p>
-                <p className={styles.cardText}>
-                  Plan: {usage.subscription_plan_name ?? "Free"}
-                </p>
-              </div>
-              <div className={styles.usageCard}>
-                <p className={styles.usageLabel}>Pack credits</p>
-                <p className={styles.usageValue}>{formatDuration(usage.pack_remaining_seconds)}</p>
-                <p className={styles.cardText}>Expires: {formatDate(usage.pack_expires_at)}</p>
-              </div>
-              <div className={styles.usageCard}>
-                <p className={styles.usageLabel}>Debt / Status</p>
-                <p className={styles.usageValue}>{formatDuration(usage.debt_seconds)}</p>
-                <p className={styles.cardText}>{usage.is_blocked ? "Blocked until top-up" : "Account active"}</p>
-              </div>
-            </div>
-          ) : null}
-        </section>
-
         {syncStatus ? (
-          <section className={styles.card}>
-            <h2 className={styles.cardTitle}>Checkout status</h2>
-            <p className={styles.cardText}>
+          <section className={`${styles.notice} ${syncStatus === "delayed" ? styles.noticeWarning : styles.noticeInfo}`}>
+            <h2 className={styles.noticeTitle}>Checkout sync status</h2>
+            <p className={styles.noticeText}>
               {syncStatus === "syncing"
                 ? "Payment received. Syncing credits and billing records..."
                 : syncStatus === "synced"
-                  ? "Billing synced. Your new purchase is now visible."
-                  : "Payment was received, but syncing is delayed. Refresh shortly or open billing portal."}
+                  ? "Billing synced. Your purchase is now reflected in your account."
+                  : "Payment succeeded but sync is delayed. Wait a moment or refresh this page."}
             </p>
           </section>
         ) : null}
 
         {refundSyncOrderId && refundSyncStatus ? (
-          <section className={styles.card}>
-            <h2 className={styles.cardTitle}>Refund status</h2>
-            <p className={styles.cardText}>
+          <section
+            className={`${styles.notice} ${
+              refundSyncStatus === "delayed" ? styles.noticeWarning : styles.noticeInfo
+            }`}
+          >
+            <h2 className={styles.noticeTitle}>Refund sync status</h2>
+            <p className={styles.noticeText}>
               {refundSyncStatus === "syncing"
-                ? "Refund request sent. Waiting for Polar confirmation..."
-                : "Refund is still processing. This can take a few minutes; no action needed."}
+                ? "Refund requested. Waiting for Polar confirmation..."
+                : "Refund is still processing. This can take a few minutes, no extra action needed."}
             </p>
           </section>
         ) : null}
 
-        <section className={styles.card}>
-          <div className={styles.sectionHeader}>
+        {error ? (
+          <section className={`${styles.notice} ${styles.noticeError}`}>
+            <h2 className={styles.noticeTitle}>Billing action failed</h2>
+            <p className={styles.noticeText}>{error}</p>
+          </section>
+        ) : null}
+
+        <section className={styles.panel}>
+          <div className={styles.panelHeader}>
             <div>
-              <h2 className={styles.cardTitle}>Current billing</h2>
-              <p className={styles.cardText}>See exactly what is active before purchasing more.</p>
+              <h2 className={styles.panelTitle}>Account overview</h2>
+              <p className={styles.panelText}>Your current credits and subscription status.</p>
+            </div>
+            <div className={styles.panelMeta}>
+              <span>Plan: {account?.subscription.plan_name ?? usage?.subscription_plan_name ?? "Free"}</span>
+              <span>Status: {subscriptionStatusText}</span>
             </div>
           </div>
 
-          <div className={styles.usageGrid}>
-            <div className={styles.usageCard}>
-              <p className={styles.usageLabel}>Subscription status</p>
-              <p className={styles.usageValue}>{subscriptionStatusText}</p>
-              <p className={styles.cardText}>Plan: {account?.subscription.plan_name ?? usage?.subscription_plan_name ?? "Free"}</p>
-              <p className={styles.cardText}>Period ends: {formatDate(account?.subscription.period_end ?? null)}</p>
+          <div className={styles.overviewStrip}>
+            <article className={styles.overviewStat}>
+              <p className={styles.overviewLabel}>Total remaining</p>
+              <p className={styles.overviewValue}>{usage ? formatDuration(usage.total_remaining_seconds) : "-"}</p>
+            </article>
+            <article className={styles.overviewStat}>
+              <p className={styles.overviewLabel}>Subscription</p>
+              <p className={styles.overviewValue}>{formatDuration(usage?.subscription_remaining_seconds ?? 0)}</p>
+            </article>
+            <article className={styles.overviewStat}>
+              <p className={styles.overviewLabel}>Packs</p>
+              <p className={styles.overviewValue}>{formatDuration(usage?.pack_remaining_seconds ?? 0)}</p>
+            </article>
+            <article className={styles.overviewStat}>
+              <p className={styles.overviewLabel}>Debt</p>
+              <p className={styles.overviewValue}>{formatDuration(usage?.debt_seconds ?? 0)}</p>
+              <p className={styles.overviewHint}>{usage?.is_blocked ? "Blocked" : "Healthy"}</p>
+            </article>
+          </div>
+
+          <p className={styles.overviewMeta}>{overviewMetaText}</p>
+        </section>
+
+        <section className={styles.panel}>
+          <div className={styles.panelHeader}>
+            <div>
+              <h2 className={styles.panelTitle}>Upgrade or top up</h2>
+              <p className={styles.panelText}>Pick the plan that best matches your monthly volume.</p>
             </div>
-            <div className={styles.usageCard}>
-              <p className={styles.usageLabel}>Active packs</p>
-              <p className={styles.usageValue}>{account?.packs.length ?? 0}</p>
-              <p className={styles.cardText}>Remaining pack credits: {formatDuration(usage?.pack_remaining_seconds ?? 0)}</p>
-              <p className={styles.cardText}>Next expiry: {formatDate(usage?.pack_expires_at ?? null)}</p>
-            </div>
+          </div>
+
+          <div className={styles.planGroupWrap}>
+            {planGroups.map((group) => (
+              <section key={group.key} className={styles.planGroup}>
+                <header className={styles.planGroupHeader}>
+                  <h3 className={styles.planGroupTitle}>{group.label}</h3>
+                  <p className={styles.planGroupText}>{group.description}</p>
+                </header>
+
+                <div className={styles.planGrid}>
+                  {group.plans.map((plan) => {
+                    const isCurrentSubscription =
+                      group.key === "subscription" &&
+                      account?.subscription.status === "active" &&
+                      account.subscription.plan_name === plan.name;
+
+                    return (
+                      <article className={styles.planCard} key={plan.plan_id}>
+                        <div>
+                          <p className={styles.planName}>{plan.name}</p>
+                          <p className={styles.planPrice}>
+                            {formatPrice(plan.amount_cents, plan.currency, plan.billing_interval)}
+                          </p>
+                          <p className={styles.planCredits}>{formatDuration(plan.quota_seconds ?? 0)} included</p>
+                        </div>
+                        <button
+                          className={styles.secondaryButton}
+                          type="button"
+                          onClick={() => handleCheckout(plan.plan_id)}
+                          disabled={checkoutLoading === plan.plan_id || isCurrentSubscription}
+                        >
+                          {checkoutLoading === plan.plan_id
+                            ? "Opening Polar..."
+                            : isCurrentSubscription
+                              ? "Current subscription"
+                              : "Choose plan"}
+                        </button>
+                      </article>
+                    );
+                  })}
+                </div>
+              </section>
+            ))}
           </div>
         </section>
 
-        <section className={styles.card}>
-          <div className={styles.sectionHeader}>
+        <section className={styles.panel}>
+          <div className={styles.panelHeader}>
             <div>
-              <h2 className={styles.cardTitle}>Your packs</h2>
-              <p className={styles.cardText}>Refunds are one-time per pack order and based on unused credits.</p>
+              <h2 className={styles.panelTitle}>Orders and refunds</h2>
+              <p className={styles.panelText}>
+                Refunds are one-time per pack order and based on unused credits. Processing can take a few minutes.
+              </p>
             </div>
           </div>
+
+          <h3 className={styles.subsectionTitle}>Purchased packs</h3>
           {!account || account.packs.length === 0 ? (
-            <p className={styles.cardText}>No packs purchased yet.</p>
+            <p className={styles.emptyState}>No packs purchased yet.</p>
           ) : (
-            <div className={styles.planGrid}>
+            <div className={styles.packList}>
               {account.packs.map((pack) => (
-                <div className={styles.planCard} key={pack.polar_order_id}>
+                <article className={styles.packCard} key={pack.polar_order_id}>
                   <div>
-                    <h3 className={styles.planTitle}>{pack.plan_name ?? "Pack"}</h3>
-                    <p className={styles.cardText}>Status: {pack.status.replaceAll("_", " ")}</p>
-                    <p className={styles.cardText}>
+                    <p className={styles.packTitle}>{pack.plan_name ?? "Pack"}</p>
+                    <p className={styles.stateText}>Status: {pack.status.replaceAll("_", " ")}</p>
+                    <p className={styles.stateText}>
                       Used {formatDuration(pack.consumed_seconds)} / {formatDuration(pack.granted_seconds)}
                     </p>
-                    <p className={styles.cardText}>Remaining: {formatDuration(pack.remaining_seconds)}</p>
-                    <p className={styles.cardText}>Expires: {formatDate(pack.expires_at)}</p>
+                    <p className={styles.stateText}>Remaining: {formatDuration(pack.remaining_seconds)}</p>
+                    <p className={styles.stateText}>Expires: {formatDate(pack.expires_at)}</p>
                   </div>
-                  {renderRefundAction(pack)}
-                </div>
+                  <div className={styles.packAction}>{renderRefundAction(pack)}</div>
+                </article>
               ))}
             </div>
           )}
-        </section>
 
-        <section className={styles.card}>
-          <div className={styles.sectionHeader}>
-            <div>
-              <h2 className={styles.cardTitle}>Billing history</h2>
-              <p className={styles.cardText}>Recent payments and refunds.</p>
-            </div>
-          </div>
+          <h3 className={styles.subsectionTitle}>Recent billing activity</h3>
           {!account || account.orders.length === 0 ? (
-            <p className={styles.cardText}>No billing events yet.</p>
+            <p className={styles.emptyState}>No billing events yet.</p>
           ) : (
             <div className={styles.historyList}>
               {account.orders.slice(0, 12).map((entry: BillingOrderHistoryEntry) => (
-                <div className={styles.historyRow} key={entry.polar_order_id}>
+                <article className={styles.historyRow} key={entry.polar_order_id}>
                   <div>
-                    <p className={styles.historyTitle}>{entry.plan_name ?? entry.plan_type}</p>
-                    <p className={styles.cardText}>Order: {entry.polar_order_id}</p>
+                    <p className={styles.historyPlan}>{entry.plan_name ?? entry.plan_type}</p>
+                    <p className={styles.historyMetaText}>Order: {entry.polar_order_id}</p>
                   </div>
-                  <div className={styles.historyMeta}>
-                    <span>{entry.status.replaceAll("_", " ")}</span>
+                  <div className={styles.historyAmounts}>
+                    <span className={styles.historyBadge}>{entry.status.replaceAll("_", " ")}</span>
                     <span>
                       Paid {formatPrice(entry.paid_amount_cents, entry.currency, null)}
                       {entry.refunded_amount_cents > 0
-                        ? ` • Refunded ${formatPrice(entry.refunded_amount_cents, entry.currency, null)}`
+                        ? ` - Refunded ${formatPrice(entry.refunded_amount_cents, entry.currency, null)}`
                         : ""}
                     </span>
                     <span>{formatDate(entry.created_at)}</span>
                   </div>
-                </div>
+                </article>
               ))}
             </div>
           )}
         </section>
-
-        {groupedPlans.map((group) => (
-          <section className={styles.card} key={group.label}>
-            <div className={styles.sectionHeader}>
-              <div>
-                <h2 className={styles.cardTitle}>{group.label}</h2>
-                <p className={styles.cardText}>
-                  {group.label.includes("Packs")
-                    ? "One‑time credits with a 6‑month expiry. Top up anytime."
-                    : "Monthly credits with rollover up to 2x your limit."}
-                </p>
-              </div>
-            </div>
-            <div className={styles.planGrid}>
-              {group.plans.map((plan) => (
-                <div className={styles.planCard} key={plan.plan_id}>
-                  <div>
-                    <h3 className={styles.planTitle}>{plan.name}</h3>
-                    <p className={styles.cardText}>{formatPrice(plan.amount_cents, plan.currency, plan.billing_interval)}</p>
-                    <p className={styles.cardText}>
-                      {formatDuration(plan.quota_seconds ?? 0)} included
-                    </p>
-                  </div>
-                  <button
-                    className={styles.secondaryButton}
-                    type="button"
-                    onClick={() => handleCheckout(plan.plan_id)}
-                    disabled={checkoutLoading === plan.plan_id}
-                  >
-                    {checkoutLoading === plan.plan_id ? "Opening Polar…" : "Choose"}
-                  </button>
-                </div>
-              ))}
-            </div>
-          </section>
-        ))}
-
-        {error ? <p className={styles.status}>{error}</p> : null}
       </main>
     </div>
   );
@@ -606,9 +685,9 @@ export default function BillingPage() {
       fallback={
         <div className={styles.page}>
           <main className={styles.main}>
-            <section className={styles.card}>
-              <h1 className={styles.cardTitle}>Loading billing…</h1>
-              <p className={styles.cardText}>Preparing your billing details.</p>
+            <section className={styles.panel}>
+              <h1 className={styles.panelTitle}>Loading billing workspace...</h1>
+              <p className={styles.panelText}>Preparing your billing details.</p>
             </section>
           </main>
         </div>

@@ -1,0 +1,140 @@
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  border-bottom: 1px solid rgba(103, 232, 249, 0.18);
+  backdrop-filter: blur(10px);
+  background: rgba(7, 11, 20, 0.72);
+}
+
+.inner {
+  width: min(1120px, 96vw);
+  margin: 0 auto;
+  min-height: 64px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.9rem;
+  align-items: center;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 0.96rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.brandMark {
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(103, 232, 249, 0.9), rgba(56, 189, 248, 0.32));
+  box-shadow: 0 0 14px rgba(103, 232, 249, 0.35);
+}
+
+.nav {
+  display: flex;
+  justify-content: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.navLink {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 0.35rem 0.7rem;
+  color: rgba(214, 228, 245, 0.84);
+  font-size: 0.84rem;
+  font-weight: 600;
+  transition: transform 140ms ease, border-color 140ms ease, background 140ms ease;
+}
+
+.navLink:hover {
+  transform: translateY(-1px);
+  border-color: rgba(103, 232, 249, 0.35);
+  background: rgba(103, 232, 249, 0.08);
+}
+
+.navLinkActive {
+  border-color: rgba(103, 232, 249, 0.42);
+  background: rgba(103, 232, 249, 0.14);
+  color: #dff7fb;
+}
+
+.accountCluster {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.creditsPill {
+  border: 1px solid rgba(103, 232, 249, 0.28);
+  border-radius: 999px;
+  padding: 0.3rem 0.62rem;
+  color: rgba(214, 228, 245, 0.9);
+  font-size: 0.76rem;
+  white-space: nowrap;
+}
+
+.accountMenu {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.accountLabel {
+  max-width: 170px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: rgba(158, 179, 206, 0.94);
+  font-size: 0.76rem;
+}
+
+.signOutButton {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.03);
+  color: #e6edf8;
+  padding: 0.32rem 0.56rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 140ms ease, transform 140ms ease;
+}
+
+.signOutButton:hover {
+  transform: translateY(-1px);
+  border-color: rgba(103, 232, 249, 0.34);
+}
+
+@media (max-width: 980px) {
+  .inner {
+    grid-template-columns: 1fr;
+    gap: 0.55rem;
+    padding: 0.72rem 0;
+  }
+
+  .brand,
+  .accountCluster {
+    justify-self: start;
+  }
+
+  .nav {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 640px) {
+  .accountCluster {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .accountLabel {
+    max-width: 120px;
+  }
+}

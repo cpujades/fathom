@@ -3,12 +3,31 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import type { BillingAccountResponse, UsageHistoryEntry, UsageOverviewResponse } from "@fathom/api-client";
 import type { User } from "@supabase/supabase-js";
 import { createApiClient } from "@fathom/api-client";
 
-import styles from "./app.module.css";
-import { formatDuration } from "../lib/format";
+import { AppShellHeader } from "../components/AppShellHeader";
+import { formatDate, formatDuration } from "../lib/format";
+import { getApiErrorMessage } from "../lib/apiErrors";
 import { getSupabaseClient } from "../lib/supabaseClient";
+import styles from "./home.module.css";
+
+const getAccountLabel = (user: User | null): string | null => {
+  if (!user) {
+    return null;
+  }
+  const fullName = (user.user_metadata?.full_name as string | undefined) ?? (user.user_metadata?.name as string | undefined);
+  if (fullName && fullName.trim().length > 0) {
+    return fullName.trim();
+  }
+  const email = user.email ?? null;
+  if (!email) {
+    return null;
+  }
+  const localPart = email.split("@")[0];
+  return localPart || email;
+};
 
 export default function AppHome() {
   const router = useRouter();
@@ -16,9 +35,10 @@ export default function AppHome() {
   const [loading, setLoading] = useState(true);
   const [url, setUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [healthStatus, setHealthStatus] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [usageRemaining, setUsageRemaining] = useState<number | null>(null);
+  const [usage, setUsage] = useState<UsageOverviewResponse | null>(null);
+  const [account, setAccount] = useState<BillingAccountResponse | null>(null);
+  const [recentUsage, setRecentUsage] = useState<UsageHistoryEntry[]>([]);
 
   useEffect(() => {
     let unsubscribe: (() => void) | null = null;
@@ -27,36 +47,49 @@ export default function AppHome() {
       try {
         router.prefetch("/app/jobs/new");
         const supabase = getSupabaseClient();
-        const { data, error: sessionError } = await supabase.auth.getSession();
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+
         if (sessionError) {
           setError(sessionError.message);
         }
 
-        if (!data.session) {
+        if (!sessionData.session) {
           router.replace("/signin");
           return;
         }
 
-        setUser(data.session.user);
+        setUser(sessionData.session.user);
 
-        const api = createApiClient();
-        const { data: healthData } = await api.GET("/meta/health");
-        setHealthStatus(healthData?.status ?? null);
+        const api = createApiClient(sessionData.session.access_token);
+        const [
+          { data: usageData, error: usageError },
+          { data: accountData, error: accountError },
+          { data: historyData, error: historyError }
+        ] = await Promise.all([api.GET("/billing/usage"), api.GET("/billing/account"), api.GET("/billing/history")]);
 
-        const { data: usageData } = await api.GET("/billing/usage", {
-          headers: {
-            Authorization: `Bearer ${data.session.access_token}`
-          }
-        });
-        if (usageData) {
-          setUsageRemaining(usageData.total_remaining_seconds ?? null);
+        if (usageError) {
+          setError(getApiErrorMessage(usageError, "Unable to load usage."));
+        } else {
+          setUsage(usageData ?? null);
         }
 
-        const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-          if (!session) {
+        if (accountError) {
+          setError(getApiErrorMessage(accountError, "Unable to load billing state."));
+        } else {
+          setAccount(accountData ?? null);
+        }
+
+        if (historyError) {
+          setError(getApiErrorMessage(historyError, "Unable to load recent activity."));
+        } else {
+          setRecentUsage((historyData ?? []).slice(0, 4));
+        }
+
+        const { data: authListener } = supabase.auth.onAuthStateChange((_event, authSession) => {
+          if (!authSession) {
             router.replace("/signin");
           } else {
-            setUser(session.user);
+            setUser(authSession.user);
           }
         });
 
@@ -98,82 +131,110 @@ export default function AppHome() {
     router.push(`/app/jobs/new?url=${encodeURIComponent(trimmedUrl)}`);
   };
 
-  if (loading) {
-    return (
-      <div className={styles.page}>
-        <header className={styles.header}>
-          <div className={styles.brand}>
-            <span className={styles.brandMark} aria-hidden="true" />
-            Fathom
-          </div>
-        </header>
-        <main className={styles.main}>
-          <div className={styles.card}>
-            <h1 className={styles.cardTitle}>Loading your workspace...</h1>
-            <p className={styles.cardText}>Hang tight while we restore your session.</p>
-          </div>
-        </main>
-      </div>
-    );
-  }
+  const subscriptionStatus = (() => {
+    const status = account?.subscription.status;
+    if (!status) {
+      return "Free";
+    }
+    if (status === "active") {
+      return "Active";
+    }
+    if (status === "canceled") {
+      return "Cancels at period end";
+    }
+    return status.replaceAll("_", " ");
+  })();
 
   return (
     <div className={styles.page}>
-      <header className={styles.header}>
-        <div className={styles.brand}>
-          <span className={styles.brandMark} aria-hidden="true" />
-          Fathom
-        </div>
-        <div className={styles.headerActions}>
-          {healthStatus ? <div className={styles.usageChip}>API: {healthStatus}</div> : null}
-          {user?.email ? <div className={styles.usageChip}>{user.email}</div> : null}
-          <div className={styles.usageChip}>
-            Remaining: {usageRemaining !== null ? formatDuration(usageRemaining) : "—"}
-          </div>
-          <Link className={styles.button} href="/app/billing">
-            Billing
-          </Link>
-          <Link className={styles.button} href="/app/profile">
-            Profile
-          </Link>
-          <Link className={styles.button} href="/app/history">
-            History
-          </Link>
-          <Link className={styles.button} href="/">
-            Landing
-          </Link>
-          <button className={styles.button} onClick={handleSignOut} type="button">
-            Sign out
-          </button>
-        </div>
-      </header>
+      <AppShellHeader
+        active="home"
+        remainingSeconds={usage?.total_remaining_seconds ?? null}
+        accountLabel={getAccountLabel(user)}
+        onSignOut={handleSignOut}
+      />
 
       <main className={styles.main}>
-        <div className={styles.card}>
-          <h1 className={styles.cardTitle}>Welcome{user?.email ? `, ${user.email}` : ""}</h1>
-          <p className={styles.cardText}>Paste a podcast or YouTube link to get started.</p>
-          <div className={styles.inputRow}>
-            <input
-              className={styles.input}
-              type="url"
-              placeholder="https://www.youtube.com/watch?v=..."
-              aria-label="Podcast or YouTube URL"
-              value={url}
-              onChange={(event) => setUrl(event.target.value)}
-            />
-            <button className={styles.primaryButton} type="button" onClick={handleSubmit} disabled={submitting}>
-              {submitting ? "Submitting..." : "Summarize"}
-            </button>
-          </div>
-          <p className={styles.inputHelp}>
-            We will transcribe, summarize, and format the briefing automatically.
-          </p>
-          {error ? <p className={styles.status}>{error}</p> : null}
-        </div>
-        <div className={styles.card}>
-          <h2 className={styles.cardTitle}>Your briefings</h2>
-          <p className={styles.cardText}>No summaries yet. Your next one will show up here.</p>
-        </div>
+        <section className={styles.commandGrid}>
+          <article className={styles.card}>
+            <h1 className={styles.commandTitle}>{loading ? "Loading workspace..." : "Start a summary"}</h1>
+            <p className={styles.commandText}>
+              Paste a podcast or YouTube URL and Fathom will generate a transcript and structured briefing.
+            </p>
+
+            <div className={styles.inputRow}>
+              <input
+                className={styles.input}
+                type="url"
+                placeholder="https://www.youtube.com/watch?v=..."
+                aria-label="Podcast or YouTube URL"
+                value={url}
+                onChange={(event) => setUrl(event.target.value)}
+                disabled={loading}
+              />
+              <button className={styles.primaryButton} type="button" onClick={handleSubmit} disabled={loading || submitting}>
+                {submitting ? "Starting..." : "Summarize"}
+              </button>
+            </div>
+
+            <p className={styles.inputHelp}>One input, one clear output: transcript, summary, and optional PDF export.</p>
+            {error ? <p className={styles.inlineStatus}>{error}</p> : null}
+          </article>
+
+          <aside className={styles.card}>
+            <h2 className={styles.stateHeader}>Current state</h2>
+            <div className={styles.stateGrid}>
+              <article className={styles.stateTile}>
+                <p className={styles.stateLabel}>Total remaining</p>
+                <p className={styles.stateValue}>{formatDuration(usage?.total_remaining_seconds ?? 0)}</p>
+              </article>
+              <article className={styles.stateTile}>
+                <p className={styles.stateLabel}>Subscription</p>
+                <p className={styles.stateValue}>{account?.subscription.plan_name ?? usage?.subscription_plan_name ?? "Free"}</p>
+                <p className={styles.stateHint}>{subscriptionStatus}</p>
+              </article>
+              <article className={styles.stateTile}>
+                <p className={styles.stateLabel}>Pack balance</p>
+                <p className={styles.stateValue}>{formatDuration(usage?.pack_remaining_seconds ?? 0)}</p>
+                <p className={styles.stateHint}>Expires {formatDate(usage?.pack_expires_at ?? null)}</p>
+              </article>
+            </div>
+
+            <div className={styles.quickLinks}>
+              <Link className={styles.linkButton} href="/app/billing">
+                Top up credits
+              </Link>
+            </div>
+          </aside>
+        </section>
+
+        <section className={styles.card}>
+          <h2 className={styles.recentTitle}>Recent activity</h2>
+          <p className={styles.recentText}>Quick snapshot of your latest credit consumption events.</p>
+
+          {loading ? (
+            <p className={styles.emptyState}>Loading recent activity...</p>
+          ) : recentUsage.length === 0 ? (
+            <p className={styles.emptyState}>No activity yet. Start your first summary above.</p>
+          ) : (
+            <div className={styles.list}>
+              {recentUsage.map((entry, index) => (
+                <article className={styles.row} key={`${entry.job_id ?? "job"}-${index}`}>
+                  <div>
+                    <p className={styles.rowTitle}>
+                      {entry.source === "subscription" ? "Subscription usage" : "Pack usage"}
+                    </p>
+                    <p className={styles.rowMeta}>Job: {entry.job_id ?? "-"}</p>
+                  </div>
+                  <div className={styles.rowRight}>
+                    <span>{formatDuration(entry.seconds_used)}</span>
+                    <span>{formatDate(entry.created_at)}</span>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
       </main>
     </div>
   );

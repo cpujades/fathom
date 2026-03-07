@@ -5,6 +5,8 @@
 @layer base {
   :root {
     color-scheme: dark light;
+    --font-body: var(--font-geist-sans), "Avenir Next", "Segoe UI", sans-serif;
+    --font-display: var(--font-geist-sans), "Avenir Next", "Segoe UI", sans-serif;
     /* Legacy variables (for gradual migration) */
     --bg-0: #0b0d10;
     --bg-1: #12151b;
@@ -73,11 +75,25 @@
   box-sizing: border-box;
 }
 
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 6.25rem;
+}
+
 body {
   margin: 0;
   background: var(--bg-0);
   color: var(--text-1);
   line-height: 1.6;
+  font-family: var(--font-body), sans-serif;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display), serif;
+  letter-spacing: -0.01em;
 }
 
 a {
@@ -90,6 +106,10 @@ img {
   display: block;
 }
 
+section[id] {
+  scroll-margin-top: 6.25rem;
+}
+
 button {
   font: inherit;
 }
@@ -97,4 +117,10 @@ button {
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
 }
