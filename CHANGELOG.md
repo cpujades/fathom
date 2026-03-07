@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.0](https://github.com/cpujades/fathom/compare/v0.11.0...v0.12.0) (2026-03-07)
+
+
+### Features
+
+* **web:** refresh landing and pricing experience ([#79](https://github.com/cpujades/fathom/issues/79)) ([cde8274](https://github.com/cpujades/fathom/commit/cde8274de11a033d79d1b06fb0957b988647e444))
+
 ## [0.11.0](https://github.com/cpujades/fathom/compare/v0.10.0...v0.11.0) (2026-03-01)
 
 
