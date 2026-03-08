@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.0](https://github.com/cpujades/fathom/compare/v0.12.0...v0.13.0) (2026-03-08)
+
+
+### Features
+
+* **web:** rebrand Fathom to Talven across web surfaces ([#81](https://github.com/cpujades/fathom/issues/81)) ([4547569](https://github.com/cpujades/fathom/commit/45475692dd52fd4984f33dd09fa4b046049e75bf))
+
 ## [0.12.0](https://github.com/cpujades/fathom/compare/v0.11.0...v0.12.0) (2026-03-07)
 
 
