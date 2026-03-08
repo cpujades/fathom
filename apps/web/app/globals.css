@@ -6,14 +6,14 @@
   :root {
     color-scheme: dark light;
     --font-body: var(--font-geist-sans), "Avenir Next", "Segoe UI", sans-serif;
-    --font-display: var(--font-geist-sans), "Avenir Next", "Segoe UI", sans-serif;
+    --font-display: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
     /* Legacy variables (for gradual migration) */
     --bg-0: #0b0d10;
     --bg-1: #12151b;
     --bg-2: #1c212b;
     --text-1: #f2f4f7;
     --text-2: #9ba5b4;
-    --accent: #67e8f9;
+    --brand-accent: #67e8f9;
 
     /* shadcn/ui variables */
     --background: 240 10% 3.9%;
@@ -41,11 +41,11 @@
   @media (prefers-color-scheme: light) {
     :root {
       /* Legacy variables (for gradual migration) */
-      --bg-0: #f7f8fa;
-      --bg-1: #ffffff;
-      --bg-2: #eef1f5;
-      --text-1: #0b0d10;
-      --text-2: #667085;
+      --bg-0: #f1ebdf;
+      --bg-1: #fbf8f1;
+      --bg-2: #e6ddcf;
+      --text-1: #17211d;
+      --text-2: #5d6b62;
 
       /* shadcn/ui variables */
       --background: 0 0% 100%;
@@ -115,7 +115,7 @@ button {
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--brand-accent);
   outline-offset: 3px;
 }
 

@@ -19,6 +19,7 @@ export default function HeroSection({ content }: HeroSectionProps) {
         <div className={styles.heroGrid}>
           <div className={styles.heroCopy}>
             <p className={styles.eyebrow}>{content.eyebrow}</p>
+            <p className={styles.heroDeck}>{content.deck}</p>
             <h1 id="hero-heading" className={styles.heroTitle}>
               {content.title}
             </h1>
@@ -45,7 +46,7 @@ export default function HeroSection({ content }: HeroSectionProps) {
                   trackMarketingEvent({
                     event: "hero_secondary_cta_clicked",
                     section: "hero",
-                    cta: "see_sample_summary"
+                    cta: "see_sample_briefing"
                   });
                 }}
               >
@@ -60,30 +61,32 @@ export default function HeroSection({ content }: HeroSectionProps) {
             </ul>
           </div>
 
-          <aside className={styles.heroAside} aria-label="What to expect">
-            <p className={styles.cardEyebrow}>What to expect</p>
-            <h2 className={styles.cardTitle}>Concise briefs with traceable context</h2>
+          <aside className={styles.heroAside} aria-label="Briefing preview">
+            <div className={styles.dossierMasthead}>
+              <p className={styles.cardEyebrow}>Talven brief</p>
+              <span className={styles.dossierSeal}>Private intelligence</span>
+            </div>
+            <h2 className={styles.cardTitle}>A briefing layer for the conversations worth keeping.</h2>
             <p className={styles.cardText}>
-              Fathom is optimized for listeners who want decisions and clarity, not verbatim transcripts.
+              Every Talven brief compresses the hours, preserves the source moments, and leaves you with the few ideas worth carrying into action.
             </p>
-            <div className={styles.cardStatGrid}>
-              <div>
-                <span className={styles.cardStatLabel}>Input</span>
-                <p className={styles.cardStatValue}>YouTube podcast URL</p>
+
+            <div className={styles.heroCoverSheet}>
+              <div className={styles.coverRow}>
+                <span className={styles.coverLabel}>Source</span>
+                <p className={styles.coverValue}>Long-form podcast conversation</p>
               </div>
-              <div>
-                <span className={styles.cardStatLabel}>Output</span>
-                <p className={styles.cardStatValue}>Timestamped summary</p>
+              <div className={styles.coverRow}>
+                <span className={styles.coverLabel}>Form</span>
+                <p className={styles.coverValue}>Source-linked briefing</p>
               </div>
-              <div>
-                <span className={styles.cardStatLabel}>Format</span>
-                <p className={styles.cardStatValue}>Markdown + PDF</p>
-              </div>
-              <div>
-                <span className={styles.cardStatLabel}>Goal</span>
-                <p className={styles.cardStatValue}>Save hours, keep signal</p>
+              <div className={styles.coverRow}>
+                <span className={styles.coverLabel}>Read time</span>
+                <p className={styles.coverValue}>Condensed to the essential minutes</p>
               </div>
             </div>
+
+            <p className={styles.heroAsideNote}>{content.note}</p>
           </aside>
         </div>
       </div>

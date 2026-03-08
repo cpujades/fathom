@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import HeroSection from "./components/landing/HeroSection";
 import HowItWorksSection from "./components/landing/HowItWorksSection";
+import LandingHeader from "./components/landing/LandingHeader";
 import PricingToggleSection from "./components/PricingToggleSection";
 import ProblemSection from "./components/landing/ProblemSection";
 import ProofSection from "./components/landing/ProofSection";
@@ -23,33 +24,7 @@ export default async function Home({ searchParams }: HomePageProps) {
 
   return (
     <div className={styles.page}>
-      <header className={styles.header}>
-        <div className={styles.container}>
-          <div className={styles.navShell}>
-            <Link href="/" className={styles.brand}>
-              <span className={styles.brandMark} aria-hidden="true" />
-              Fathom
-            </Link>
-
-            <nav className={styles.nav} aria-label="Main">
-              {landingContent.nav.map((item) => (
-                <SmoothScrollLink key={item.href} href={item.href}>
-                  {item.label}
-                </SmoothScrollLink>
-              ))}
-            </nav>
-
-            <div className={styles.navActions}>
-              <Link href="/signin" className={`${styles.button} ${styles.buttonGhost}`}>
-                Sign in
-              </Link>
-              <Link href="/signup" className={`${styles.button} ${styles.buttonPrimary}`}>
-                Start free
-              </Link>
-            </div>
-          </div>
-        </div>
-      </header>
+      <LandingHeader navItems={landingContent.nav} primaryCta={landingContent.hero.primaryCta} />
 
       <main>
         <HeroSection content={landingContent.hero} />
@@ -58,7 +33,7 @@ export default async function Home({ searchParams }: HomePageProps) {
         <ProofSection content={landingContent.proof} />
         <QualitySection content={landingContent.quality} />
 
-        <section id="pricing" className={styles.section} aria-labelledby="pricing-heading">
+        <section className={styles.section} aria-labelledby="pricing-heading">
           <div className={styles.container}>
             <div className={styles.sectionIntro}>
               <p className={styles.eyebrow}>{landingContent.pricingIntro.eyebrow}</p>
@@ -67,7 +42,9 @@ export default async function Home({ searchParams }: HomePageProps) {
               </h2>
               <p className={styles.sectionSubtitle}>{landingContent.pricingIntro.subtitle}</p>
             </div>
-            <PricingToggleSection mode={pricingMode} />
+            <div id="pricing" data-scroll-align="center">
+              <PricingToggleSection mode={pricingMode} />
+            </div>
           </div>
         </section>
 
@@ -84,7 +61,11 @@ export default async function Home({ searchParams }: HomePageProps) {
               {landingContent.faq.items.map((item) => (
                 <details key={item.question} className={styles.faqItem}>
                   <summary>{item.question}</summary>
-                  <p>{item.answer}</p>
+                  <div className={styles.faqAnswer}>
+                    <div className={styles.faqAnswerInner}>
+                      <p>{item.answer}</p>
+                    </div>
+                  </div>
                 </details>
               ))}
             </div>

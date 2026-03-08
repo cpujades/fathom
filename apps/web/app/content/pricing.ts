@@ -8,10 +8,12 @@ type Plan = {
 };
 
 type PricingCopy = {
+  section_label: string;
   headline: string;
   subhead: string;
   footnote: string;
   secondary_cta: string;
+  notes_label: string;
   footnoteMuted?: string;
   benefits?: string[];
 };
@@ -95,24 +97,28 @@ const subscriptionPlans: Plan[] = [
 
 const pricingCopy: Record<"packs" | "subscriptions", PricingCopy> = {
   packs: {
-    headline: "Not ready to subscribe? Looking for one-time credits?",
+    section_label: "Reserve access",
+    headline: "Prefer reserve credits instead?",
     subhead:
-      "Buy a pack and skip the subscription. No monthly fees. Pay only for the hours you listen to. Credits are valid for 6 months and extend with top-ups.",
-    secondary_cta: "Try Fathom free first",
+      "Use packs when listening comes in bursts. Buy time when needed, keep it for six months, and extend the window when you top up.",
+    secondary_cta: "Start with a free briefing",
+    notes_label: "Reserve notes",
     footnote:
-      "Credits last 6 months. If you top up before expiry, remaining hours roll into the new 6-month window.",
+      "Credits remain valid for 6 months. Top up before expiry and the remaining time rolls into a fresh 6-month window.",
     footnoteMuted:
       "Auto-refill (coming soon): buy another pack when you drop under 1 hour and unlock +10% bonus credits."
   },
   subscriptions: {
-    headline: "Prefer a predictable monthly plan?",
+    section_label: "Standing access",
+    headline: "Prefer a standing monthly brief?",
     subhead:
-      "Best for steady listeners. Monthly hours with rollover protection, so unused time carries forward.",
-    secondary_cta: "Go straight to paid checkout",
+      "Best for steady listeners who want ready access, rollover protection, and lower effective cost as the habit compounds.",
+    secondary_cta: "Go straight to paid access",
+    notes_label: "Standing notes",
     benefits: [
-      "Rollover — Don't lose your hours.",
-      "Peace of mind — Always ready when you need it.",
-      "Lower price — Save about 15% vs packs on most tiers."
+      "Rollover - keep unused listening time in play.",
+      "Readiness - always have briefing capacity on hand.",
+      "Lower cost - better economics than packs at recurring usage."
     ],
     footnote:
       "Unused credits roll over for one month, up to 2x your monthly limit."

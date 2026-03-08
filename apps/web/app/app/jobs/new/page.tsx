@@ -45,7 +45,7 @@ function JobCreatePageContent() {
         });
 
         if (apiError) {
-          setError(getApiErrorMessage(apiError, "Unable to create a summary job."));
+          setError(getApiErrorMessage(apiError, "Unable to create a briefing job."));
           return;
         }
 
@@ -68,14 +68,14 @@ function JobCreatePageContent() {
       <header className={styles.header}>
         <div className={styles.brand}>
           <span className={styles.brandMark} aria-hidden="true" />
-          Fathom
+          Talven
         </div>
         <div className={styles.headerActions}>
           <Link className={styles.headerButton} href="/app">
             Workspace
           </Link>
           <Link className={styles.headerButton} href="/">
-            Landing
+            Talven
           </Link>
         </div>
       </header>

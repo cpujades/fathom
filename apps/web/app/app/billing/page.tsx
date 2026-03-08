@@ -461,7 +461,7 @@ function BillingPageContent() {
       <header className={styles.header}>
         <div className={styles.headerInner}>
           <div className={styles.brandBlock}>
-            <p className={styles.eyebrow}>Fathom</p>
+            <p className={styles.eyebrow}>Talven</p>
             <h1 className={styles.pageTitle}>Billing</h1>
             <p className={styles.pageSubtitle}>Manage your plan, top up credits, and handle refunds in one place.</p>
           </div>
@@ -605,7 +605,7 @@ function BillingPageContent() {
                             ? "Opening Polar..."
                             : isCurrentSubscription
                               ? "Current subscription"
-                              : "Choose plan"}
+                              : "Select access"}
                         </button>
                       </article>
                     );

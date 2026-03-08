@@ -131,6 +131,7 @@ export default function PricingToggleSection({ mode }: PricingToggleSectionProps
               animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1 }}
               transition={stageTransition}
             >
+              <p className={styles.sectionLabel}>{copy.section_label}</p>
               <h3>{copy.headline}</h3>
               <p>{copy.subhead}</p>
             </motion.div>
@@ -143,7 +144,7 @@ export default function PricingToggleSection({ mode }: PricingToggleSectionProps
                     ? "/signup"
                     : buildPaidCheckoutHref(plan.name);
                 const cardCtaLabel =
-                  activeMode === "subscriptions" && plan.name.toLowerCase() === "free" ? "Start free" : "Choose plan";
+                  activeMode === "subscriptions" && plan.name.toLowerCase() === "free" ? "Open free access" : "Select access";
 
                 return (
                   <motion.article
@@ -164,8 +165,10 @@ export default function PricingToggleSection({ mode }: PricingToggleSectionProps
                       {isFeatured ? <span className={styles.popularBadge}>Most popular</span> : null}
                     </header>
 
-                    <p className={styles.planPrice}>{plan.price}</p>
-                    <p className={styles.planHours}>{plan.hours}</p>
+                    <div className={styles.planLedger}>
+                      <p className={styles.planPrice}>{plan.price}</p>
+                      <p className={styles.planHours}>{plan.hours}</p>
+                    </div>
 
                     <ul className={styles.featureList}>
                       {plan.features.map((feature) => (
@@ -187,8 +190,8 @@ export default function PricingToggleSection({ mode }: PricingToggleSectionProps
               })}
             </div>
 
-            <motion.p
-              className={styles.footnote}
+            <motion.div
+              className={styles.notesPanel}
               initial={shouldReduceMotion ? false : { opacity: 0 }}
               animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1 }}
               transition={{
@@ -196,8 +199,17 @@ export default function PricingToggleSection({ mode }: PricingToggleSectionProps
                 delay: shouldReduceMotion ? 0 : 0.04
               }}
             >
-              {copy.footnote}
-            </motion.p>
+              <p className={styles.notesLabel}>{copy.notes_label}</p>
+              <p className={styles.footnote}>{copy.footnote}</p>
+              {copy.footnoteMuted ? <p className={styles.footnoteMuted}>{copy.footnoteMuted}</p> : null}
+              {copy.benefits?.length ? (
+                <ul className={styles.benefitList}>
+                  {copy.benefits.map((benefit) => (
+                    <li key={benefit}>{benefit}</li>
+                  ))}
+                </ul>
+              ) : null}
+            </motion.div>
 
             <motion.div
               className={styles.secondaryActions}
@@ -208,16 +220,16 @@ export default function PricingToggleSection({ mode }: PricingToggleSectionProps
                 delay: shouldReduceMotion ? 0 : 0.06
               }}
             >
-            <Link
-              href={activeMode === "subscriptions" ? buildPaidCheckoutHref(highlightedPlan.name) : "/signup"}
-              className={styles.secondaryLink}
-              onClick={() => {
-                trackPricingCtaClick("secondary", highlightedPlan.name);
-              }}
-            >
-              {copy.secondary_cta}
-            </Link>
-          </motion.div>
+              <Link
+                href={activeMode === "subscriptions" ? buildPaidCheckoutHref(highlightedPlan.name) : "/signup"}
+                className={styles.secondaryLink}
+                onClick={() => {
+                  trackPricingCtaClick("secondary", highlightedPlan.name);
+                }}
+              >
+                {copy.secondary_cta}
+              </Link>
+            </motion.div>
         </motion.div>
         </AnimatePresence>
       </div>

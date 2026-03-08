@@ -10,12 +10,21 @@ export default function QualitySection({ content }: QualitySectionProps) {
   return (
     <section className={styles.sectionAlt} aria-labelledby="quality-heading">
       <div className={styles.container}>
-        <div className={styles.sectionIntro}>
-          <p className={styles.eyebrow}>{content.eyebrow}</p>
-          <h2 id="quality-heading" className={styles.sectionTitle}>
-            {content.title}
-          </h2>
-          <p className={styles.sectionSubtitle}>{content.subtitle}</p>
+        <div className={styles.editorialShell}>
+          <div className={styles.sectionIntro}>
+            <p className={styles.eyebrow}>{content.eyebrow}</p>
+            <h2 id="quality-heading" className={styles.sectionTitle}>
+              {content.title}
+            </h2>
+            <p className={styles.sectionSubtitle}>{content.subtitle}</p>
+          </div>
+
+          <div className={styles.dossierNote}>
+            <p className={styles.dossierNoteLabel}>Trust condition</p>
+            <p className={styles.dossierNoteText}>
+              The briefing should feel lighter than the source material, but never detached from it.
+            </p>
+          </div>
         </div>
 
         <div className={styles.qualityGrid}>
