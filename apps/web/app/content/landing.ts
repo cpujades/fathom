@@ -21,7 +21,7 @@ type HeroContent = {
   primaryCta: Cta;
   secondaryCta: Cta;
   expectations: string[];
-  previewRows: ProofRow[];
+  note: string;
 };
 
 type ProblemPoint = {
@@ -110,7 +110,7 @@ const landingContent: LandingContent = {
     deck: "Private brief / Source-linked / Ready in minutes",
     title: "Extract the signal. Keep the edge.",
     subtitle:
-      "Talven turns long podcast conversations into clear, timestamped briefings for people who prefer advantage to backlog.",
+      "Talven turns long podcast conversations into clear, source-linked briefings for people who prefer advantage to backlog.",
     primaryCta: {
       label: "Get your first briefing",
       href: "/signup"
@@ -120,20 +120,7 @@ const landingContent: LandingContent = {
       href: "#proof"
     },
     expectations: ["YouTube link in", "Briefing out", "Markdown + PDF ready"],
-    previewRows: [
-      {
-        timestamp: "08:42",
-        claim: "Guest identifies the weekly GTM metric they use to spot weakness before it compounds."
-      },
-      {
-        timestamp: "21:17",
-        claim: "Host explains why founder-led sales should end once messaging becomes repeatable."
-      },
-      {
-        timestamp: "46:03",
-        claim: "Episode closes with two experiments the listener can run in the next week."
-      }
-    ]
+    note: "Includes key claims, source moments, and export-ready output without the transcript sprawl."
   },
   problem: {
     eyebrow: "Why it matters",

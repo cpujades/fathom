@@ -551,43 +551,13 @@
   line-height: 1.48;
 }
 
-.heroPreviewRows {
+.heroAsideNote {
   margin-top: 1rem;
-  display: grid;
-  gap: 0.62rem;
-}
-
-.heroPreviewRow {
-  display: grid;
-  grid-template-columns: 64px minmax(0, 1fr);
-  gap: 0.7rem;
-  align-items: start;
-  border: 1px solid rgba(35, 55, 45, 0.12);
-  border-radius: 12px;
-  padding: 0.64rem 0.72rem;
-  background: var(--landing-neutral-glass);
-  backdrop-filter: blur(14px) saturate(1.04);
-}
-
-.heroPreviewTime {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 24px;
-  padding: 0.14rem 0.48rem;
-  border-radius: 999px;
-  background: linear-gradient(155deg, var(--landing-brand), var(--landing-brand-strong));
-  color: #f7f5ef;
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-}
-
-.heroPreviewClaim {
-  margin: 0;
-  color: var(--landing-text);
+  padding-top: 0.92rem;
+  border-top: 1px solid var(--landing-line);
+  color: var(--landing-text-muted);
   font-size: 0.83rem;
-  line-height: 1.46;
+  line-height: 1.52;
 }
 
 .section,
@@ -1080,10 +1050,6 @@
   .heroCopy {
     max-width: 100%;
   }
-
-  .heroPreviewRow {
-    grid-template-columns: 64px minmax(0, 1fr);
-  }
 }
 
 @media (max-width: 860px) {
@@ -1188,13 +1154,6 @@
     gap: 0.28rem;
   }
 
-  .heroPreviewRow {
-    grid-template-columns: 1fr;
-  }
-
-  .heroPreviewTime {
-    justify-self: start;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

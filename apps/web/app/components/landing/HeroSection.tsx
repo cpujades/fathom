@@ -78,7 +78,7 @@ export default function HeroSection({ content }: HeroSectionProps) {
               </div>
               <div className={styles.coverRow}>
                 <span className={styles.coverLabel}>Form</span>
-                <p className={styles.coverValue}>Timestamped briefing</p>
+                <p className={styles.coverValue}>Source-linked briefing</p>
               </div>
               <div className={styles.coverRow}>
                 <span className={styles.coverLabel}>Read time</span>
@@ -86,14 +86,7 @@ export default function HeroSection({ content }: HeroSectionProps) {
               </div>
             </div>
 
-            <div className={styles.heroPreviewRows}>
-              {content.previewRows.map((row) => (
-                <div key={`${row.timestamp}-${row.claim}`} className={styles.heroPreviewRow}>
-                  <span className={styles.heroPreviewTime}>{row.timestamp}</span>
-                  <p className={styles.heroPreviewClaim}>{row.claim}</p>
-                </div>
-              ))}
-            </div>
+            <p className={styles.heroAsideNote}>{content.note}</p>
           </aside>
         </div>
       </div>
