@@ -8,13 +8,20 @@ type Cta = {
   href: string;
 };
 
+type ProofRow = {
+  timestamp: string;
+  claim: string;
+};
+
 type HeroContent = {
   eyebrow: string;
+  deck: string;
   title: string;
   subtitle: string;
   primaryCta: Cta;
   secondaryCta: Cta;
   expectations: string[];
+  previewRows: ProofRow[];
 };
 
 type ProblemPoint = {
@@ -25,11 +32,6 @@ type ProblemPoint = {
 type HowItWorksStep = {
   title: string;
   text: string;
-};
-
-type ProofRow = {
-  timestamp: string;
-  claim: string;
 };
 
 type QualityPoint = {
@@ -98,134 +100,147 @@ type LandingContent = {
 
 const landingContent: LandingContent = {
   nav: [
-    { label: "How it works", href: "#how-it-works" },
-    { label: "Sample", href: "#proof" },
+    { label: "Method", href: "#how-it-works" },
+    { label: "Sample brief", href: "#proof" },
     { label: "Pricing", href: "#pricing" },
-    { label: "FAQ", href: "#faq" }
+    { label: "Questions", href: "#faq" }
   ],
   hero: {
-    eyebrow: "Built for podcast listeners",
-    title: "Save hours without missing signal.",
+    eyebrow: "Private podcast briefings",
+    deck: "Private brief / Source-linked / Ready in minutes",
+    title: "Extract the signal. Keep the edge.",
     subtitle:
-      "Paste a YouTube podcast URL and get a concise, timestamped brief with key insights, takeaways, and exports in minutes.",
+      "Talven turns long podcast conversations into clear, timestamped briefings for people who prefer advantage to backlog.",
     primaryCta: {
-      label: "Start free",
+      label: "Get your first briefing",
       href: "/signup"
     },
     secondaryCta: {
-      label: "See sample summary",
+      label: "Read the sample brief",
       href: "#proof"
     },
-    expectations: ["YouTube URL in", "Structured summary out", "Markdown + PDF export"]
+    expectations: ["YouTube link in", "Briefing out", "Markdown + PDF ready"],
+    previewRows: [
+      {
+        timestamp: "08:42",
+        claim: "Guest identifies the weekly GTM metric they use to spot weakness before it compounds."
+      },
+      {
+        timestamp: "21:17",
+        claim: "Host explains why founder-led sales should end once messaging becomes repeatable."
+      },
+      {
+        timestamp: "46:03",
+        claim: "Episode closes with two experiments the listener can run in the next week."
+      }
+    ]
   },
   problem: {
-    eyebrow: "Why Fathom",
-    title: "Your podcast backlog grows faster than your listening time.",
-    subtitle: "Fathom helps you keep the useful parts and skip the noise.",
+    eyebrow: "Why it matters",
+    title: "Most podcast value disappears into the hour you never revisit.",
+    subtitle: "Talven keeps the ideas worth carrying forward, without asking you to relisten.",
     points: [
       {
-        title: "Too much content, not enough time",
-        text: "Long episodes are valuable, but full playback does not fit every day."
+        title: "Long conversations hide a few usable ideas",
+        text: "Most episodes contain a small number of points that actually change how you think or act."
       },
       {
-        title: "Signal is hard to recover later",
-        text: "Great moments get buried when you only rely on memory or scattered notes."
+        title: "Memory is not a retrieval system",
+        text: "Useful moments vanish quickly when they live only in your head or in half-finished notes."
       },
       {
-        title: "Decisions need clarity, not full transcripts",
-        text: "You need the important points, sources, and next actions in one clear brief."
+        title: "Insight loses value when it arrives late",
+        text: "You need the point, the source, and the takeaway before the idea goes cold."
       }
     ]
   },
   howItWorks: {
-    eyebrow: "How it works",
-    title: "Three steps from episode to usable brief.",
+    eyebrow: "Briefing flow",
+    title: "From open conversation to usable briefing.",
     steps: [
       {
-        title: "1. Paste a YouTube URL",
-        text: "Add any supported episode to your queue in seconds."
+        title: "Submit an episode",
+        text: "Drop in a YouTube podcast link and send it straight into the queue."
       },
       {
-        title: "2. Fathom processes the episode",
-        text: "The system transcribes, summarizes, and structures the output automatically."
+        title: "Talven extracts the signal",
+        text: "The system transcribes, condenses, and structures the conversation into a readable briefing."
       },
       {
-        title: "3. Review and export",
-        text: "Get timestamps, key ideas, and takeaways you can share as Markdown or PDF."
+        title: "Read, verify, and export",
+        text: "Review the key points, trace them to source moments, and export the briefing when needed."
       }
     ]
   },
   proof: {
-    eyebrow: "Output proof",
-    title: "A summary format designed for fast trust.",
-    subtitle: "This section uses placeholder sample content and is ready for a real episode swap.",
-    sampleLabel: "Sample summary format",
-    sampleTitle: "58-minute episode -> 4-minute read",
-    sampleNote: "Placeholder sample: replace with an approved real summary excerpt before launch.",
-    before:
-      "A full episode with multiple tangents, stories, and references across product, strategy, and execution.",
+    eyebrow: "Evidence",
+    title: "Built to read like a briefing, not a transcript.",
+    subtitle: "Talven condenses the ideas worth keeping and anchors them to source moments you can verify.",
+    sampleLabel: "Sample brief",
+    sampleTitle: "58-minute episode -> 4-minute briefing",
+    sampleNote: "Each Talven briefing keeps the same reading logic: key claims first, source moments attached, next moves made clear.",
+    before: "A long conversation spanning strategy, execution, and personal operating principles.",
     after: [
-      "Main claims prioritized by importance",
-      "Timestamp anchors for each important point",
-      "Actionable takeaway bullets for follow-through"
+      "Key claims ranked by importance",
+      "Source moments attached to material points",
+      "Clear takeaways you can reuse or act on"
     ],
     rows: [
       {
         timestamp: "08:42",
-        claim: "Guest explains the single metric they track weekly to catch GTM problems early."
+        claim: "Guest explains the single metric they track weekly to catch GTM weakness before it compounds."
       },
       {
         timestamp: "21:17",
-        claim: "Host outlines why founder-led sales should transition once messaging repeatability appears."
+        claim: "Host outlines why founder-led sales should end once messaging becomes repeatable."
       },
       {
         timestamp: "46:03",
-        claim: "Final section lists two practical experiments teams can run in the next sprint."
+        claim: "Final section ends with two practical experiments a listener could run in the next week."
       }
     ]
   },
   quality: {
-    eyebrow: "Quality expectations",
-    title: "Transparent about what you get.",
-    subtitle: "Fathom is built for practical clarity, with concise AI transparency.",
+    eyebrow: "Method",
+    title: "Structured for signal, grounded in source.",
+    subtitle: "Talven is built for readable synthesis with enough traceability to verify what matters.",
     points: [
       {
-        title: "Structured by default",
-        text: "Every summary follows the same readable format so you can scan quickly."
+        title: "Briefing-first format",
+        text: "Every output follows the same disciplined structure so it reads fast and stays usable."
       },
       {
         title: "Timestamp traceability",
-        text: "Important statements point back to source moments for fast verification."
+        text: "Material claims point back to source moments so you can verify the original context quickly."
       },
       {
-        title: "Realistic AI expectations",
-        text: "Fathom prioritizes high-signal output, but you should still review critical decisions against source audio."
+        title: "Disciplined AI use",
+        text: "Talven favors concise synthesis over bloated recaps, but critical decisions should still be checked against source audio."
       }
     ],
-    expectation:
-      "Best fit: listeners who want fast, trustworthy synthesis for planning, sharing, and follow-up."
+    expectation: "Best fit: listeners who want sharper thinking without turning every episode into homework."
   },
   pricingIntro: {
     eyebrow: "Pricing",
-    title: "Start free, upgrade when your listening volume grows.",
-    subtitle: "Subscriptions are default. One-time packs are available for occasional spikes."
+    title: "Choose a standing brief or a measured reserve.",
+    subtitle: "Subscriptions fit steady listening. Credit packs cover occasional bursts without a monthly commitment."
   },
   faq: {
-    eyebrow: "FAQ",
-    title: "Answers before you commit.",
+    eyebrow: "Questions",
+    title: "What people ask before they begin.",
     items: [
       {
         question: "What sources are supported right now?",
-        answer: "Fathom currently supports YouTube podcast URLs."
+        answer: "Talven currently supports YouTube podcast URLs."
       },
       {
-        question: "How long does a summary take?",
+        question: "How long does a briefing take?",
         answer:
-          "Most jobs finish in minutes depending on episode length and queue load. You can track status in your dashboard."
+          "Most jobs finish in minutes depending on episode length and queue load. You can track each briefing from your workspace."
       },
       {
-        question: "Can I export summaries to my own tools?",
-        answer: "Yes. Export to Markdown or PDF for your docs and workflows."
+        question: "Can I export briefings to my own tools?",
+        answer: "Yes. Export each briefing to Markdown or PDF for your notes, docs, or workflows."
       },
       {
         question: "Can I cancel a paid subscription anytime?",
@@ -234,23 +249,23 @@ const landingContent: LandingContent = {
     ]
   },
   finalCta: {
-    title: "Keep your favorite podcasts. Summarize the rest.",
-    text: "Create your free account now and decide later whether to stay free, subscribe, or use one-time packs.",
+    title: "Build a private edge from what you listen to.",
+    text: "Start with one episode. Read the briefing. Decide if Talven belongs in your weekly stack.",
     primaryCta: {
-      label: "Start free",
+      label: "Get your first briefing",
       href: "/signup"
     },
     secondaryCta: {
-      label: "Jump to pricing",
+      label: "See pricing",
       href: "#pricing"
     }
   },
   footer: {
-    copyright: "Copyright 2026 Fathom",
+    copyright: "Copyright 2026 Talven",
     links: [
       { label: "Pricing", href: "#pricing" },
       { label: "Sign in", href: "/signin" },
-      { label: "contact@fathom.ai", href: "mailto:contact@fathom.ai" }
+      { label: "Contact", href: "mailto:contact@talven.ai" }
     ]
   }
 };

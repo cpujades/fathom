@@ -100,12 +100,12 @@ export default function HistoryPage() {
           <div className={styles.sectionHeader}>
             <div>
               <h1 className={styles.cardTitle}>Usage history</h1>
-              <p className={styles.cardText}>A quick log of your recent summaries.</p>
+              <p className={styles.cardText}>A quick log of your recent briefings.</p>
             </div>
           </div>
 
           {history.length === 0 ? (
-            <p className={styles.cardText}>No usage yet. Run your first summary to populate this list.</p>
+            <p className={styles.cardText}>No usage yet. Run your first briefing to populate this list.</p>
           ) : (
             <div className={styles.historyList}>
               {history.map((entry, index) => (

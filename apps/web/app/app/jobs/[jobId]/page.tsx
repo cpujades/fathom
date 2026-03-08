@@ -75,7 +75,7 @@ export default function JobDetailPage() {
     });
 
     if (summaryError) {
-      setError(getApiErrorMessage(summaryError, "Unable to fetch summary."));
+      setError(getApiErrorMessage(summaryError, "Unable to fetch briefing."));
       return;
     }
 
@@ -256,9 +256,9 @@ export default function JobDetailPage() {
         ? "Briefing in progress"
         : "Preparing your briefing";
   const subhead = isComplete
-    ? "Your summary is ready to read, export, and share."
+    ? "Your briefing is ready to read, export, and share."
     : isFailed
-      ? "We ran into an issue. You can try again or start a fresh summary."
+      ? "We ran into an issue. You can try again or start a fresh briefing."
       : "We are translating the audio into a clean, structured briefing.";
   const isCached = job?.stage === "cached";
   const isStreaming = !isComplete && !isFailed && !isCached;
@@ -268,7 +268,7 @@ export default function JobDetailPage() {
   const rawStageKey = job?.stage ?? statusFallbackStage;
   const normalizedStage = rawStageKey === "completed" || rawStageKey === "cached" ? "rendering" : rawStageKey;
   const displayStageLabel = (() => {
-    if (isComplete) return "Summary ready";
+    if (isComplete) return "Briefing ready";
     if (isFailed) return "Needs attention";
     switch (normalizedStage) {
       case "transcribing":
@@ -278,7 +278,7 @@ export default function JobDetailPage() {
       case "rendering":
         return "Polishing the output";
       default:
-        return "Preparing your summary";
+        return "Preparing your briefing";
     }
   })();
 
@@ -326,14 +326,14 @@ export default function JobDetailPage() {
       <header className={styles.header}>
         <div className={styles.brand}>
           <span className={styles.brandMark} aria-hidden="true" />
-          Fathom
+          Talven
         </div>
         <div className={styles.headerActions}>
           <Link className={styles.headerButton} href="/app">
             Workspace
           </Link>
           <Link className={styles.headerButton} href="/">
-            Landing
+            Talven
           </Link>
         </div>
       </header>
@@ -365,7 +365,7 @@ export default function JobDetailPage() {
                   <div className={styles.progressFill} style={{ width: `${clampedProgress}%` }} />
                 </div>
                 <div className={styles.loadingMeta}>
-                  <span>Your summary will appear here once it’s ready.</span>
+                  <span>Your briefing will appear here once it’s ready.</span>
                   <span>Usually a few minutes.</span>
                 </div>
 
@@ -427,8 +427,8 @@ export default function JobDetailPage() {
                   ) : (
                     <div className={styles.emptyState}>
                       {isFailed
-                        ? "We could not render the summary. Try again when you’re ready."
-                        : "Your summary will appear here as soon as we have content."}
+                        ? "We could not render the briefing. Try again when you’re ready."
+                        : "Your briefing will appear here as soon as we have content."}
                     </div>
                   )}
                 </div>
@@ -440,7 +440,7 @@ export default function JobDetailPage() {
                     <div>
                       <h2 className={styles.cardTitle}>Export</h2>
                       <p className={styles.cardSubtitle}>
-                        Save the briefing as a PDF or start a new summary.
+                        Save the briefing as a PDF or start a new one.
                       </p>
                     </div>
                   </div>
@@ -460,7 +460,7 @@ export default function JobDetailPage() {
                       </button>
                     )}
                     <Link className={styles.buttonSecondary} href="/app">
-                      New summary
+                      New briefing
                     </Link>
                   </div>
                   {pdfError ? <div className={styles.errorCard}>{pdfError}</div> : null}

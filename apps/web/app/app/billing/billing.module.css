@@ -1,21 +1,21 @@
 .page {
-  --bg: #070b14;
-  --surface: rgba(12, 19, 32, 0.74);
-  --surface-strong: rgba(15, 24, 40, 0.92);
-  --line: rgba(147, 197, 253, 0.2);
-  --line-strong: rgba(147, 197, 253, 0.35);
-  --text: #e6edf8;
-  --text-muted: #a8b5c9;
-  --text-soft: #8090a8;
-  --accent: #67e8f9;
-  --accent-strong: #22d3ee;
+  --bg: #141f1a;
+  --surface: rgba(19, 30, 24, 0.78);
+  --surface-strong: rgba(23, 36, 29, 0.94);
+  --line: rgba(117, 140, 126, 0.18);
+  --line-strong: rgba(117, 140, 126, 0.34);
+  --text: #f1ede2;
+  --text-muted: #b5c0b4;
+  --text-soft: #96a396;
+  --accent: #2d624b;
+  --accent-strong: #17382b;
   --danger: #f87171;
   min-height: 100vh;
   position: relative;
   overflow: hidden;
   color: var(--text);
-  background: radial-gradient(circle at 10% 10%, rgba(34, 211, 238, 0.12), transparent 38%),
-    radial-gradient(circle at 100% 100%, rgba(59, 130, 246, 0.08), transparent 35%), var(--bg);
+  background: radial-gradient(circle at 10% 10%, rgba(40, 92, 70, 0.12), transparent 38%),
+    radial-gradient(circle at 100% 100%, rgba(142, 123, 73, 0.08), transparent 35%), var(--bg);
   font-family: var(--font-geist-sans), "Avenir Next", "Segoe UI", sans-serif;
 }
 
@@ -24,7 +24,7 @@
   inset: -20% -10% auto;
   height: 52vh;
   pointer-events: none;
-  background: radial-gradient(circle, rgba(34, 211, 238, 0.16) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(40, 92, 70, 0.16) 0%, transparent 70%);
   filter: blur(30px);
 }
 
@@ -33,8 +33,8 @@
   inset: 0;
   pointer-events: none;
   opacity: 0.22;
-  background-image: linear-gradient(rgba(147, 197, 253, 0.12) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(147, 197, 253, 0.12) 1px, transparent 1px);
+  background-image: linear-gradient(rgba(117, 140, 126, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(117, 140, 126, 0.1) 1px, transparent 1px);
   background-size: 42px 42px;
   mask-image: radial-gradient(circle at center, black 38%, transparent 100%);
 }
@@ -48,7 +48,7 @@
 .header {
   padding: clamp(1.2rem, 2.5vw, 1.8rem) 0;
   border-bottom: 1px solid var(--line);
-  background: rgba(7, 11, 20, 0.72);
+  background: rgba(18, 28, 23, 0.78);
   backdrop-filter: blur(6px);
 }
 
@@ -70,7 +70,7 @@
   font-size: 0.72rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--accent);
+  color: #8fa390;
   font-weight: 700;
 }
 
@@ -112,8 +112,8 @@
 }
 
 .primaryButton {
-  border: 1px solid rgba(103, 232, 249, 0.45);
-  color: #06252b;
+  border: 1px solid rgba(88, 110, 97, 0.38);
+  color: #f4efe2;
   background: linear-gradient(155deg, var(--accent), var(--accent-strong));
 }
 
@@ -121,7 +121,7 @@
 .ghostButton {
   border: 1px solid var(--line);
   color: var(--text);
-  background: rgba(148, 163, 184, 0.08);
+  background: rgba(243, 235, 218, 0.05);
 }
 
 .primaryButton:hover,
@@ -175,11 +175,11 @@
   border: 1px solid var(--line);
   border-radius: 14px;
   padding: 0.84rem 0.96rem;
-  background: rgba(15, 23, 39, 0.8);
+  background: rgba(20, 31, 25, 0.84);
 }
 
 .noticeInfo {
-  border-color: rgba(103, 232, 249, 0.35);
+  border-color: rgba(117, 140, 126, 0.32);
 }
 
 .noticeWarning {
@@ -205,7 +205,7 @@
   border: 1px solid var(--line);
   border-radius: 18px;
   padding: 1rem;
-  background: linear-gradient(170deg, rgba(11, 18, 31, 0.82), var(--surface));
+  background: linear-gradient(170deg, rgba(19, 30, 24, 0.9), var(--surface));
 }
 
 .panelHeader {

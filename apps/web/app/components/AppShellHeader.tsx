@@ -33,7 +33,7 @@ export function AppShellHeader({ active, remainingSeconds, accountLabel, onSignO
       <div className={styles.inner}>
         <Link className={styles.brand} href="/app" aria-label="Go to workspace home">
           <span className={styles.brandMark} aria-hidden="true" />
-          Fathom
+          Talven
         </Link>
 
         <nav className={styles.nav} aria-label="Main navigation">

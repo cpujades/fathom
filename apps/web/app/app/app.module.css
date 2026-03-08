@@ -231,7 +231,7 @@
 }
 
 .markdown li::marker {
-  color: var(--accent);
+  color: var(--brand-accent);
 }
 
 .markdown code {

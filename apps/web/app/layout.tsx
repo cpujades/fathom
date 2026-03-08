@@ -6,17 +6,17 @@ import { GeistMono } from "geist/font/mono";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Fathom | YouTube Podcast Summaries",
-  description: "Turn YouTube podcast episodes into concise, timestamped summaries in minutes.",
+  title: "Talven | Private Podcast Briefings",
+  description: "Turn long podcast episodes into clear, timestamped briefings built for private advantage.",
   openGraph: {
-    title: "Fathom | YouTube Podcast Summaries",
-    description: "Paste a YouTube podcast URL and get a concise, timestamped summary.",
+    title: "Talven | Private Podcast Briefings",
+    description: "Paste a YouTube podcast URL and get a concise, timestamped briefing.",
     type: "website"
   },
   twitter: {
     card: "summary_large_image",
-    title: "Fathom | YouTube Podcast Summaries",
-    description: "Summarize long YouTube podcast episodes into fast, readable briefs."
+    title: "Talven | Private Podcast Briefings",
+    description: "Convert long podcast episodes into fast, readable briefings with source moments attached."
   }
 };
 

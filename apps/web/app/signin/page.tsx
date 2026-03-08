@@ -152,14 +152,14 @@ export default function SignInPage() {
         <aside className={styles.panel}>
           <div className={styles.brand}>
             <span className={styles.brandMark} aria-hidden="true" />
-            Fathom
+            Talven
           </div>
           <h1 className={styles.panelTitle}>Welcome back</h1>
-          <p className={styles.panelText}>Sign in to resume your briefings and keep your listening workflow focused.</p>
+          <p className={styles.panelText}>Sign in to resume your briefings and keep your edge close at hand.</p>
           <ul className={styles.panelList}>
-            <li>Fast checkout and billing controls</li>
-            <li>Credit usage and history in one place</li>
-            <li>Structured summaries ready to export</li>
+            <li>Billing controls when you need more time</li>
+            <li>Usage history and reserve balance in one place</li>
+            <li>Structured briefings ready to export</li>
           </ul>
           <p className={styles.panelFooter}>Need a new account? Create one in under a minute.</p>
         </aside>
@@ -246,7 +246,7 @@ export default function SignInPage() {
             <span>
               New here? <Link href={signUpHref}>Create an account</Link>
             </span>
-            <Link href="/">Back to home</Link>
+            <Link href="/">Return to Talven</Link>
           </div>
         </section>
       </div>

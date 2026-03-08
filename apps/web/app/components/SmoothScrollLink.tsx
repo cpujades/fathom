@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import type { MouseEvent, ReactNode } from "react";
 
 type SmoothScrollLinkProps = {
@@ -11,34 +11,9 @@ type SmoothScrollLinkProps = {
 };
 
 const SCROLL_OFFSET = 92;
-const SCROLL_DURATION_MS = 880;
-
-const easeInOutQuart = (progress: number): number => {
-  return progress < 0.5 ? 8 * progress * progress * progress * progress : 1 - Math.pow(-2 * progress + 2, 4) / 2;
-};
-
-const animateScrollTo = (targetY: number) => {
-  const startY = window.scrollY;
-  const distance = targetY - startY;
-  const startedAt = performance.now();
-
-  const step = (currentTime: number) => {
-    const elapsed = currentTime - startedAt;
-    const progress = Math.min(elapsed / SCROLL_DURATION_MS, 1);
-    const easedProgress = easeInOutQuart(progress);
-
-    window.scrollTo(0, startY + distance * easedProgress);
-
-    if (progress < 1) {
-      window.requestAnimationFrame(step);
-    }
-  };
-
-  window.requestAnimationFrame(step);
-};
+const CENTER_ALIGNMENT_PADDING = 24;
 
 export default function SmoothScrollLink({ href, className, children, onClick }: SmoothScrollLinkProps) {
-  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
@@ -56,19 +31,25 @@ export default function SmoothScrollLink({ href, className, children, onClick }:
       return;
     }
 
-    const targetTop = target.getBoundingClientRect().top + window.scrollY - SCROLL_OFFSET;
-    const targetY = Math.max(targetTop, 0);
+    const targetRect = target.getBoundingClientRect();
+    const absoluteTop = targetRect.top + window.scrollY;
+    const targetY =
+      target.dataset.scrollAlign === "center"
+        ? Math.max(absoluteTop - (window.innerHeight - targetRect.height) / 2 - CENTER_ALIGNMENT_PADDING, 0)
+        : Math.max(absoluteTop - SCROLL_OFFSET, 0);
 
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       window.scrollTo(0, targetY);
     } else {
-      animateScrollTo(targetY);
+      window.scrollTo({
+        top: targetY,
+        behavior: "smooth"
+      });
     }
 
     const currentQuery = searchParams.toString();
     const nextUrl = `${pathname}${currentQuery ? `?${currentQuery}` : ""}${href}`;
 
-    router.replace(nextUrl, { scroll: false });
     window.history.replaceState(window.history.state, "", nextUrl);
   };
 

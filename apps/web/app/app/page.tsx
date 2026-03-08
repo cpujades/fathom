@@ -157,9 +157,9 @@ export default function AppHome() {
       <main className={styles.main}>
         <section className={styles.commandGrid}>
           <article className={styles.card}>
-            <h1 className={styles.commandTitle}>{loading ? "Loading workspace..." : "Start a summary"}</h1>
+            <h1 className={styles.commandTitle}>{loading ? "Loading workspace..." : "Start a briefing"}</h1>
             <p className={styles.commandText}>
-              Paste a podcast or YouTube URL and Fathom will generate a transcript and structured briefing.
+              Paste a podcast or YouTube URL and Talven will generate a transcript and structured briefing.
             </p>
 
             <div className={styles.inputRow}>
@@ -173,11 +173,11 @@ export default function AppHome() {
                 disabled={loading}
               />
               <button className={styles.primaryButton} type="button" onClick={handleSubmit} disabled={loading || submitting}>
-                {submitting ? "Starting..." : "Summarize"}
+                {submitting ? "Starting..." : "Generate briefing"}
               </button>
             </div>
 
-            <p className={styles.inputHelp}>One input, one clear output: transcript, summary, and optional PDF export.</p>
+            <p className={styles.inputHelp}>One input, one clear output: transcript, briefing, and optional PDF export.</p>
             {error ? <p className={styles.inlineStatus}>{error}</p> : null}
           </article>
 
@@ -215,7 +215,7 @@ export default function AppHome() {
           {loading ? (
             <p className={styles.emptyState}>Loading recent activity...</p>
           ) : recentUsage.length === 0 ? (
-            <p className={styles.emptyState}>No activity yet. Start your first summary above.</p>
+            <p className={styles.emptyState}>No activity yet. Start your first briefing above.</p>
           ) : (
             <div className={styles.list}>
               {recentUsage.map((entry, index) => (

@@ -1,8 +1,8 @@
 .page {
   min-height: 100vh;
-  background: radial-gradient(circle at 2% 10%, rgba(34, 211, 238, 0.1), transparent 38%),
-    radial-gradient(circle at 94% 88%, rgba(59, 130, 246, 0.08), transparent 35%), var(--bg-0);
-  color: var(--text-1);
+  background: radial-gradient(circle at 2% 10%, rgba(40, 92, 70, 0.12), transparent 38%),
+    radial-gradient(circle at 94% 88%, rgba(142, 123, 73, 0.08), transparent 35%), #141f1a;
+  color: #f2efe5;
 }
 
 .main {
@@ -22,8 +22,8 @@
 
 .card {
   border-radius: 18px;
-  border: 1px solid rgba(103, 232, 249, 0.18);
-  background: linear-gradient(170deg, rgba(10, 17, 30, 0.88), rgba(10, 16, 27, 0.76));
+  border: 1px solid rgba(117, 140, 126, 0.18);
+  background: linear-gradient(170deg, rgba(18, 28, 23, 0.9), rgba(13, 22, 18, 0.8));
   padding: 1rem;
 }
 
@@ -35,7 +35,7 @@
 
 .commandText {
   margin: 0.45rem 0 0;
-  color: var(--text-2);
+  color: #b6c0b6;
   max-width: 60ch;
 }
 
@@ -48,18 +48,18 @@
 
 .input {
   border-radius: 12px;
-  border: 1px solid rgba(103, 232, 249, 0.24);
-  background: rgba(6, 11, 20, 0.82);
-  color: var(--text-1);
+  border: 1px solid rgba(117, 140, 126, 0.22);
+  background: rgba(10, 18, 15, 0.82);
+  color: #f2efe5;
   padding: 0.74rem 0.82rem;
   font-size: 0.95rem;
 }
 
 .primaryButton {
   border-radius: 12px;
-  border: 1px solid rgba(103, 232, 249, 0.4);
-  background: linear-gradient(150deg, rgba(103, 232, 249, 0.95), rgba(34, 211, 238, 0.88));
-  color: #042128;
+  border: 1px solid rgba(88, 110, 97, 0.38);
+  background: linear-gradient(150deg, rgba(40, 92, 70, 0.98), rgba(23, 56, 43, 0.92));
+  color: #f4efe2;
   padding: 0.7rem 1rem;
   font-weight: 700;
   cursor: pointer;
@@ -84,7 +84,7 @@
 
 .inputHelp {
   margin: 0.52rem 0 0;
-  color: var(--text-2);
+  color: #9da89d;
   font-size: 0.86rem;
 }
 
@@ -100,17 +100,17 @@
 }
 
 .stateTile {
-  border: 1px solid rgba(148, 163, 184, 0.23);
+  border: 1px solid rgba(117, 140, 126, 0.18);
   border-radius: 11px;
   padding: 0.64rem 0.68rem;
-  background: rgba(148, 163, 184, 0.05);
+  background: rgba(243, 235, 218, 0.04);
 }
 
 .stateLabel {
   margin: 0;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--text-2);
+  color: #99a598;
   font-size: 0.67rem;
 }
 
@@ -122,7 +122,7 @@
 
 .stateHint {
   margin: 0.18rem 0 0;
-  color: var(--text-2);
+  color: #99a598;
   font-size: 0.8rem;
 }
 
@@ -135,9 +135,9 @@
 
 .linkButton {
   border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.28);
-  background: rgba(148, 163, 184, 0.08);
-  color: var(--text-1);
+  border: 1px solid rgba(117, 140, 126, 0.22);
+  background: rgba(243, 235, 218, 0.06);
+  color: #f2efe5;
   padding: 0.34rem 0.7rem;
   font-size: 0.8rem;
   font-weight: 600;
@@ -150,7 +150,7 @@
 
 .recentText {
   margin: 0.38rem 0 0;
-  color: var(--text-2);
+  color: #b6c0b6;
 }
 
 .list {
@@ -160,9 +160,9 @@
 }
 
 .row {
-  border: 1px solid rgba(148, 163, 184, 0.23);
+  border: 1px solid rgba(117, 140, 126, 0.18);
   border-radius: 11px;
-  background: rgba(148, 163, 184, 0.05);
+  background: rgba(243, 235, 218, 0.04);
   padding: 0.6rem 0.7rem;
   display: flex;
   justify-content: space-between;
@@ -177,7 +177,7 @@
 
 .rowMeta {
   margin: 0.2rem 0 0;
-  color: var(--text-2);
+  color: #99a598;
   font-size: 0.78rem;
 }
 
@@ -185,13 +185,13 @@
   display: grid;
   gap: 0.2rem;
   text-align: right;
-  color: var(--text-2);
+  color: #99a598;
   font-size: 0.79rem;
 }
 
 .emptyState {
   margin: 0.72rem 0 0;
-  color: var(--text-2);
+  color: #99a598;
   font-size: 0.9rem;
 }
 

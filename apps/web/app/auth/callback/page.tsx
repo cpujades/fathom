@@ -60,7 +60,7 @@ function AuthCallbackPageContent() {
       <div className={styles.card}>
         <div className={styles.brand}>
           <span className={styles.brandMark} aria-hidden="true" />
-          Fathom
+          Talven
         </div>
         <div>
           <h1 className={styles.title}>Signing you in</h1>
@@ -80,7 +80,7 @@ export default function AuthCallbackPage() {
           <div className={styles.card}>
             <div className={styles.brand}>
               <span className={styles.brandMark} aria-hidden="true" />
-              Fathom
+              Talven
             </div>
             <div>
               <h1 className={styles.title}>Signing you in</h1>

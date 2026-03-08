@@ -161,14 +161,14 @@ export default function SignUpPage() {
         <aside className={styles.panel}>
           <div className={styles.brand}>
             <span className={styles.brandMark} aria-hidden="true" />
-            Fathom
+            Talven
           </div>
           <h1 className={styles.panelTitle}>Create your account</h1>
-          <p className={styles.panelText}>Start turning long-form audio into concise, actionable briefings.</p>
+          <p className={styles.panelText}>Turn long-form audio into concise, actionable briefings built for private advantage.</p>
           <ul className={styles.panelList}>
-            <li>Start free with monthly credits</li>
-            <li>Upgrade or top up anytime</li>
-            <li>Track usage and exports from one workspace</li>
+            <li>Begin with included monthly usage</li>
+            <li>Upgrade or top up when listening expands</li>
+            <li>Track usage and exports in one workspace</li>
           </ul>
           <p className={styles.panelFooter}>Already have an account? Sign in and continue where you left off.</p>
         </aside>
@@ -249,7 +249,7 @@ export default function SignUpPage() {
 
             <div className={styles.actions}>
               <button className={`${styles.button} ${styles.buttonPrimary}`} type="submit" disabled={loading}>
-                {loading ? "Working..." : mode === "magic" ? "Email sign-up link" : "Create account"}
+                {loading ? "Working..." : mode === "magic" ? "Send access link" : "Create Talven account"}
               </button>
             </div>
 
@@ -277,7 +277,7 @@ export default function SignUpPage() {
             <span>
               Already have an account? <Link href={signInHref}>Sign in</Link>
             </span>
-            <Link href="/">Back to home</Link>
+            <Link href="/">Return to Talven</Link>
           </div>
         </section>
       </div>
