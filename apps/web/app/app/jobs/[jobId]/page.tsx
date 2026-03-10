@@ -5,12 +5,16 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 
 import type { JobStatusResponse, SummaryResponse } from "@fathom/api-client";
-import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
+import type { RealtimeChannel, SupabaseClient, User } from "@supabase/supabase-js";
 import { createApiClient } from "@fathom/api-client";
+
+import { AppShellHeader } from "../../../components/AppShellHeader";
+import { StreamingMarkdown } from "../../../components/StreamingMarkdown";
+import chrome from "../../../components/app-chrome.module.css";
 import styles from "./job.module.css";
 import { getApiErrorMessage } from "../../../lib/apiErrors";
+import { getAccountLabel } from "../../../lib/accountLabel";
 import { getSupabaseClient } from "../../../lib/supabaseClient";
-import { StreamingMarkdown } from "../../../components/StreamingMarkdown";
 
 const POLL_INTERVAL_MS = 2000;
 const STAGE_FALLBACK: Record<string, number> = {
@@ -30,6 +34,7 @@ export default function JobDetailPage() {
   const router = useRouter();
   const params = useParams();
   const jobId = useMemo(() => params?.jobId?.toString() ?? "", [params]);
+  const [user, setUser] = useState<User | null>(null);
   const [job, setJob] = useState<JobStatusResponse | null>(null);
   const [summary, setSummary] = useState<SummaryResponse | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
@@ -85,66 +90,72 @@ export default function JobDetailPage() {
     }
   }, []);
 
-  const handleJobPayload = useCallback(async (payload: JobStatusResponse, accessToken: string) => {
-    setJob(payload);
-    updateProgress(payload);
+  const handleJobPayload = useCallback(
+    async (payload: JobStatusResponse, accessToken: string) => {
+      setJob(payload);
+      updateProgress(payload);
 
-    const isStageComplete = payload.stage === "completed" || payload.stage === "cached";
+      const isStageComplete = payload.stage === "completed" || payload.stage === "cached";
 
-    if ((payload.status === "succeeded" || isStageComplete) && payload.summary_id) {
-      await fetchSummary(payload.summary_id, accessToken);
-      return true;
-    }
+      if ((payload.status === "succeeded" || isStageComplete) && payload.summary_id) {
+        await fetchSummary(payload.summary_id, accessToken);
+        return true;
+      }
 
-    if (payload.status === "failed") {
-      return true;
-    }
+      if (payload.status === "failed") {
+        return true;
+      }
 
-    return false;
-  }, [fetchSummary, updateProgress]);
+      return false;
+    },
+    [fetchSummary, updateProgress]
+  );
 
-  const startPolling = useCallback((accessToken: string) => {
-    if (pollingRef.current) {
-      return;
-    }
+  const startPolling = useCallback(
+    (accessToken: string) => {
+      if (pollingRef.current) {
+        return;
+      }
 
-    let delay = POLL_INTERVAL_MS;
-    const poll = async () => {
-      try {
-        const api = createApiClient(accessToken);
-        const { data, error: apiError } = await api.GET("/jobs/{job_id}", {
-          params: {
-            path: {
-              job_id: jobId
+      let delay = POLL_INTERVAL_MS;
+      const poll = async () => {
+        try {
+          const api = createApiClient(accessToken);
+          const { data, error: apiError } = await api.GET("/jobs/{job_id}", {
+            params: {
+              path: {
+                job_id: jobId
+              }
             }
-          }
-        });
+          });
 
-        if (apiError) {
-          const status = (apiError as { status?: number }).status;
-          if (status === 429) {
-            delay = Math.min(delay * 1.8, 15000);
-            pollingRef.current = setTimeout(poll, delay);
+          if (apiError) {
+            const status = (apiError as { status?: number }).status;
+            if (status === 429) {
+              delay = Math.min(delay * 1.8, 15000);
+              pollingRef.current = setTimeout(poll, delay);
+              return;
+            }
+            setError(getApiErrorMessage(apiError, "Unable to fetch job status."));
             return;
           }
-          setError(getApiErrorMessage(apiError, "Unable to fetch job status."));
-          return;
-        }
 
-        if (data) {
-          const isDone = await handleJobPayload(data, accessToken);
-          if (!isDone) {
-            delay = POLL_INTERVAL_MS;
-            pollingRef.current = setTimeout(poll, delay);
+          if (data) {
+            const isDone = await handleJobPayload(data, accessToken);
+            if (!isDone) {
+              delay = POLL_INTERVAL_MS;
+              pollingRef.current = setTimeout(poll, delay);
+            }
           }
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Something went wrong.");
         }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Something went wrong.");
-      }
-    };
+      };
 
-    void poll();
-  }, [handleJobPayload, jobId]);
+      void poll();
+    },
+    [handleJobPayload, jobId]
+  );
 
   useEffect(() => {
     if (!jobId) {
@@ -161,6 +172,8 @@ export default function JobDetailPage() {
           router.replace("/signin");
           return;
         }
+
+        setUser(sessionData.session.user);
 
         const accessToken = sessionData.session.access_token;
         const userId = sessionData.session.user.id;
@@ -243,6 +256,12 @@ export default function JobDetailPage() {
     };
   }, [handleJobPayload, jobId, router, startPolling]);
 
+  const handleSignOut = async () => {
+    const supabase = getSupabaseClient();
+    await supabase.auth.signOut();
+    router.replace("/signin");
+  };
+
   const isComplete = job?.status === "succeeded" || job?.stage === "completed" || job?.stage === "cached";
   const isFailed = job?.status === "failed";
   const markdownToRender = summary?.markdown ?? "";
@@ -256,12 +275,11 @@ export default function JobDetailPage() {
         ? "Briefing in progress"
         : "Preparing your briefing";
   const subhead = isComplete
-    ? "Your briefing is ready to read, export, and share."
+    ? "Your briefing is ready to read, export, and move into the rest of your work."
     : isFailed
-      ? "We ran into an issue. You can try again or start a fresh briefing."
-      : "We are translating the audio into a clean, structured briefing.";
+      ? "We ran into an issue. You can start again or return to the workspace."
+      : "Talven is turning the episode into a clean, readable briefing.";
   const isCached = job?.stage === "cached";
-  const isStreaming = !isComplete && !isFailed && !isCached;
   const showProgressPanel = !hasMarkdown && !isComplete && !isFailed && !isCached;
 
   const statusFallbackStage = job?.status === "running" ? "summarizing" : job?.status ?? "queued";
@@ -281,6 +299,8 @@ export default function JobDetailPage() {
         return "Preparing your briefing";
     }
   })();
+
+  const stageTone = isFailed ? chrome.statusPillDanger : isComplete ? chrome.statusPillSuccess : chrome.statusPillMuted;
 
   const handleGeneratePdf = async () => {
     if (!summary?.summary_id) {
@@ -322,159 +342,165 @@ export default function JobDetailPage() {
   };
 
   return (
-    <div className={styles.page}>
-      <header className={styles.header}>
-        <div className={styles.brand}>
-          <span className={styles.brandMark} aria-hidden="true" />
-          Talven
-        </div>
-        <div className={styles.headerActions}>
-          <Link className={styles.headerButton} href="/app">
-            Workspace
-          </Link>
-          <Link className={styles.headerButton} href="/">
-            Talven
-          </Link>
-        </div>
-      </header>
+    <div className={chrome.pageFrame}>
+      <AppShellHeader active={null} remainingSeconds={null} accountLabel={getAccountLabel(user)} onSignOut={handleSignOut} />
 
-      <main className={styles.main}>
-        <div className={styles.container}>
-          <section className={styles.hero}>
-            <h1 className={styles.heroTitle}>{headline}</h1>
-            <p className={styles.heroText}>{subhead}</p>
-            <div className={styles.heroMeta}>
-              <span className={showProgressPanel ? styles.pill : isComplete ? styles.pill : styles.pillMuted}>
-                {showProgressPanel ? displayStageLabel : isStreaming ? "Live" : "Final"}
-              </span>
+      <main className={chrome.mainFrame}>
+        <section className={chrome.heroBlock}>
+          <div>
+            <p className={chrome.heroEyebrow}>Briefing job</p>
+            <h1 className={chrome.heroTitle}>{headline}</h1>
+            <p className={chrome.heroText}>{subhead}</p>
+          </div>
+          <div className={chrome.heroMeta}>
+            <span className={chrome.statusPill}>{displayStageLabel}</span>
+            <span className={stageTone}>{isComplete ? "Final" : isFailed ? "Failed" : "Live"}</span>
+            <span className={chrome.statusPillMuted}>Job {jobId.slice(0, 8)}</span>
+          </div>
+        </section>
+
+        {showProgressPanel ? (
+          <section className={`${chrome.surfaceStrong} ${styles.loadingCard}`}>
+            <div className={styles.loadingTop}>
+              <div>
+                <h2 className={chrome.surfaceTitle}>Building your briefing</h2>
+                <p className={chrome.surfaceText}>{job?.status_message ?? "Your briefing will appear here as soon as we have content."}</p>
+              </div>
+              <span className={chrome.statusPillMuted}>{clampedProgress}%</span>
             </div>
-          </section>
 
-          {showProgressPanel ? (
-            <section className={styles.loadingSection}>
-              <div className={styles.loadingCard}>
-                <div className={styles.loadingTop}>
-                  <span className={styles.spinner} aria-hidden="true" />
-                  <div>
-                    <h2 className={styles.loadingTitle}>Building your briefing</h2>
-                    <p className={styles.loadingSubtitle}>{displayStageLabel}</p>
-                  </div>
-                </div>
+            <div className={chrome.progressTrack}>
+              <div className={chrome.progressFill} style={{ width: `${clampedProgress}%` }} />
+            </div>
 
-                <div className={styles.progressTrack}>
-                  <div className={styles.progressFill} style={{ width: `${clampedProgress}%` }} />
-                </div>
-                <div className={styles.loadingMeta}>
-                  <span>Your briefing will appear here once it’s ready.</span>
-                  <span>Usually a few minutes.</span>
-                </div>
+            <div className={styles.loadingMeta}>
+              <span>Usually a few minutes, depending on episode length.</span>
+              <span>{displayStageLabel}</span>
+            </div>
 
-                <div className={styles.loadingSteps}>
-                  {[
-                    { key: "listen", label: "Listening", hint: "Transcribing the audio" },
-                    { key: "summarize", label: "Summarizing", hint: "Structuring key insights" },
-                    { key: "polish", label: "Polishing", hint: "Final formatting" }
-                  ].map((step, index) => {
-                    const activeIndex = normalizedStage === "rendering" ? 2 : normalizedStage === "summarizing" ? 1 : 0;
-                    const isStepActive = index === activeIndex;
-                    const isStepComplete = index < activeIndex;
+            <div className={chrome.stepList}>
+              {[
+                { key: "listen", label: "Listening", hint: "Transcribing the audio" },
+                { key: "summarize", label: "Summarizing", hint: "Extracting the signal" },
+                { key: "polish", label: "Polishing", hint: "Final structure and export readiness" }
+              ].map((step, index) => {
+                const activeIndex = normalizedStage === "rendering" ? 2 : normalizedStage === "summarizing" ? 1 : 0;
+                const dotClass =
+                  index < activeIndex
+                    ? chrome.stepDotComplete
+                    : index === activeIndex
+                      ? chrome.stepDotActive
+                      : chrome.stepDot;
 
-                    return (
-                      <div key={step.key} className={styles.loadingStep}>
-                        <span
-                          className={`${styles.stageDot} ${
-                            isStepComplete
-                              ? styles.stageDotComplete
-                              : isStepActive
-                                ? styles.stageDotActive
-                                : ""
-                          }`}
-                        />
-                        <div>
-                          <div className={styles.stageLabel}>{step.label}</div>
-                          <div className={styles.stageHint}>{step.hint}</div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {error ? <div className={styles.errorCard}>{error}</div> : null}
-              </div>
-            </section>
-          ) : (
-            <section className={styles.layout}>
-              <div className={styles.card}>
-                <div className={styles.cardHeader}>
-                  <div>
-                    <h2 className={styles.cardTitle}>Briefing</h2>
-                    <p className={styles.cardSubtitle}>
-                      {isComplete
-                        ? "Your briefing is finalized below."
-                        : "We refresh the briefing status as it’s prepared."}
-                    </p>
-                  </div>
-                  <span className={isComplete ? styles.pill : styles.pillMuted}>{isComplete ? "Final" : "Updating"}</span>
-                </div>
-                <div className={styles.summaryBody}>
-                  {markdownToRender ? (
-                    <StreamingMarkdown
-                      markdown={markdownToRender}
-                      isStreaming={false}
-                      className={styles.markdown}
-                      cursorClassName={styles.streamingCursor}
-                    />
-                  ) : (
-                    <div className={styles.emptyState}>
-                      {isFailed
-                        ? "We could not render the briefing. Try again when you’re ready."
-                        : "Your briefing will appear here as soon as we have content."}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <aside className={styles.sideColumn}>
-                <div className={styles.card}>
-                  <div className={styles.cardHeader}>
+                return (
+                  <div key={step.key} className={chrome.stepRow}>
+                    <span className={dotClass} />
                     <div>
-                      <h2 className={styles.cardTitle}>Export</h2>
-                      <p className={styles.cardSubtitle}>
-                        Save the briefing as a PDF or start a new one.
-                      </p>
+                      <p className={chrome.stepLabel}>{step.label}</p>
+                      <p className={chrome.stepHint}>{step.hint}</p>
                     </div>
                   </div>
-                  <div className={styles.actions}>
-                    {pdfUrl ? (
-                      <a className={styles.buttonPrimary} href={pdfUrl} target="_blank" rel="noreferrer">
-                        Download PDF
-                      </a>
-                    ) : (
-                      <button
-                        className={styles.buttonPrimary}
-                        type="button"
-                        onClick={handleGeneratePdf}
-                        disabled={pdfLoading || !job?.summary_id}
-                      >
-                        {pdfLoading ? "Preparing PDF…" : "Generate PDF"}
-                      </button>
-                    )}
-                    <Link className={styles.buttonSecondary} href="/app">
-                      New briefing
-                    </Link>
-                  </div>
-                  {pdfError ? <div className={styles.errorCard}>{pdfError}</div> : null}
-                </div>
+                );
+              })}
+            </div>
 
-                {job?.status === "failed" && (
-                  <div className={styles.errorCard}>Error: {job.error_message ?? "Job failed."}</div>
-                )}
-                {error && <div className={styles.errorCard}>{error}</div>}
-              </aside>
-            </section>
-          )}
-        </div>
-     </main>
+            {error ? <div className={styles.errorCard}>{error}</div> : null}
+          </section>
+        ) : (
+          <section className={chrome.readerLayout}>
+            <article className={`${chrome.surfaceStrong} ${chrome.readerMain} ${styles.readerCard}`}>
+              <div className={styles.readerHeader}>
+                <div>
+                  <h2 className={chrome.surfaceTitle}>Briefing</h2>
+                  <p className={chrome.surfaceText}>
+                    {isComplete
+                      ? "Final Talven output, ready to read and export."
+                      : "The document updates as the pipeline finishes the final pass."}
+                  </p>
+                </div>
+                <span className={isComplete ? chrome.statusPillSuccess : chrome.statusPillMuted}>
+                  {isComplete ? "Final" : "Updating"}
+                </span>
+              </div>
+
+              {markdownToRender ? (
+                <StreamingMarkdown
+                  markdown={markdownToRender}
+                  isStreaming={false}
+                  className={styles.markdown}
+                  cursorClassName={styles.streamingCursor}
+                />
+              ) : (
+                <p className={chrome.emptyState}>
+                  {isFailed
+                    ? "We could not render the briefing. Start a new one when you are ready."
+                    : "Your briefing will appear here as soon as Talven has content ready."}
+                </p>
+              )}
+            </article>
+
+            <aside className={chrome.readerSide}>
+              <div className={chrome.readerSideCard}>
+                <div className={chrome.surfaceHeader}>
+                  <div>
+                    <h2 className={chrome.surfaceTitle}>Export</h2>
+                    <p className={chrome.surfaceText}>Save the finished brief or move back into the desk.</p>
+                  </div>
+                </div>
+                <div className={chrome.actionRow}>
+                  {pdfUrl ? (
+                    <a className={chrome.primaryButton} href={pdfUrl} target="_blank" rel="noreferrer">
+                      Download PDF
+                    </a>
+                  ) : (
+                    <button
+                      className={chrome.primaryButton}
+                      type="button"
+                      onClick={handleGeneratePdf}
+                      disabled={pdfLoading || !job?.summary_id}
+                    >
+                      {pdfLoading ? "Preparing PDF..." : "Generate PDF"}
+                    </button>
+                  )}
+                  <Link className={chrome.secondaryButton} href="/app">
+                    New briefing
+                  </Link>
+                </div>
+                {pdfError ? <p className={`${chrome.inlineStatus} ${chrome.inlineStatusError}`}>{pdfError}</p> : null}
+              </div>
+
+              <div className={chrome.readerSideCard}>
+                <div className={chrome.surfaceHeader}>
+                  <div>
+                    <h2 className={chrome.surfaceTitle}>Job state</h2>
+                    <p className={chrome.surfaceText}>Pipeline status and utility details for this briefing.</p>
+                  </div>
+                </div>
+                <div className={styles.metaList}>
+                  <div className={styles.metaRow}>
+                    <span className={styles.metaLabel}>Stage</span>
+                    <span className={styles.metaValue}>{displayStageLabel}</span>
+                  </div>
+                  <div className={styles.metaRow}>
+                    <span className={styles.metaLabel}>Progress</span>
+                    <span className={styles.metaValue}>{clampedProgress}%</span>
+                  </div>
+                  <div className={styles.metaRow}>
+                    <span className={styles.metaLabel}>Summary ID</span>
+                    <span className={styles.metaValue}>{summary?.summary_id ?? "Pending"}</span>
+                  </div>
+                </div>
+                {job?.status_message ? <p className={chrome.subtleText}>{job.status_message}</p> : null}
+              </div>
+
+              {job?.status === "failed" ? (
+                <div className={styles.errorCard}>Error: {job.error_message ?? "Job failed."}</div>
+              ) : null}
+              {error ? <div className={styles.errorCard}>{error}</div> : null}
+            </aside>
+          </section>
+        )}
+      </main>
     </div>
   );
 }

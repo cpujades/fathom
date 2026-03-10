@@ -25,6 +25,9 @@ from fathom.crud.supabase.billing import (
     upsert_credit_lot,
     upsert_subscription_entitlement_state,
 )
+from fathom.crud.supabase.jobs import fetch_jobs_by_ids
+from fathom.crud.supabase.summaries import fetch_summaries_by_ids
+from fathom.crud.supabase.transcripts import fetch_transcripts_by_ids
 from fathom.services.supabase import create_supabase_admin_client
 
 logger = logging.getLogger(__name__)
@@ -340,7 +343,36 @@ async def get_usage_overview(user_id: str, settings: Settings) -> UsageOverview:
 
 async def get_usage_history(user_id: str, settings: Settings, limit: int = 50) -> list[dict[str, Any]]:
     admin_client = await create_supabase_admin_client(settings)
-    return await fetch_usage_history(admin_client, user_id=user_id, limit=limit)
+    entries = await fetch_usage_history(admin_client, user_id=user_id, limit=limit)
+    job_ids = [str(entry.get("job_id")) for entry in entries if entry.get("job_id")]
+    if not job_ids:
+        return entries
+
+    jobs = await fetch_jobs_by_ids(admin_client, job_ids)
+    summary_ids = [str(job.get("summary_id")) for job in jobs if job.get("summary_id")]
+    summaries = await fetch_summaries_by_ids(admin_client, summary_ids)
+    transcript_ids = [str(summary.get("transcript_id")) for summary in summaries if summary.get("transcript_id")]
+    transcripts = await fetch_transcripts_by_ids(admin_client, transcript_ids)
+
+    job_by_id = {str(job.get("id")): job for job in jobs if job.get("id")}
+    summary_by_id = {str(summary.get("id")): summary for summary in summaries if summary.get("id")}
+    transcript_by_id = {str(transcript.get("id")): transcript for transcript in transcripts if transcript.get("id")}
+
+    for entry in entries:
+        job_id = entry.get("job_id")
+        if not job_id:
+            entry["title"] = None
+            continue
+
+        job = job_by_id.get(str(job_id))
+        summary_id = job.get("summary_id") if isinstance(job, dict) else None
+        summary = summary_by_id.get(str(summary_id)) if summary_id else None
+        transcript_id = summary.get("transcript_id") if isinstance(summary, dict) else None
+        transcript = transcript_by_id.get(str(transcript_id)) if transcript_id else None
+        source_title = transcript.get("source_title") if isinstance(transcript, dict) else None
+        entry["title"] = str(source_title).strip() if isinstance(source_title, str) and source_title.strip() else None
+
+    return entries
 
 
 async def record_usage_for_job(

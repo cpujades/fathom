@@ -1,216 +1,71 @@
-.page {
-  min-height: 100vh;
-  background: radial-gradient(circle at 2% 10%, rgba(40, 92, 70, 0.12), transparent 38%),
-    radial-gradient(circle at 94% 88%, rgba(142, 123, 73, 0.08), transparent 35%), #141f1a;
-  color: #f2efe5;
+.workspaceShell {
+  width: min(980px, 100%);
+  margin: 9rem auto 0;
 }
 
-.main {
-  width: min(1120px, 96vw);
-  margin: 0 auto;
-  padding: 1rem 0 2.5rem;
+.workspacePanel {
   display: grid;
-  gap: 0.9rem;
+  gap: 1.15rem;
+  padding: 1.7rem;
 }
 
-.commandGrid {
+.workspaceTitle {
+  margin: 0;
+  color: #18211d;
+  font-size: clamp(1.35rem, 2vw, 1.85rem);
+  line-height: 1.08;
+  letter-spacing: -0.04em;
+  font-weight: 700;
+  max-width: none;
+}
+
+.commandBlock {
   display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(0, 0.95fr);
-  gap: 0.9rem;
-  align-items: stretch;
+  gap: 0.95rem;
+  margin-top: 0.6rem;
 }
 
-.card {
+.commandRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: center;
+}
+
+.commandField {
+  display: block;
+}
+
+.commandInput {
+  min-height: 58px;
   border-radius: 18px;
-  border: 1px solid rgba(117, 140, 126, 0.18);
-  background: linear-gradient(170deg, rgba(18, 28, 23, 0.9), rgba(13, 22, 18, 0.8));
-  padding: 1rem;
-}
-
-.commandTitle {
-  margin: 0;
-  font-size: clamp(1.22rem, 2.2vw, 1.65rem);
-  line-height: 1.2;
-}
-
-.commandText {
-  margin: 0.45rem 0 0;
-  color: #b6c0b6;
-  max-width: 60ch;
-}
-
-.inputRow {
-  margin-top: 0.95rem;
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 0.55rem;
-}
-
-.input {
-  border-radius: 12px;
-  border: 1px solid rgba(117, 140, 126, 0.22);
-  background: rgba(10, 18, 15, 0.82);
-  color: #f2efe5;
-  padding: 0.74rem 0.82rem;
-  font-size: 0.95rem;
-}
-
-.primaryButton {
-  border-radius: 12px;
-  border: 1px solid rgba(88, 110, 97, 0.38);
-  background: linear-gradient(150deg, rgba(40, 92, 70, 0.98), rgba(23, 56, 43, 0.92));
-  color: #f4efe2;
-  padding: 0.7rem 1rem;
-  font-weight: 700;
-  cursor: pointer;
-  transition: transform 140ms ease;
-}
-
-.primaryButton:hover {
-  transform: translateY(-1px);
-}
-
-.primaryButton:disabled {
-  opacity: 0.65;
-  cursor: not-allowed;
-  transform: none;
-}
-
-.inlineStatus {
-  margin: 0.62rem 0 0;
-  color: #fca5a5;
-  font-size: 0.88rem;
-}
-
-.inputHelp {
-  margin: 0.52rem 0 0;
-  color: #9da89d;
-  font-size: 0.86rem;
-}
-
-.stateHeader {
-  margin: 0;
-  font-size: 1.05rem;
-}
-
-.stateGrid {
-  margin-top: 0.7rem;
-  display: grid;
-  gap: 0.55rem;
-}
-
-.stateTile {
-  border: 1px solid rgba(117, 140, 126, 0.18);
-  border-radius: 11px;
-  padding: 0.64rem 0.68rem;
-  background: rgba(243, 235, 218, 0.04);
-}
-
-.stateLabel {
-  margin: 0;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: #99a598;
-  font-size: 0.67rem;
-}
-
-.stateValue {
-  margin: 0.22rem 0 0;
+  padding: 0.95rem 1rem;
   font-size: 0.98rem;
-  font-weight: 700;
 }
 
-.stateHint {
-  margin: 0.18rem 0 0;
-  color: #99a598;
-  font-size: 0.8rem;
-}
-
-.quickLinks {
-  margin-top: 0.8rem;
+.commandActions {
   display: flex;
-  gap: 0.45rem;
-  flex-wrap: wrap;
+  align-items: center;
 }
 
-.linkButton {
-  border-radius: 999px;
-  border: 1px solid rgba(117, 140, 126, 0.22);
-  background: rgba(243, 235, 218, 0.06);
-  color: #f2efe5;
-  padding: 0.34rem 0.7rem;
-  font-size: 0.8rem;
-  font-weight: 600;
+.commandButton {
+  min-height: 52px;
+  padding: 0.82rem 1.14rem;
+  border-radius: 18px;
+  font-size: 0.84rem;
+  white-space: nowrap;
 }
 
-.recentTitle {
-  margin: 0;
-  font-size: 1.04rem;
-}
+@media (max-width: 720px) {
+  .workspaceShell {
+    margin-top: 5rem;
+  }
 
-.recentText {
-  margin: 0.38rem 0 0;
-  color: #b6c0b6;
-}
+  .workspacePanel {
+    padding: 1.2rem;
+  }
 
-.list {
-  margin-top: 0.7rem;
-  display: grid;
-  gap: 0.5rem;
-}
-
-.row {
-  border: 1px solid rgba(117, 140, 126, 0.18);
-  border-radius: 11px;
-  background: rgba(243, 235, 218, 0.04);
-  padding: 0.6rem 0.7rem;
-  display: flex;
-  justify-content: space-between;
-  gap: 0.9rem;
-}
-
-.rowTitle {
-  margin: 0;
-  font-weight: 700;
-  font-size: 0.88rem;
-}
-
-.rowMeta {
-  margin: 0.2rem 0 0;
-  color: #99a598;
-  font-size: 0.78rem;
-}
-
-.rowRight {
-  display: grid;
-  gap: 0.2rem;
-  text-align: right;
-  color: #99a598;
-  font-size: 0.79rem;
-}
-
-.emptyState {
-  margin: 0.72rem 0 0;
-  color: #99a598;
-  font-size: 0.9rem;
-}
-
-@media (max-width: 980px) {
-  .commandGrid {
+  .commandRow {
     grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 700px) {
-  .inputRow {
-    grid-template-columns: 1fr;
-  }
-
-  .row {
-    flex-direction: column;
-  }
-
-  .rowRight {
-    text-align: left;
   }
 }

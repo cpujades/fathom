@@ -54,6 +54,7 @@ class UsageOverviewResponse(BaseModel):
 
 class UsageHistoryEntry(BaseModel):
     job_id: UUID | None
+    title: str | None = None
     seconds_used: int
     source: str
     created_at: datetime

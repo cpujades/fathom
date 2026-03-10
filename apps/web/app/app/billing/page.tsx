@@ -10,11 +10,15 @@ import type {
   PlanResponse,
   UsageOverviewResponse
 } from "@fathom/api-client";
+import type { User } from "@supabase/supabase-js";
 import { createApiClient } from "@fathom/api-client";
 
+import { AppShellHeader } from "../../components/AppShellHeader";
+import chrome from "../../components/app-chrome.module.css";
 import styles from "./billing.module.css";
 import { formatDate, formatDuration } from "../../lib/format";
 import { getApiErrorMessage } from "../../lib/apiErrors";
+import { getAccountLabel } from "../../lib/accountLabel";
 import { getSupabaseClient } from "../../lib/supabaseClient";
 
 type PlanGroup = {
@@ -53,12 +57,26 @@ const describeSubscriptionStatus = (status: string | null): string => {
   return status.replaceAll("_", " ");
 };
 
+const getStatusTone = (status: string | null): string => {
+  if (status === "active" || status === "paid" || status === "refunded") {
+    return chrome.statusPillSuccess;
+  }
+  if (status === "refund_pending" || status === "canceled") {
+    return chrome.statusPillWarning;
+  }
+  if (status === "revoked") {
+    return chrome.statusPillDanger;
+  }
+  return chrome.statusPillMuted;
+};
+
 function BillingPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const checkoutStatus = searchParams.get("checkout");
   const customerSessionToken = searchParams.get("customer_session_token");
 
+  const [user, setUser] = useState<User | null>(null);
   const [plans, setPlans] = useState<PlanResponse[]>([]);
   const [usage, setUsage] = useState<UsageOverviewResponse | null>(null);
   const [account, setAccount] = useState<BillingAccountResponse | null>(null);
@@ -67,6 +85,7 @@ function BillingPageContent() {
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
   const [refundLoading, setRefundLoading] = useState<string | null>(null);
+  const [offerMode, setOfferMode] = useState<"subscription" | "pack">("subscription");
 
   const [syncStatus, setSyncStatus] = useState<"syncing" | "synced" | "delayed" | null>(null);
   const [refundSyncOrderId, setRefundSyncOrderId] = useState<string | null>(null);
@@ -96,6 +115,8 @@ function BillingPageContent() {
           return null;
         }
 
+        setUser(sessionData.session.user);
+
         const api = createApiClient(sessionData.session.access_token);
         const [
           { data: plansData, error: plansError },
@@ -114,7 +135,7 @@ function BillingPageContent() {
         }
 
         if (accountError) {
-          setError(getApiErrorMessage(accountError, "Unable to load billing account."));
+          setError(getApiErrorMessage(accountError, "Unable to load billing details."));
           return null;
         }
 
@@ -125,6 +146,7 @@ function BillingPageContent() {
         setPlans(normalizedPlans);
         setUsage(normalizedUsage);
         setAccount(normalizedAccount);
+
         return {
           plansData: normalizedPlans,
           usageData: normalizedUsage,
@@ -199,14 +221,14 @@ function BillingPageContent() {
     return [
       {
         key: "subscription",
-        label: "Subscriptions",
-        description: "Recurring monthly credits with predictable usage coverage.",
+        label: "Monthly access",
+        description: "Best for steady listening and recurring briefing volume.",
         plans: subscriptions
       },
       {
         key: "pack",
-        label: "Credit packs",
-        description: "One-time top ups. Useful for spikes and seasonal demand.",
+        label: "One-time packs",
+        description: "Add reserve time when you need extra coverage without a recurring change.",
         plans: packs
       }
     ];
@@ -215,33 +237,42 @@ function BillingPageContent() {
   const activePackCount = useMemo(() => {
     return (account?.packs ?? []).filter((pack) => pack.remaining_seconds > 0 && pack.status !== "refunded").length;
   }, [account?.packs]);
+
   const canManageBilling = useMemo(() => {
     return (account?.orders ?? []).some((order) => order.paid_amount_cents > 0);
   }, [account?.orders]);
 
   const subscriptionStatusText = describeSubscriptionStatus(account?.subscription.status ?? null);
-  const overviewMetaText = useMemo(() => {
-    const parts: string[] = [];
-    parts.push(activePackCount > 0 ? `${activePackCount} active pack(s)` : "No active packs");
 
-    if (activePackCount > 0 && usage?.pack_expires_at) {
-      parts.push(`Next pack expiry ${formatDate(usage.pack_expires_at)}`);
+  const accessNote = useMemo(() => {
+    if ((usage?.pack_remaining_seconds ?? 0) > 0 && usage?.pack_expires_at) {
+      return `Pack reserve expires ${formatDate(usage.pack_expires_at)}.`;
     }
 
     const subscriptionPlanName = account?.subscription.plan_name ?? usage?.subscription_plan_name;
     const hasPaidPlan = Boolean(subscriptionPlanName && subscriptionPlanName.toLowerCase() !== "free");
     if (hasPaidPlan && account?.subscription.period_end) {
-      parts.push(`Current period ends ${formatDate(account.subscription.period_end)}`);
+      return `Current plan renews ${formatDate(account.subscription.period_end)}.`;
     }
 
-    return parts.join(" - ");
+    return "Add more listening time whenever you need it.";
   }, [
-    activePackCount,
+    usage?.pack_remaining_seconds,
     usage?.pack_expires_at,
     usage?.subscription_plan_name,
     account?.subscription.plan_name,
     account?.subscription.period_end
   ]);
+
+  const visiblePlanGroup = useMemo(() => {
+    return planGroups.find((group) => group.key === offerMode) ?? null;
+  }, [offerMode, planGroups]);
+
+  const handleSignOut = async () => {
+    const supabase = getSupabaseClient();
+    await supabase.auth.signOut();
+    router.replace("/signin");
+  };
 
   const handleCheckout = async (planId: string) => {
     if (checkoutLoading) {
@@ -415,20 +446,20 @@ function BillingPageContent() {
 
   const renderRefundAction = (pack: PackBillingState) => {
     if (pack.status === "refund_pending") {
-      return <span className={styles.inlineState}>Refund pending confirmation</span>;
+      return <span className={chrome.statusPillWarning}>Refund pending</span>;
     }
 
     if (pack.status === "refunded") {
-      return <span className={styles.inlineState}>Refund completed</span>;
+      return <span className={chrome.statusPillSuccess}>Refunded</span>;
     }
 
     if (!pack.is_refundable) {
-      return <span className={styles.inlineState}>Refund unavailable</span>;
+      return <span className={chrome.statusPillMuted}>Unavailable</span>;
     }
 
     return (
       <button
-        className={styles.secondaryButton}
+        className={chrome.secondaryButton}
         type="button"
         onClick={() => handleRefund(pack.polar_order_id)}
         disabled={refundLoading === pack.polar_order_id}
@@ -442,11 +473,12 @@ function BillingPageContent() {
 
   if (loading) {
     return (
-      <div className={styles.page}>
-        <main className={styles.main}>
-          <section className={styles.panel}>
-            <h1 className={styles.panelTitle}>Loading billing workspace...</h1>
-            <p className={styles.panelText}>Fetching plans, usage, and billing state.</p>
+      <div className={chrome.pageFrame}>
+        <AppShellHeader active="billing" remainingSeconds={null} accountLabel={null} onSignOut={() => undefined} />
+        <main className={chrome.mainFrame}>
+          <section className={chrome.surface}>
+            <h1 className={chrome.surfaceTitle}>Loading your access...</h1>
+            <p className={chrome.surfaceText}>Fetching plans, balances, and billing details.</p>
           </section>
         </main>
       </div>
@@ -454,225 +486,236 @@ function BillingPageContent() {
   }
 
   return (
-    <div className={styles.page}>
-      <div className={styles.backgroundGlow} aria-hidden="true" />
-      <div className={styles.backgroundGrid} aria-hidden="true" />
+    <div className={chrome.pageFrame}>
+      <AppShellHeader
+        active="billing"
+        remainingSeconds={usage?.total_remaining_seconds ?? null}
+        accountLabel={getAccountLabel(user)}
+        onSignOut={handleSignOut}
+      />
 
-      <header className={styles.header}>
-        <div className={styles.headerInner}>
-          <div className={styles.brandBlock}>
-            <p className={styles.eyebrow}>Talven</p>
-            <h1 className={styles.pageTitle}>Billing</h1>
-            <p className={styles.pageSubtitle}>Manage your plan, top up credits, and handle refunds in one place.</p>
+      <main className={chrome.mainFrame}>
+        <section className={chrome.heroBlock}>
+          <div>
+            <p className={chrome.heroEyebrow}>Billing</p>
+            <h1 className={chrome.heroTitle}>Your access</h1>
+            <p className={chrome.heroText}>See what listening time you have now, then add more when you need it.</p>
           </div>
-          <div className={styles.headerActions}>
-            <div
-              className={styles.portalControl}
-              title={!canManageBilling ? "Available after your first paid purchase." : undefined}
+          <div className={chrome.heroActions}>
+            <button
+              className={chrome.primaryButton}
+              type="button"
+              onClick={handlePortal}
+              disabled={portalLoading || !canManageBilling}
             >
-              <button
-                className={styles.primaryButton}
-                type="button"
-                onClick={handlePortal}
-                disabled={portalLoading || !canManageBilling}
-                aria-describedby={!canManageBilling ? "portal-disabled-hint" : undefined}
-              >
-                {portalLoading ? "Opening portal..." : "Manage subscription"}
-              </button>
-              {!canManageBilling ? (
-                <span id="portal-disabled-hint" role="tooltip" className={styles.portalHintTooltip}>
-                  Available after your first paid purchase.
-                </span>
-              ) : null}
-            </div>
-            <Link className={styles.ghostButton} href="/app">
-              Back to app
+              {portalLoading ? "Opening portal..." : "Manage plan"}
+            </button>
+            <Link className={chrome.secondaryButton} href="/app">
+              Back to workspace
             </Link>
           </div>
-        </div>
-      </header>
+        </section>
 
-      <main className={styles.main}>
         {syncStatus ? (
-          <section className={`${styles.notice} ${syncStatus === "delayed" ? styles.noticeWarning : styles.noticeInfo}`}>
-            <h2 className={styles.noticeTitle}>Checkout sync status</h2>
-            <p className={styles.noticeText}>
+          <section className={`${chrome.notice} ${syncStatus === "delayed" ? chrome.noticeWarning : chrome.noticeInfo}`}>
+            <h2 className={chrome.noticeTitle}>Purchase status</h2>
+            <p className={chrome.noticeText}>
               {syncStatus === "syncing"
-                ? "Payment received. Syncing credits and billing records..."
+                ? "Payment received. Updating your access now..."
                 : syncStatus === "synced"
-                  ? "Billing synced. Your purchase is now reflected in your account."
-                  : "Payment succeeded but sync is delayed. Wait a moment or refresh this page."}
+                  ? "Your access has been updated."
+                  : "Payment succeeded, but the update is taking longer than expected. Refresh in a moment."}
             </p>
           </section>
         ) : null}
 
         {refundSyncOrderId && refundSyncStatus ? (
-          <section
-            className={`${styles.notice} ${
-              refundSyncStatus === "delayed" ? styles.noticeWarning : styles.noticeInfo
-            }`}
-          >
-            <h2 className={styles.noticeTitle}>Refund sync status</h2>
-            <p className={styles.noticeText}>
+          <section className={`${chrome.notice} ${refundSyncStatus === "delayed" ? chrome.noticeWarning : chrome.noticeInfo}`}>
+            <h2 className={chrome.noticeTitle}>Refund status</h2>
+            <p className={chrome.noticeText}>
               {refundSyncStatus === "syncing"
-                ? "Refund requested. Waiting for Polar confirmation..."
-                : "Refund is still processing. This can take a few minutes, no extra action needed."}
+                ? "Refund requested. Waiting for confirmation..."
+                : "Refund is still processing. This can take a few minutes."}
             </p>
           </section>
         ) : null}
 
         {error ? (
-          <section className={`${styles.notice} ${styles.noticeError}`}>
-            <h2 className={styles.noticeTitle}>Billing action failed</h2>
-            <p className={styles.noticeText}>{error}</p>
+          <section className={`${chrome.notice} ${chrome.noticeError}`}>
+            <h2 className={chrome.noticeTitle}>Billing action failed</h2>
+            <p className={chrome.noticeText}>{error}</p>
           </section>
         ) : null}
 
-        <section className={styles.panel}>
-          <div className={styles.panelHeader}>
+        <section className={`${chrome.surface} ${styles.accessSection}`}>
+          <div className={chrome.surfaceHeader}>
             <div>
-              <h2 className={styles.panelTitle}>Account overview</h2>
-              <p className={styles.panelText}>Your current credits and subscription status.</p>
+              <h2 className={chrome.surfaceTitle}>Current access</h2>
+              <p className={chrome.surfaceText}>What you have now, with room to add more only when you need it.</p>
             </div>
-            <div className={styles.panelMeta}>
-              <span>Plan: {account?.subscription.plan_name ?? usage?.subscription_plan_name ?? "Free"}</span>
-              <span>Status: {subscriptionStatusText}</span>
-            </div>
+            <span className={getStatusTone(account?.subscription.status ?? null)}>{subscriptionStatusText}</span>
           </div>
 
-          <div className={styles.overviewStrip}>
-            <article className={styles.overviewStat}>
-              <p className={styles.overviewLabel}>Total remaining</p>
-              <p className={styles.overviewValue}>{usage ? formatDuration(usage.total_remaining_seconds) : "-"}</p>
+          <div className={styles.accessSummary}>
+            <article className={styles.accessStat}>
+              <p className={styles.accessLabel}>Available time</p>
+              <p className={styles.accessValue}>{usage ? formatDuration(usage.total_remaining_seconds) : "-"}</p>
             </article>
-            <article className={styles.overviewStat}>
-              <p className={styles.overviewLabel}>Subscription</p>
-              <p className={styles.overviewValue}>{formatDuration(usage?.subscription_remaining_seconds ?? 0)}</p>
+            <article className={styles.accessStat}>
+              <p className={styles.accessLabel}>Current plan</p>
+              <p className={styles.accessValue}>{account?.subscription.plan_name ?? usage?.subscription_plan_name ?? "Free"}</p>
+              <p className={styles.accessHint}>{subscriptionStatusText}</p>
             </article>
-            <article className={styles.overviewStat}>
-              <p className={styles.overviewLabel}>Packs</p>
-              <p className={styles.overviewValue}>{formatDuration(usage?.pack_remaining_seconds ?? 0)}</p>
-            </article>
-            <article className={styles.overviewStat}>
-              <p className={styles.overviewLabel}>Debt</p>
-              <p className={styles.overviewValue}>{formatDuration(usage?.debt_seconds ?? 0)}</p>
-              <p className={styles.overviewHint}>{usage?.is_blocked ? "Blocked" : "Healthy"}</p>
-            </article>
-          </div>
-
-          <p className={styles.overviewMeta}>{overviewMetaText}</p>
-        </section>
-
-        <section className={styles.panel}>
-          <div className={styles.panelHeader}>
-            <div>
-              <h2 className={styles.panelTitle}>Upgrade or top up</h2>
-              <p className={styles.panelText}>Pick the plan that best matches your monthly volume.</p>
-            </div>
-          </div>
-
-          <div className={styles.planGroupWrap}>
-            {planGroups.map((group) => (
-              <section key={group.key} className={styles.planGroup}>
-                <header className={styles.planGroupHeader}>
-                  <h3 className={styles.planGroupTitle}>{group.label}</h3>
-                  <p className={styles.planGroupText}>{group.description}</p>
-                </header>
-
-                <div className={styles.planGrid}>
-                  {group.plans.map((plan) => {
-                    const isCurrentSubscription =
-                      group.key === "subscription" &&
-                      account?.subscription.status === "active" &&
-                      account.subscription.plan_name === plan.name;
-
-                    return (
-                      <article className={styles.planCard} key={plan.plan_id}>
-                        <div>
-                          <p className={styles.planName}>{plan.name}</p>
-                          <p className={styles.planPrice}>
-                            {formatPrice(plan.amount_cents, plan.currency, plan.billing_interval)}
-                          </p>
-                          <p className={styles.planCredits}>{formatDuration(plan.quota_seconds ?? 0)} included</p>
-                        </div>
-                        <button
-                          className={styles.secondaryButton}
-                          type="button"
-                          onClick={() => handleCheckout(plan.plan_id)}
-                          disabled={checkoutLoading === plan.plan_id || isCurrentSubscription}
-                        >
-                          {checkoutLoading === plan.plan_id
-                            ? "Opening Polar..."
-                            : isCurrentSubscription
-                              ? "Current subscription"
-                              : "Select access"}
-                        </button>
-                      </article>
-                    );
-                  })}
-                </div>
-              </section>
-            ))}
-          </div>
-        </section>
-
-        <section className={styles.panel}>
-          <div className={styles.panelHeader}>
-            <div>
-              <h2 className={styles.panelTitle}>Orders and refunds</h2>
-              <p className={styles.panelText}>
-                Refunds are one-time per pack order and based on unused credits. Processing can take a few minutes.
+            <article className={styles.accessStat}>
+              <p className={styles.accessLabel}>Pack reserve</p>
+              <p className={styles.accessValue}>{formatDuration(usage?.pack_remaining_seconds ?? 0)}</p>
+              <p className={styles.accessHint}>
+                {(usage?.pack_remaining_seconds ?? 0) > 0 ? `Expires ${formatDate(usage?.pack_expires_at ?? null)}` : "Add packs anytime"}
               </p>
+            </article>
+          </div>
+
+          <p className={styles.accessNote}>{accessNote}</p>
+        </section>
+
+        <section className={`${chrome.surface} ${styles.offerSection}`}>
+          <div className={chrome.surfaceHeader}>
+            <div>
+              <h2 className={chrome.surfaceTitle}>Get more listening time</h2>
+              <p className={chrome.surfaceText}>Choose monthly access or add a one-time reserve when your listening expands.</p>
             </div>
           </div>
 
-          <h3 className={styles.subsectionTitle}>Purchased packs</h3>
-          {!account || account.packs.length === 0 ? (
-            <p className={styles.emptyState}>No packs purchased yet.</p>
-          ) : (
-            <div className={styles.packList}>
-              {account.packs.map((pack) => (
-                <article className={styles.packCard} key={pack.polar_order_id}>
-                  <div>
-                    <p className={styles.packTitle}>{pack.plan_name ?? "Pack"}</p>
-                    <p className={styles.stateText}>Status: {pack.status.replaceAll("_", " ")}</p>
-                    <p className={styles.stateText}>
-                      Used {formatDuration(pack.consumed_seconds)} / {formatDuration(pack.granted_seconds)}
-                    </p>
-                    <p className={styles.stateText}>Remaining: {formatDuration(pack.remaining_seconds)}</p>
-                    <p className={styles.stateText}>Expires: {formatDate(pack.expires_at)}</p>
-                  </div>
-                  <div className={styles.packAction}>{renderRefundAction(pack)}</div>
-                </article>
-              ))}
-            </div>
-          )}
+          <div className={styles.offerSwitch}>
+            <button
+              className={`${styles.offerSwitchButton} ${offerMode === "subscription" ? styles.offerSwitchButtonActive : ""}`}
+              type="button"
+              onClick={() => setOfferMode("subscription")}
+            >
+              Monthly access
+            </button>
+            <button
+              className={`${styles.offerSwitchButton} ${offerMode === "pack" ? styles.offerSwitchButtonActive : ""}`}
+              type="button"
+              onClick={() => setOfferMode("pack")}
+            >
+              One-time packs
+            </button>
+          </div>
 
-          <h3 className={styles.subsectionTitle}>Recent billing activity</h3>
-          {!account || account.orders.length === 0 ? (
-            <p className={styles.emptyState}>No billing events yet.</p>
-          ) : (
-            <div className={styles.historyList}>
-              {account.orders.slice(0, 12).map((entry: BillingOrderHistoryEntry) => (
-                <article className={styles.historyRow} key={entry.polar_order_id}>
-                  <div>
-                    <p className={styles.historyPlan}>{entry.plan_name ?? entry.plan_type}</p>
-                    <p className={styles.historyMetaText}>Order: {entry.polar_order_id}</p>
-                  </div>
-                  <div className={styles.historyAmounts}>
-                    <span className={styles.historyBadge}>{entry.status.replaceAll("_", " ")}</span>
-                    <span>
-                      Paid {formatPrice(entry.paid_amount_cents, entry.currency, null)}
-                      {entry.refunded_amount_cents > 0
-                        ? ` - Refunded ${formatPrice(entry.refunded_amount_cents, entry.currency, null)}`
-                        : ""}
-                    </span>
-                    <span>{formatDate(entry.created_at)}</span>
-                  </div>
-                </article>
-              ))}
+          {visiblePlanGroup ? <p className={styles.offerIntro}>{visiblePlanGroup.description}</p> : null}
+
+          {visiblePlanGroup ? (
+            <div className={styles.planGrid}>
+              {visiblePlanGroup.plans.map((plan) => {
+                const isCurrentSubscription =
+                  visiblePlanGroup.key === "subscription" &&
+                  account?.subscription.status === "active" &&
+                  account.subscription.plan_name === plan.name;
+
+                return (
+                  <article className={styles.planCard} key={plan.plan_id}>
+                    <div className={styles.planCardBody}>
+                      <div>
+                        <p className={styles.planName}>{plan.name}</p>
+                        <p className={styles.planPrice}>{formatPrice(plan.amount_cents, plan.currency, plan.billing_interval)}</p>
+                      </div>
+                      <div className={styles.planMeta}>
+                        <p className={chrome.subtleText}>{formatDuration(plan.quota_seconds ?? 0)} included</p>
+                        {visiblePlanGroup.key === "pack" && plan.pack_expiry_days ? (
+                          <p className={chrome.subtleText}>Expires in {plan.pack_expiry_days} days</p>
+                        ) : null}
+                      </div>
+                    </div>
+                    <button
+                      className={isCurrentSubscription ? chrome.ghostButton : chrome.primaryButton}
+                      type="button"
+                      onClick={() => handleCheckout(plan.plan_id)}
+                      disabled={checkoutLoading === plan.plan_id || isCurrentSubscription}
+                    >
+                      {checkoutLoading === plan.plan_id
+                        ? "Opening checkout..."
+                        : isCurrentSubscription
+                          ? "Current plan"
+                          : visiblePlanGroup.key === "subscription"
+                            ? "Upgrade now"
+                            : "Buy pack"}
+                    </button>
+                  </article>
+                );
+              })}
             </div>
-          )}
+          ) : null}
+        </section>
+
+        <section className={`${chrome.surface} ${styles.detailsSection}`}>
+          <div className={chrome.surfaceHeader}>
+            <div>
+              <h2 className={chrome.surfaceTitle}>Details</h2>
+              <p className={chrome.surfaceText}>Only the payment details worth keeping close.</p>
+            </div>
+          </div>
+
+          <div className={styles.detailsStack}>
+            <details className={styles.detailDisclosure} open={activePackCount > 0}>
+              <summary className={styles.detailSummary}>
+                <span>Purchased packs</span>
+                <span className={styles.detailCount}>{account?.packs.length ?? 0}</span>
+              </summary>
+
+              {!account || account.packs.length === 0 ? (
+                <p className={chrome.emptyState}>No packs purchased yet.</p>
+              ) : (
+                <div className={chrome.list}>
+                  {account.packs.map((pack) => (
+                    <article className={chrome.listRow} key={pack.polar_order_id}>
+                      <div className={chrome.listPrimary}>
+                        <p className={chrome.listTitle}>{pack.plan_name ?? "Pack"}</p>
+                        <p className={chrome.listMeta}>
+                          {formatDuration(pack.remaining_seconds)} left · Expires {formatDate(pack.expires_at)}
+                        </p>
+                        <p className={chrome.listMeta}>
+                          Used {formatDuration(pack.consumed_seconds)} / {formatDuration(pack.granted_seconds)}
+                        </p>
+                      </div>
+                      <div className={styles.packActions}>{renderRefundAction(pack)}</div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </details>
+
+            <details className={styles.detailDisclosure}>
+              <summary className={styles.detailSummary}>
+                <span>Billing history</span>
+                <span className={styles.detailCount}>{account?.orders.length ?? 0}</span>
+              </summary>
+
+              {!account || account.orders.length === 0 ? (
+                <p className={chrome.emptyState}>No billing events yet.</p>
+              ) : (
+                <div className={chrome.list}>
+                  {account.orders.slice(0, 12).map((entry: BillingOrderHistoryEntry) => (
+                    <article className={chrome.listRow} key={entry.polar_order_id}>
+                      <div className={chrome.listPrimary}>
+                        <p className={chrome.listTitle}>{entry.plan_name ?? entry.plan_type}</p>
+                        <p className={chrome.listMeta}>{formatDate(entry.created_at)}</p>
+                      </div>
+                      <div className={chrome.listAside}>
+                        <span className={getStatusTone(entry.status)}>{entry.status.replaceAll("_", " ")}</span>
+                        <span>
+                          Paid {formatPrice(entry.paid_amount_cents, entry.currency, null)}
+                          {entry.refunded_amount_cents > 0
+                            ? ` · Refunded ${formatPrice(entry.refunded_amount_cents, entry.currency, null)}`
+                            : ""}
+                        </span>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </details>
+          </div>
         </section>
       </main>
     </div>
@@ -683,11 +726,12 @@ export default function BillingPage() {
   return (
     <Suspense
       fallback={
-        <div className={styles.page}>
-          <main className={styles.main}>
-            <section className={styles.panel}>
-              <h1 className={styles.panelTitle}>Loading billing workspace...</h1>
-              <p className={styles.panelText}>Preparing your billing details.</p>
+        <div className={chrome.pageFrame}>
+          <AppShellHeader active="billing" remainingSeconds={null} accountLabel={null} onSignOut={() => undefined} />
+          <main className={chrome.mainFrame}>
+            <section className={chrome.surface}>
+              <h1 className={chrome.surfaceTitle}>Loading your access...</h1>
+              <p className={chrome.surfaceText}>Preparing your plan and billing details.</p>
             </section>
           </main>
         </div>

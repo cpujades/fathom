@@ -56,6 +56,19 @@ async def fetch_job(client: AsyncClient, job_id: str) -> dict[str, Any]:
     )
 
 
+async def fetch_jobs_by_ids(client: AsyncClient, job_ids: list[str]) -> list[dict[str, Any]]:
+    if not job_ids:
+        return []
+
+    try:
+        response = await client.table("jobs").select("id,summary_id").in_("id", job_ids).execute()
+    except APIError as exc:
+        raise_for_postgrest_error(exc, "Failed to fetch jobs.")
+
+    data = response.data or []
+    return [row for row in data if isinstance(row, dict)]
+
+
 async def claim_next_job(client: AsyncClient) -> dict[str, Any] | None:
     try:
         response = await client.rpc("claim_next_job").execute()

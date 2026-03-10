@@ -29,6 +29,19 @@ async def fetch_summary(client: AsyncClient, summary_id: str) -> dict[str, Any]:
     )
 
 
+async def fetch_summaries_by_ids(client: AsyncClient, summary_ids: list[str]) -> list[dict[str, Any]]:
+    if not summary_ids:
+        return []
+
+    try:
+        response = await client.table("summaries").select("id,transcript_id").in_("id", summary_ids).execute()
+    except APIError as exc:
+        raise_for_postgrest_error(exc, "Failed to fetch summaries.")
+
+    data = response.data or []
+    return [row for row in data if isinstance(row, dict)]
+
+
 async def fetch_summary_by_keys(
     client: AsyncClient,
     *,
