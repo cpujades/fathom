@@ -158,7 +158,7 @@ export default function SignInPage() {
           <p className={styles.panelText}>Sign in to resume your briefings and keep your edge close at hand.</p>
           <ul className={styles.panelList}>
             <li>Billing controls when you need more time</li>
-            <li>Usage history and reserve balance in one place</li>
+            <li>Your briefings and reserve balance in one place</li>
             <li>Structured briefings ready to export</li>
           </ul>
           <p className={styles.panelFooter}>Need a new account? Create one in under a minute.</p>

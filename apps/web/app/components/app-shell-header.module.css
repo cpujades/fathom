@@ -2,49 +2,48 @@
   position: sticky;
   top: 0;
   z-index: 40;
-  border-bottom: 1px solid rgba(120, 145, 129, 0.18);
-  backdrop-filter: blur(10px);
-  background: rgba(18, 28, 23, 0.78);
+  border-bottom: 1px solid rgba(36, 58, 47, 0.1);
+  backdrop-filter: blur(18px) saturate(1.04);
+  background: rgba(247, 242, 233, 0.82);
 }
 
 .inner {
-  width: min(1120px, 96vw);
+  width: min(980px, 94vw);
   margin: 0 auto;
-  min-height: 64px;
+  min-height: 68px;
   display: grid;
   grid-template-columns: auto 1fr auto;
-  gap: 0.9rem;
+  grid-template-areas: "brand nav utilities";
+  gap: 1rem;
   align-items: center;
+  padding: 0.74rem 0;
 }
 
 .brand {
+  grid-area: brand;
   display: inline-flex;
   align-items: center;
-  gap: 0.55rem;
-  font-family: var(--font-display), serif;
-  font-size: 0.96rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
+  gap: 0.68rem;
+  min-width: 0;
 }
 
 .brandMark {
   position: relative;
   display: inline-block;
-  width: 24px;
-  height: 24px;
-  border-radius: 7px;
-  border: 1px solid rgba(88, 110, 97, 0.34);
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid rgba(23, 56, 43, 0.2);
   background: linear-gradient(145deg, rgba(40, 92, 70, 0.98), rgba(23, 56, 43, 0.92));
-  box-shadow: 0 10px 18px rgba(12, 20, 16, 0.24);
+  box-shadow: 0 12px 24px rgba(23, 56, 43, 0.14);
 }
 
 .brandMark::before {
   content: "";
   position: absolute;
-  left: 5px;
-  top: 4px;
-  bottom: 4px;
+  left: 6px;
+  top: 5px;
+  bottom: 5px;
   width: 3px;
   border-radius: 999px;
   background: rgba(232, 219, 189, 0.72);
@@ -53,115 +52,269 @@
 .brandMark::after {
   content: "";
   position: absolute;
-  left: 10px;
-  right: 4px;
-  top: 7px;
+  left: 11px;
+  right: 5px;
+  top: 8px;
   height: 1px;
   background: rgba(232, 219, 189, 0.42);
-  box-shadow: 0 5px 0 rgba(232, 219, 189, 0.28), 0 10px 0 rgba(232, 219, 189, 0.18);
+  box-shadow: 0 6px 0 rgba(232, 219, 189, 0.28), 0 12px 0 rgba(232, 219, 189, 0.18);
+}
+
+.brandText {
+  display: grid;
+  gap: 0.02rem;
+  min-width: 0;
+}
+
+.brandWord {
+  color: #18211d;
+  font-family: var(--font-display), serif;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.brandMeta {
+  color: #667267;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.58rem;
+  font-weight: 700;
 }
 
 .nav {
+  grid-area: nav;
   display: flex;
+  align-items: center;
   justify-content: center;
-  gap: 0.35rem;
-  flex-wrap: wrap;
+  gap: 0.3rem;
+  min-width: 0;
 }
 
 .navLink {
-  border: 1px solid transparent;
-  border-radius: 999px;
-  padding: 0.35rem 0.7rem;
-  color: rgba(228, 231, 220, 0.84);
+  position: relative;
+  padding: 0.4rem 0.16rem;
+  margin: 0 0.48rem;
+  color: #556558;
   font-size: 0.84rem;
-  font-weight: 600;
-  transition: transform 140ms ease, border-color 140ms ease, background 140ms ease;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  transition: color 180ms ease;
+}
+
+.navLink::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -0.1rem;
+  height: 2px;
+  border-radius: 999px;
+  background: rgba(40, 92, 70, 0.8);
+  transform: scaleX(0);
+  transform-origin: center;
+  opacity: 0;
+  transition: transform 180ms ease, opacity 180ms ease;
 }
 
 .navLink:hover {
-  transform: translateY(-1px);
-  border-color: rgba(120, 145, 129, 0.35);
-  background: rgba(40, 92, 70, 0.12);
+  color: #17382b;
+}
+
+.navLink:hover::after,
+.navLinkActive::after {
+  transform: scaleX(1);
+  opacity: 1;
 }
 
 .navLinkActive {
-  border-color: rgba(120, 145, 129, 0.42);
-  background: rgba(40, 92, 70, 0.16);
-  color: #f0ecdf;
+  color: #17382b;
 }
 
-.accountCluster {
+.utilityCluster {
+  grid-area: utilities;
   display: flex;
   align-items: center;
-  gap: 0.55rem;
+  justify-content: flex-end;
+  gap: 0.72rem;
+  min-width: 0;
 }
 
-.creditsPill {
-  border: 1px solid rgba(120, 145, 129, 0.28);
-  border-radius: 999px;
-  padding: 0.3rem 0.62rem;
-  color: rgba(228, 231, 220, 0.9);
-  font-size: 0.76rem;
-  white-space: nowrap;
-  background: rgba(243, 235, 218, 0.04);
-}
-
-.accountMenu {
+.balanceReadout {
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
+  min-width: 0;
 }
 
-.accountLabel {
-  max-width: 170px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.balanceValue {
+  color: #556558;
+  font-size: 0.76rem;
+  font-weight: 700;
   white-space: nowrap;
-  color: rgba(183, 191, 180, 0.94);
-  font-size: 0.76rem;
 }
 
-.signOutButton {
-  border: 1px solid rgba(120, 145, 129, 0.2);
+.profileMenu {
+  position: relative;
+}
+
+.profileTrigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  padding: 0.28rem 0.36rem 0.28rem 0.3rem;
+  border: 1px solid rgba(36, 58, 47, 0.12);
   border-radius: 999px;
-  background: rgba(243, 235, 218, 0.03);
-  color: #ece7da;
-  padding: 0.32rem 0.56rem;
-  font-size: 0.76rem;
-  font-weight: 600;
+  background: rgba(248, 244, 236, 0.82);
+  color: #18211d;
   cursor: pointer;
-  transition: border-color 140ms ease, transform 140ms ease;
+  transition:
+    border-color 180ms ease,
+    box-shadow 220ms ease,
+    transform 180ms ease;
 }
 
-.signOutButton:hover {
+.profileTrigger:hover,
+.profileTriggerActive {
   transform: translateY(-1px);
-  border-color: rgba(120, 145, 129, 0.34);
+  border-color: rgba(23, 56, 43, 0.18);
+  box-shadow: 0 12px 28px rgba(18, 28, 23, 0.08);
+}
+
+.profileAvatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background: linear-gradient(155deg, rgba(40, 92, 70, 0.16), rgba(23, 56, 43, 0.08));
+  color: #17382b;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.profileText {
+  color: #24332c;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.profileChevron {
+  color: #667267;
+  font-size: 0.76rem;
+  line-height: 1;
+}
+
+.profilePopover {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  min-width: 220px;
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.5rem;
+  border-radius: 20px;
+  border: 1px solid rgba(36, 58, 47, 0.12);
+  background: linear-gradient(180deg, rgba(249, 246, 239, 0.92), rgba(235, 229, 219, 0.86));
+  box-shadow:
+    0 22px 44px rgba(18, 28, 23, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(16px) saturate(1.04);
+}
+
+.profileSummary {
+  display: grid;
+  gap: 0.14rem;
+  padding: 0.5rem 0.65rem 0.65rem;
+  border-bottom: 1px solid rgba(36, 58, 47, 0.08);
+}
+
+.profileSummaryLabel {
+  color: #667267;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.profileSummaryValue {
+  color: #18211d;
+  font-size: 0.82rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.profileAction {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: #24332c;
+  padding: 0.62rem 0.7rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+
+.profileAction:hover {
+  background: rgba(220, 231, 223, 0.82);
+  color: #17382b;
+}
+
+.profileActionDanger {
+  color: #8f3533;
+}
+
+.profileActionDanger:hover {
+  background: rgba(182, 75, 71, 0.08);
+  color: #7b2c2a;
 }
 
 @media (max-width: 980px) {
   .inner {
-    grid-template-columns: 1fr;
-    gap: 0.55rem;
-    padding: 0.72rem 0;
-  }
-
-  .brand,
-  .accountCluster {
-    justify-self: start;
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "brand utilities"
+      "nav nav";
+    gap: 0.68rem;
   }
 
   .nav {
     justify-content: flex-start;
+    overflow-x: auto;
+    padding-bottom: 0.08rem;
+  }
+
+  .nav::-webkit-scrollbar {
+    display: none;
   }
 }
 
 @media (max-width: 640px) {
-  .accountCluster {
-    width: 100%;
-    justify-content: space-between;
+  .inner {
+    width: min(1160px, 94vw);
   }
 
-  .accountLabel {
-    max-width: 120px;
+  .utilityCluster {
+    gap: 0.5rem;
+  }
+
+  .balanceReadout {
+    display: none;
+  }
+
+  .profileText {
+    display: none;
+  }
+
+  .profilePopover {
+    min-width: 200px;
   }
 }

@@ -507,6 +507,8 @@ export interface components {
         UsageHistoryEntry: {
             /** Job Id */
             job_id: string | null;
+            /** Title */
+            title: string | null;
             /** Seconds Used */
             seconds_used: number;
             /** Source */

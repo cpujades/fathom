@@ -8,26 +8,12 @@ import type { User } from "@supabase/supabase-js";
 import { createApiClient } from "@fathom/api-client";
 
 import { AppShellHeader } from "../../components/AppShellHeader";
+import chrome from "../../components/app-chrome.module.css";
 import { formatDuration } from "../../lib/format";
 import { getApiErrorMessage } from "../../lib/apiErrors";
+import { getAccountLabel } from "../../lib/accountLabel";
 import { getSupabaseClient } from "../../lib/supabaseClient";
 import styles from "./profile.module.css";
-
-const getAccountLabel = (user: User | null): string | null => {
-  if (!user) {
-    return null;
-  }
-  const fullName = (user.user_metadata?.full_name as string | undefined) ?? (user.user_metadata?.name as string | undefined);
-  if (fullName && fullName.trim().length > 0) {
-    return fullName.trim();
-  }
-  const email = user.email ?? null;
-  if (!email) {
-    return null;
-  }
-  const localPart = email.split("@")[0];
-  return localPart || email;
-};
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -139,7 +125,7 @@ export default function ProfilePage() {
   };
 
   return (
-    <div className={styles.page}>
+    <div className={chrome.pageFrame}>
       <AppShellHeader
         active="profile"
         remainingSeconds={usage?.total_remaining_seconds ?? null}
@@ -147,62 +133,79 @@ export default function ProfilePage() {
         onSignOut={handleSignOut}
       />
 
-      <main className={styles.main}>
-        <section className={styles.summaryCard}>
-          <div className={styles.summaryHeader}>
-            <h1 className={styles.title}>Profile</h1>
-            <p className={styles.subtitle}>Manage your account identity and keep billing details current.</p>
-          </div>
-
-          <div className={styles.kpiGrid}>
-            <article className={styles.kpi}>
-              <p className={styles.kpiLabel}>Display name</p>
-              <p className={styles.kpiValue}>{getAccountLabel(user) ?? "Not set"}</p>
-            </article>
-            <article className={styles.kpi}>
-              <p className={styles.kpiLabel}>Current plan</p>
-              <p className={styles.kpiValue}>{account?.subscription.plan_name ?? usage?.subscription_plan_name ?? "Free"}</p>
-            </article>
-            <article className={styles.kpi}>
-              <p className={styles.kpiLabel}>Credits remaining</p>
-              <p className={styles.kpiValue}>{formatDuration(usage?.total_remaining_seconds ?? 0)}</p>
-            </article>
+      <main className={chrome.mainFrame}>
+        <section className={chrome.heroBlock}>
+          <div>
+            <p className={chrome.heroEyebrow}>Profile</p>
+            <h1 className={chrome.heroTitle}>Account identity</h1>
+            <p className={chrome.heroText}>Keep your Talven identity current and make sure billing context stays easy to read.</p>
           </div>
         </section>
 
-        <section className={styles.formCard}>
-          <h2 className={styles.formTitle}>Account details</h2>
+        <section className={chrome.heroSplit}>
+          <article className={chrome.surfaceStrong}>
+            <div className={chrome.surfaceHeader}>
+              <div>
+                <h2 className={chrome.surfaceTitle}>Account details</h2>
+                <p className={chrome.surfaceText}>Update the name attached to your workspace.</p>
+              </div>
+            </div>
 
-          <div className={styles.fieldGrid}>
-            <label className={styles.field}>
-              <span className={styles.fieldLabel}>Email</span>
-              <div className={styles.readonlyField}>{user?.email ?? "-"}</div>
-            </label>
+            <div className={styles.fieldGrid}>
+              <label className={chrome.fieldStack}>
+                <span className={chrome.fieldLabel}>Email</span>
+                <div className={chrome.readonlyField}>{user?.email ?? "-"}</div>
+              </label>
 
-            <label className={styles.field}>
-              <span className={styles.fieldLabel}>Full name</span>
-              <input
-                className={styles.input}
-                value={fullName}
-                onChange={(event) => setFullName(event.target.value)}
-                placeholder="Your name"
-                disabled={loading}
-              />
-            </label>
-          </div>
+              <label className={chrome.fieldStack}>
+                <span className={chrome.fieldLabel}>Full name</span>
+                <input
+                  className={chrome.input}
+                  value={fullName}
+                  onChange={(event) => setFullName(event.target.value)}
+                  placeholder="Your name"
+                  disabled={loading}
+                />
+              </label>
+            </div>
 
-          <div className={styles.actionRow}>
-            <button className={styles.primaryButton} type="button" onClick={handleSave} disabled={saving || loading}>
-              {saving ? "Saving..." : "Save changes"}
-            </button>
-            <Link className={styles.secondaryButton} href="/app/billing">
-              Open billing
-            </Link>
-          </div>
+            <div className={chrome.actionRow}>
+              <button className={chrome.primaryButton} type="button" onClick={handleSave} disabled={saving || loading}>
+                {saving ? "Saving..." : "Save changes"}
+              </button>
+              <Link className={chrome.secondaryButton} href="/app/billing">
+                Open billing
+              </Link>
+            </div>
 
-          {status ? (
-            <p className={`${styles.status} ${statusError ? styles.statusError : styles.statusSuccess}`}>{status}</p>
-          ) : null}
+            {status ? (
+              <p className={`${chrome.inlineStatus} ${statusError ? chrome.inlineStatusError : ""}`}>{status}</p>
+            ) : null}
+          </article>
+
+          <aside className={chrome.surface}>
+            <div className={chrome.surfaceHeader}>
+              <div>
+                <h2 className={chrome.surfaceTitle}>Current posture</h2>
+                <p className={chrome.surfaceText}>A concise read on who this account is and what access it carries.</p>
+              </div>
+            </div>
+
+            <div className={chrome.metricGrid}>
+              <article className={chrome.metricCard}>
+                <p className={chrome.metricLabel}>Display name</p>
+                <p className={chrome.metricValue}>{getAccountLabel(user) ?? "Not set"}</p>
+              </article>
+              <article className={chrome.metricCard}>
+                <p className={chrome.metricLabel}>Current plan</p>
+                <p className={chrome.metricValue}>{account?.subscription.plan_name ?? usage?.subscription_plan_name ?? "Free"}</p>
+              </article>
+              <article className={chrome.metricCard}>
+                <p className={chrome.metricLabel}>Credits remaining</p>
+                <p className={chrome.metricValue}>{formatDuration(usage?.total_remaining_seconds ?? 0)}</p>
+              </article>
+            </div>
+          </aside>
         </section>
       </main>
     </div>

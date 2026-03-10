@@ -118,3 +118,16 @@ async def fetch_transcript_by_id(client: AsyncClient, transcript_id: str) -> dic
         error_message="Supabase returned an unexpected transcripts shape.",
         not_found_message="Transcript not found.",
     )
+
+
+async def fetch_transcripts_by_ids(client: AsyncClient, transcript_ids: list[str]) -> list[dict[str, Any]]:
+    if not transcript_ids:
+        return []
+
+    try:
+        response = await client.table("transcripts").select("id,source_title").in_("id", transcript_ids).execute()
+    except APIError as exc:
+        raise_for_postgrest_error(exc, "Failed to fetch transcripts.")
+
+    data = response.data or []
+    return [row for row in data if isinstance(row, dict)]

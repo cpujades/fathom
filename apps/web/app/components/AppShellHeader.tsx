@@ -1,11 +1,12 @@
 "use client";
 
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 
 import { formatDuration } from "../lib/format";
 import styles from "./app-shell-header.module.css";
 
-type AppSection = "home" | "billing" | "history" | "profile";
+type AppSection = "home" | "billing" | "briefings" | "profile";
 
 type NavItem = {
   id: AppSection;
@@ -14,26 +15,85 @@ type NavItem = {
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { id: "home", href: "/app", label: "Home" },
-  { id: "billing", href: "/app/billing", label: "Billing" },
-  { id: "history", href: "/app/history", label: "History" },
-  { id: "profile", href: "/app/profile", label: "Profile" }
+  { id: "home", href: "/app", label: "Workspace" },
+  { id: "briefings", href: "/app/briefings", label: "Briefings" },
+  { id: "billing", href: "/app/billing", label: "Billing" }
 ];
 
 type AppShellHeaderProps = {
-  active: AppSection;
+  active?: AppSection | null;
   remainingSeconds: number | null;
   accountLabel: string | null;
-  onSignOut: () => void;
+  onSignOut?: () => void;
 };
 
-export function AppShellHeader({ active, remainingSeconds, accountLabel, onSignOut }: AppShellHeaderProps) {
+function getInitials(accountLabel: string | null): string {
+  if (!accountLabel) {
+    return "T";
+  }
+
+  const parts = accountLabel
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2);
+
+  if (parts.length === 0) {
+    return "T";
+  }
+
+  return parts
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("")
+    .slice(0, 2);
+}
+
+export function AppShellHeader({ active = null, remainingSeconds, accountLabel, onSignOut }: AppShellHeaderProps) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const activeLabel = useMemo(() => {
+    if (active === "profile") {
+      return "Profile";
+    }
+
+    return NAV_ITEMS.find((item) => item.id === active)?.label ?? "Workspace";
+  }, [active]);
+
+  useEffect(() => {
+    if (!menuOpen) {
+      return undefined;
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [menuOpen]);
+
   return (
     <header className={styles.header}>
       <div className={styles.inner}>
         <Link className={styles.brand} href="/app" aria-label="Go to workspace home">
           <span className={styles.brandMark} aria-hidden="true" />
-          Talven
+          <span className={styles.brandText}>
+            <span className={styles.brandWord}>Talven</span>
+            <span className={styles.brandMeta}>{activeLabel}</span>
+          </span>
         </Link>
 
         <nav className={styles.nav} aria-label="Main navigation">
@@ -48,17 +108,59 @@ export function AppShellHeader({ active, remainingSeconds, accountLabel, onSignO
           ))}
         </nav>
 
-        <div className={styles.accountCluster}>
-          <div className={styles.creditsPill}>
-            Remaining {remainingSeconds !== null ? formatDuration(remainingSeconds) : "-"}
+        {remainingSeconds !== null || accountLabel || onSignOut ? (
+          <div className={styles.utilityCluster}>
+            {remainingSeconds !== null ? (
+              <div className={styles.balanceReadout}>
+                <span className={styles.balanceValue}>{formatDuration(remainingSeconds)} available</span>
+              </div>
+            ) : null}
+            {accountLabel || onSignOut ? (
+              <div className={styles.profileMenu} ref={menuRef}>
+                <button
+                  aria-expanded={menuOpen}
+                  aria-haspopup="menu"
+                  className={`${styles.profileTrigger} ${active === "profile" ? styles.profileTriggerActive : ""}`}
+                  type="button"
+                  onClick={() => setMenuOpen((open) => !open)}
+                >
+                  <span className={styles.profileAvatar} aria-hidden="true">
+                    {getInitials(accountLabel)}
+                  </span>
+                  <span className={styles.profileText}>Account</span>
+                  <span className={styles.profileChevron} aria-hidden="true">
+                    ▾
+                  </span>
+                </button>
+
+                {menuOpen ? (
+                  <div className={styles.profilePopover} role="menu" aria-label="Account menu">
+                    <div className={styles.profileSummary}>
+                      <span className={styles.profileSummaryLabel}>Signed in as</span>
+                      <span className={styles.profileSummaryValue}>{accountLabel ?? "Talven account"}</span>
+                    </div>
+                    <Link className={styles.profileAction} href="/app/profile" onClick={() => setMenuOpen(false)}>
+                      Profile settings
+                    </Link>
+                    {onSignOut ? (
+                      <button
+                        className={`${styles.profileAction} ${styles.profileActionDanger}`}
+                        role="menuitem"
+                        type="button"
+                        onClick={() => {
+                          setMenuOpen(false);
+                          onSignOut();
+                        }}
+                      >
+                        Sign out
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
-          <div className={styles.accountMenu}>
-            <span className={styles.accountLabel}>{accountLabel ?? "Account"}</span>
-            <button className={styles.signOutButton} type="button" onClick={onSignOut}>
-              Sign out
-            </button>
-          </div>
-        </div>
+        ) : null}
       </div>
     </header>
   );

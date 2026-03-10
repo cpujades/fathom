@@ -160,6 +160,7 @@ async def get_history(
     return [
         UsageHistoryEntry(
             job_id=entry.get("job_id"),
+            title=entry.get("title"),
             seconds_used=int(entry.get("seconds_used") or 0),
             source=str(entry.get("source") or ""),
             created_at=entry.get("created_at"),
