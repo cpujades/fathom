@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.0](https://github.com/cpujades/fathom/compare/v0.13.0...v0.14.0) (2026-03-10)
+
+
+### Features
+
+* **app:** add briefings view and refresh authenticated chrome ([#83](https://github.com/cpujades/fathom/issues/83)) ([a5bc21f](https://github.com/cpujades/fathom/commit/a5bc21f01aab885a861cda7f892e03b4dc340fc3))
+
 ## [0.13.0](https://github.com/cpujades/fathom/compare/v0.12.0...v0.13.0) (2026-03-08)
 
 
