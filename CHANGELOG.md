@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.0](https://github.com/cpujades/fathom/compare/v0.14.0...v0.15.0) (2026-03-12)
+
+
+### Features
+
+* **app:** centralize app shell state and rename account and briefings routes ([#85](https://github.com/cpujades/fathom/issues/85)) ([5059c52](https://github.com/cpujades/fathom/commit/5059c523d12d46bcc60f5c0400ad13f8d70867a5))
+
 ## [0.14.0](https://github.com/cpujades/fathom/compare/v0.13.0...v0.14.0) (2026-03-10)
 
 
