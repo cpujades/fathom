@@ -6,7 +6,7 @@ import Link from "next/link";
 import { formatDuration } from "../lib/format";
 import styles from "./app-shell-header.module.css";
 
-type AppSection = "home" | "billing" | "briefings" | "profile";
+type AppSection = "home" | "billing" | "briefings" | "account";
 
 type NavItem = {
   id: AppSection;
@@ -52,8 +52,8 @@ export function AppShellHeader({ active = null, remainingSeconds, accountLabel, 
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const activeLabel = useMemo(() => {
-    if (active === "profile") {
-      return "Profile";
+    if (active === "account") {
+      return "Account";
     }
 
     return NAV_ITEMS.find((item) => item.id === active)?.label ?? "Workspace";
@@ -120,7 +120,7 @@ export function AppShellHeader({ active = null, remainingSeconds, accountLabel, 
                 <button
                   aria-expanded={menuOpen}
                   aria-haspopup="menu"
-                  className={`${styles.profileTrigger} ${active === "profile" ? styles.profileTriggerActive : ""}`}
+                  className={`${styles.profileTrigger} ${active === "account" ? styles.profileTriggerActive : ""}`}
                   type="button"
                   onClick={() => setMenuOpen((open) => !open)}
                 >
@@ -139,8 +139,8 @@ export function AppShellHeader({ active = null, remainingSeconds, accountLabel, 
                       <span className={styles.profileSummaryLabel}>Signed in as</span>
                       <span className={styles.profileSummaryValue}>{accountLabel ?? "Talven account"}</span>
                     </div>
-                    <Link className={styles.profileAction} href="/app/profile" onClick={() => setMenuOpen(false)}>
-                      Profile settings
+                    <Link className={styles.profileAction} href="/app/account" onClick={() => setMenuOpen(false)}>
+                      Account settings
                     </Link>
                     {onSignOut ? (
                       <button

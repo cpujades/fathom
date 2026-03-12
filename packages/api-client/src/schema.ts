@@ -208,15 +208,15 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/billing/history": {
+    "/billing/briefings": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Get History */
-        get: operations["get_history_billing_history_get"];
+        /** Get Briefings */
+        get: operations["get_briefings_billing_briefings_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1179,7 +1179,7 @@ export interface operations {
             };
         };
     };
-    get_history_billing_history_get: {
+    get_briefings_billing_briefings_get: {
         parameters: {
             query?: never;
             header?: never;

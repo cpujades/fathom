@@ -1,3 +1,18 @@
+.pageColumn {
+  width: min(1040px, 100%);
+  margin: 0 auto;
+}
+
+.briefingsSurface {
+  padding: 1.25rem;
+}
+
 .briefingsList {
   margin-top: 0.3rem;
+}
+
+@media (max-width: 720px) {
+  .briefingsSurface {
+    padding: 1.05rem;
+  }
 }
