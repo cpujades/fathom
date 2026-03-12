@@ -66,12 +66,12 @@ async def create_postgres_connection(settings: Settings) -> AsyncIterator[asyncp
 
     try:
         conn = await asyncpg.connect(postgres_url, timeout=10)
-        logger.info("postgres connection established")
+        logger.debug("postgres connection established")
         try:
             yield conn
         finally:
             await conn.close()
-            logger.info("postgres connection closed")
+            logger.debug("postgres connection closed")
     except Exception as exc:
         logger.error("failed to create postgres connection", exc_info=exc)
         raise ConfigurationError(f"Failed to connect to Postgres: {exc}") from exc
@@ -90,7 +90,7 @@ async def wait_for_job_created(
         queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
         notification_handler = partial(_enqueue_notification, queue=queue)
         await conn.add_listener("job_created", notification_handler)
-        logger.info("listening to job_created channel")
+        logger.debug("listening to job_created channel")
 
         try:
             try:
@@ -99,4 +99,4 @@ async def wait_for_job_created(
                 return None
         finally:
             await conn.remove_listener("job_created", notification_handler)
-            logger.info("stopped listening to job_created channel")
+            logger.debug("stopped listening to job_created channel")

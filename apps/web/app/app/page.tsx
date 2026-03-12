@@ -2,15 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { UsageOverviewResponse } from "@fathom/api-client";
 import type { User } from "@supabase/supabase-js";
-import { createApiClient } from "@fathom/api-client";
 
 import { AppShellHeader } from "../components/AppShellHeader";
+import { useAppShell } from "../components/AppShellProvider";
 import chrome from "../components/app-chrome.module.css";
-import { getApiErrorMessage } from "../lib/apiErrors";
 import { getAccountLabel } from "../lib/accountLabel";
-import { getSupabaseClient } from "../lib/supabaseClient";
 import styles from "./home.module.css";
 
 function getFirstName(user: Pick<User, "user_metadata"> | null): string | null {
@@ -31,70 +28,14 @@ function getFirstName(user: Pick<User, "user_metadata"> | null): string | null {
 
 export default function AppHome() {
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { loading, remainingSeconds, signOut, user } = useAppShell();
   const [url, setUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [usage, setUsage] = useState<UsageOverviewResponse | null>(null);
 
   useEffect(() => {
-    let unsubscribe: (() => void) | null = null;
-
-    const loadSession = async () => {
-      try {
-        router.prefetch("/app/jobs/new");
-        const supabase = getSupabaseClient();
-        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-
-        if (sessionError) {
-          setError(sessionError.message);
-        }
-
-        if (!sessionData.session) {
-          router.replace("/signin");
-          return;
-        }
-
-        setUser(sessionData.session.user);
-
-        const api = createApiClient(sessionData.session.access_token);
-        const { data: usageData, error: usageError } = await api.GET("/billing/usage");
-
-        if (usageError) {
-          setError(getApiErrorMessage(usageError, "Unable to load usage."));
-        } else {
-          setUsage(usageData ?? null);
-        }
-
-        const { data: authListener } = supabase.auth.onAuthStateChange((_event, authSession) => {
-          if (!authSession) {
-            router.replace("/signin");
-          } else {
-            setUser(authSession.user);
-          }
-        });
-
-        unsubscribe = () => authListener.subscription.unsubscribe();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Something went wrong.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    void loadSession();
-
-    return () => {
-      unsubscribe?.();
-    };
+    router.prefetch("/app/jobs/new");
   }, [router]);
-
-  const handleSignOut = async () => {
-    const supabase = getSupabaseClient();
-    await supabase.auth.signOut();
-    router.replace("/signin");
-  };
 
   const handleSubmit = () => {
     if (submitting) {
@@ -122,9 +63,9 @@ export default function AppHome() {
     <div className={chrome.pageFrame}>
       <AppShellHeader
         active="home"
-        remainingSeconds={usage?.total_remaining_seconds ?? null}
+        remainingSeconds={remainingSeconds}
         accountLabel={getAccountLabel(user)}
-        onSignOut={handleSignOut}
+        onSignOut={signOut}
       />
 
       <main className={chrome.mainFrame}>

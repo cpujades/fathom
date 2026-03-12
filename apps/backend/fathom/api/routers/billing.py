@@ -145,14 +145,14 @@ async def get_usage(
 
 
 @router.get(
-    "/history",
+    "/briefings",
     response_model=list[UsageHistoryEntry],
     responses={
         401: {"model": ErrorResponse, "description": "Missing or invalid auth token."},
         500: {"model": ErrorResponse, "description": "Unexpected server error."},
     },
 )
-async def get_history(
+async def get_briefings(
     auth: Annotated[AuthContext, Depends(get_auth_context)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> list[UsageHistoryEntry]:

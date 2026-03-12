@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import type {
   BillingAccountResponse,
   BillingOrderHistoryEntry,
@@ -10,16 +10,16 @@ import type {
   PlanResponse,
   UsageOverviewResponse
 } from "@fathom/api-client";
-import type { User } from "@supabase/supabase-js";
 import { createApiClient } from "@fathom/api-client";
 
 import { AppShellHeader } from "../../components/AppShellHeader";
+import { useAppShell } from "../../components/AppShellProvider";
 import chrome from "../../components/app-chrome.module.css";
 import styles from "./billing.module.css";
 import { formatDate, formatDuration } from "../../lib/format";
 import { getApiErrorMessage } from "../../lib/apiErrors";
 import { getAccountLabel } from "../../lib/accountLabel";
-import { getSupabaseClient } from "../../lib/supabaseClient";
+import { getCachedBillingSnapshot, hasFreshBillingCache, loadBillingSnapshot } from "../../lib/appDataCache";
 
 type PlanGroup = {
   key: "subscription" | "pack";
@@ -71,17 +71,17 @@ const getStatusTone = (status: string | null): string => {
 };
 
 function BillingPageContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
+  const { accessToken, loading: shellLoading, remainingSeconds, setRemainingSeconds, signOut, user } = useAppShell();
   const checkoutStatus = searchParams.get("checkout");
   const customerSessionToken = searchParams.get("customer_session_token");
+  const cachedBillingSnapshot = getCachedBillingSnapshot();
 
-  const [user, setUser] = useState<User | null>(null);
-  const [plans, setPlans] = useState<PlanResponse[]>([]);
-  const [usage, setUsage] = useState<UsageOverviewResponse | null>(null);
-  const [account, setAccount] = useState<BillingAccountResponse | null>(null);
+  const [plans, setPlans] = useState<PlanResponse[]>(cachedBillingSnapshot?.plansData ?? []);
+  const [usage, setUsage] = useState<UsageOverviewResponse | null>(cachedBillingSnapshot?.usageData ?? null);
+  const [account, setAccount] = useState<BillingAccountResponse | null>(cachedBillingSnapshot?.accountData ?? null);
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => cachedBillingSnapshot === null);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
   const [refundLoading, setRefundLoading] = useState<string | null>(null);
@@ -96,64 +96,25 @@ function BillingPageContent() {
   const refundPollRef = useRef<number | null>(null);
 
   const loadBilling = useCallback(
-    async (
-      showLoading: boolean
-    ): Promise<{
-      plansData: PlanResponse[];
-      usageData: UsageOverviewResponse | null;
-      accountData: BillingAccountResponse | null;
-    } | null> => {
+    async (showLoading: boolean) => {
+      if (!accessToken) {
+        return null;
+      }
+
       if (showLoading) {
         setLoading(true);
       }
 
       try {
-        const supabase = getSupabaseClient();
-        const { data: sessionData } = await supabase.auth.getSession();
-        if (!sessionData.session) {
-          router.replace("/signin");
-          return null;
-        }
-
-        setUser(sessionData.session.user);
-
-        const api = createApiClient(sessionData.session.access_token);
-        const [
-          { data: plansData, error: plansError },
-          { data: usageData, error: usageError },
-          { data: accountData, error: accountError }
-        ] = await Promise.all([api.GET("/billing/plans"), api.GET("/billing/usage"), api.GET("/billing/account")]);
-
-        if (plansError) {
-          setError(getApiErrorMessage(plansError, "Unable to load plans."));
-          return null;
-        }
-
-        if (usageError) {
-          setError(getApiErrorMessage(usageError, "Unable to load usage."));
-          return null;
-        }
-
-        if (accountError) {
-          setError(getApiErrorMessage(accountError, "Unable to load billing details."));
-          return null;
-        }
-
-        const normalizedPlans = plansData ?? [];
-        const normalizedUsage = usageData ?? null;
-        const normalizedAccount = accountData ?? null;
-
-        setPlans(normalizedPlans);
-        setUsage(normalizedUsage);
-        setAccount(normalizedAccount);
-
-        return {
-          plansData: normalizedPlans,
-          usageData: normalizedUsage,
-          accountData: normalizedAccount
-        };
+        const snapshot = await loadBillingSnapshot(accessToken);
+        setPlans(snapshot.plansData);
+        setUsage(snapshot.usageData);
+        setAccount(snapshot.accountData);
+        setRemainingSeconds(snapshot.usageData?.total_remaining_seconds ?? null);
+        setError(null);
+        return snapshot;
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Something went wrong.");
+        setError(getApiErrorMessage(err, "Unable to load billing details."));
         return null;
       } finally {
         if (showLoading) {
@@ -161,12 +122,27 @@ function BillingPageContent() {
         }
       }
     },
-    [router]
+    [accessToken, setRemainingSeconds]
   );
 
   useEffect(() => {
-    void loadBilling(true);
-  }, [loadBilling]);
+    if (!accessToken) {
+      return;
+    }
+
+    const cacheIsFresh = hasFreshBillingCache();
+    if (cacheIsFresh) {
+      const nextSnapshot = getCachedBillingSnapshot();
+      setPlans(nextSnapshot?.plansData ?? []);
+      setUsage(nextSnapshot?.usageData ?? null);
+      setAccount(nextSnapshot?.accountData ?? null);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
+    void loadBilling(cachedBillingSnapshot === null);
+  }, [accessToken, cachedBillingSnapshot, loadBilling]);
 
   useEffect(() => {
     if (checkoutStatus !== "success") {
@@ -268,12 +244,6 @@ function BillingPageContent() {
     return planGroups.find((group) => group.key === offerMode) ?? null;
   }, [offerMode, planGroups]);
 
-  const handleSignOut = async () => {
-    const supabase = getSupabaseClient();
-    await supabase.auth.signOut();
-    router.replace("/signin");
-  };
-
   const handleCheckout = async (planId: string) => {
     if (checkoutLoading) {
       return;
@@ -283,14 +253,11 @@ function BillingPageContent() {
     setError(null);
 
     try {
-      const supabase = getSupabaseClient();
-      const { data: sessionData } = await supabase.auth.getSession();
-      if (!sessionData.session) {
-        router.replace("/signin");
+      if (!accessToken) {
         return;
       }
 
-      const api = createApiClient(sessionData.session.access_token);
+      const api = createApiClient(accessToken);
       const { data, error: apiError } = await api.POST("/billing/checkout", {
         body: {
           plan_id: planId
@@ -321,14 +288,11 @@ function BillingPageContent() {
     setError(null);
 
     try {
-      const supabase = getSupabaseClient();
-      const { data: sessionData } = await supabase.auth.getSession();
-      if (!sessionData.session) {
-        router.replace("/signin");
+      if (!accessToken) {
         return;
       }
 
-      const api = createApiClient(sessionData.session.access_token);
+      const api = createApiClient(accessToken);
       const { data, error: apiError } = await api.POST("/billing/portal");
 
       if (apiError) {
@@ -355,14 +319,11 @@ function BillingPageContent() {
     setError(null);
 
     try {
-      const supabase = getSupabaseClient();
-      const { data: sessionData } = await supabase.auth.getSession();
-      if (!sessionData.session) {
-        router.replace("/signin");
+      if (!accessToken) {
         return;
       }
 
-      const api = createApiClient(sessionData.session.access_token);
+      const api = createApiClient(accessToken);
       const { error: apiError } = await api.POST("/billing/packs/{polar_order_id}/refund", {
         params: {
           path: {
@@ -489,27 +450,28 @@ function BillingPageContent() {
     <div className={chrome.pageFrame}>
       <AppShellHeader
         active="billing"
-        remainingSeconds={usage?.total_remaining_seconds ?? null}
+        remainingSeconds={remainingSeconds}
         accountLabel={getAccountLabel(user)}
-        onSignOut={handleSignOut}
+        onSignOut={signOut}
       />
 
       <main className={chrome.mainFrame}>
-        <section className={chrome.heroBlock}>
+        <section className={`${chrome.heroBlock} ${styles.pageColumn}`}>
           <div>
             <p className={chrome.heroEyebrow}>Billing</p>
             <h1 className={chrome.heroTitle}>Your access</h1>
             <p className={chrome.heroText}>See what listening time you have now, then add more when you need it.</p>
           </div>
           <div className={chrome.heroActions}>
-            <button
-              className={chrome.primaryButton}
-              type="button"
-              onClick={handlePortal}
-              disabled={portalLoading || !canManageBilling}
-            >
-              {portalLoading ? "Opening portal..." : "Manage plan"}
-            </button>
+            {canManageBilling ? (
+              <button className={chrome.primaryButton} type="button" onClick={handlePortal} disabled={portalLoading || shellLoading}>
+                {portalLoading ? "Opening portal..." : "Manage plan"}
+              </button>
+            ) : (
+              <a className={chrome.primaryButton} href="#billing-offers">
+                Get more listening time
+              </a>
+            )}
             <Link className={chrome.secondaryButton} href="/app">
               Back to workspace
             </Link>
@@ -547,7 +509,7 @@ function BillingPageContent() {
           </section>
         ) : null}
 
-        <section className={`${chrome.surface} ${styles.accessSection}`}>
+        <section className={`${chrome.surface} ${styles.pageColumn} ${styles.accessSection}`}>
           <div className={chrome.surfaceHeader}>
             <div>
               <h2 className={chrome.surfaceTitle}>Current access</h2>
@@ -578,7 +540,7 @@ function BillingPageContent() {
           <p className={styles.accessNote}>{accessNote}</p>
         </section>
 
-        <section className={`${chrome.surface} ${styles.offerSection}`}>
+        <section className={`${chrome.surface} ${styles.pageColumn} ${styles.offerSection}`} id="billing-offers">
           <div className={chrome.surfaceHeader}>
             <div>
               <h2 className={chrome.surfaceTitle}>Get more listening time</h2>
@@ -648,7 +610,7 @@ function BillingPageContent() {
           ) : null}
         </section>
 
-        <section className={`${chrome.surface} ${styles.detailsSection}`}>
+        <section className={`${chrome.surface} ${styles.pageColumn} ${styles.detailsSection}`}>
           <div className={chrome.surfaceHeader}>
             <div>
               <h2 className={chrome.surfaceTitle}>Details</h2>

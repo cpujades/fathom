@@ -1,0 +1,65 @@
+.pageColumn {
+  width: min(1040px, 100%);
+  margin: 0 auto;
+}
+
+.profileShell {
+  padding: 0.35rem 0 0;
+}
+
+.profileCard {
+  width: min(760px, 100%);
+  margin: 0 auto;
+  padding: 1.4rem;
+}
+
+.cardIntro {
+  display: grid;
+  gap: 0.28rem;
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: 1.02rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.cardText {
+  margin: 0;
+  color: #435247;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.fieldGrid {
+  display: grid;
+  gap: 0.9rem;
+  margin-top: 1.1rem;
+}
+
+.actionRow {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 1rem;
+}
+
+@media (max-width: 720px) {
+  .profileShell {
+    padding-top: 0.25rem;
+  }
+
+  .profileCard {
+    padding: 1.15rem;
+  }
+
+  .actionRow {
+    align-items: stretch;
+  }
+
+  .actionRow > * {
+    width: 100%;
+  }
+}
