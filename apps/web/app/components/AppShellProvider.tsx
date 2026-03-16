@@ -19,7 +19,7 @@ type AppShellContextValue = {
 
 const AppShellContext = createContext<AppShellContextValue | null>(null);
 
-const PREFETCH_ROUTES = ["/app", "/app/briefings", "/app/billing", "/app/account", "/app/jobs/new"];
+const PREFETCH_ROUTES = ["/app", "/app/briefings", "/app/billing", "/app/account", "/app/briefings/new"];
 const USAGE_CACHE_TTL_MS = 30_000;
 
 let usageCache: {

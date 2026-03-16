@@ -25,4 +25,21 @@ const formatDate = (value?: string | null): string => {
   return parsed.toLocaleDateString();
 };
 
-export { formatDate, formatDuration };
+const formatDateTime = (value?: string | null): string => {
+  if (!value) {
+    return "—";
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "—";
+  }
+  return parsed.toLocaleString([], {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+};
+
+export { formatDate, formatDateTime, formatDuration };

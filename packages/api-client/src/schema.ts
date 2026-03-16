@@ -55,24 +55,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/jobs/{job_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Job */
-        get: operations["get_job_jobs__job_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/summarize": {
+    "/briefing-sessions": {
         parameters: {
             query?: never;
             header?: never;
@@ -81,23 +64,23 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Summarize */
-        post: operations["summarize_summarize_post"];
+        /** Create Session */
+        post: operations["create_session_briefing_sessions_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/summaries/{summary_id}": {
+    "/briefing-sessions/{session_id}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Get Summary */
-        get: operations["get_summary_summaries__summary_id__get"];
+        /** Get Session */
+        get: operations["get_session_briefing_sessions__session_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -106,7 +89,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/summaries/{summary_id}/pdf": {
+    "/briefing-sessions/{session_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Session Events */
+        get: operations["get_session_events_briefing_sessions__session_id__events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/briefings/{briefing_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Briefing By Id */
+        get: operations["get_briefing_by_id_briefings__briefing_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/briefings/{briefing_id}/pdf": {
         parameters: {
             query?: never;
             header?: never;
@@ -115,8 +132,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Generate Summary Pdf */
-        post: operations["generate_summary_pdf_summaries__summary_id__pdf_post"];
+        /** Generate Briefing Pdf */
+        post: operations["generate_briefing_pdf_briefings__briefing_id__pdf_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -293,6 +310,85 @@ export interface components {
              */
             created_at: string;
         };
+        /** BriefingPdfResponse */
+        BriefingPdfResponse: {
+            /**
+             * Briefing Id
+             * Format: uuid
+             */
+            briefing_id: string;
+            /** Pdf Url */
+            pdf_url: string;
+        };
+        /** BriefingResponse */
+        BriefingResponse: {
+            /**
+             * Briefing Id
+             * Format: uuid
+             */
+            briefing_id: string;
+            /** Markdown */
+            markdown: string;
+            /** Pdf Url */
+            pdf_url: string | null;
+        };
+        /** BriefingSessionCreateRequest */
+        BriefingSessionCreateRequest: {
+            /**
+             * Url
+             * Format: uri
+             */
+            url: string;
+        };
+        /** BriefingSessionResponse */
+        BriefingSessionResponse: {
+            /**
+             * Session Id
+             * Format: uuid
+             */
+            session_id: string;
+            /** Briefing Id */
+            briefing_id?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "accepted" | "resolving_source" | "reusing_existing" | "transcribing" | "drafting_briefing" | "finalizing_briefing" | "ready" | "failed";
+            /** Message */
+            message: string;
+            /** Detail */
+            detail?: string | null;
+            /** Progress */
+            progress: number;
+            /**
+             * Resolution Type
+             * @enum {string}
+             */
+            resolution_type: "new" | "joined_existing" | "reused_ready";
+            /** Submitted Url */
+            submitted_url: string;
+            /** Canonical Source Url */
+            canonical_source_url: string;
+            /**
+             * Source Type
+             * @enum {string}
+             */
+            source_type: "youtube" | "url";
+            /** Source Identity Key */
+            source_identity_key: string;
+            /** Session Url */
+            session_url: string;
+            /** Events Url */
+            events_url: string;
+            /** Error Code */
+            error_code?: string | null;
+            /** Error Message */
+            error_message?: string | null;
+            /** Briefing Markdown */
+            briefing_markdown?: string | null;
+            /** Briefing Has Pdf */
+            briefing_has_pdf?: boolean;
+        };
         /** CheckoutSessionRequest */
         CheckoutSessionRequest: {
             /**
@@ -337,31 +433,6 @@ export interface components {
         HealthResponse: {
             /** Status */
             status: string;
-        };
-        /** JobStatusResponse */
-        JobStatusResponse: {
-            /**
-             * Job Id
-             * Format: uuid
-             */
-            job_id: string;
-            /**
-             * Status
-             * @enum {string}
-             */
-            status: "queued" | "running" | "succeeded" | "failed";
-            /** Summary Id */
-            summary_id?: string | null;
-            /** Error Code */
-            error_code?: string | null;
-            /** Error Message */
-            error_message?: string | null;
-            /** Stage */
-            stage?: string | null;
-            /** Progress */
-            progress?: number | null;
-            /** Status Message */
-            status_message?: string | null;
         };
         /** PackBillingState */
         PackBillingState: {
@@ -465,50 +536,14 @@ export interface components {
             /** Period End */
             period_end: string | null;
         };
-        /** SummarizeRequest */
-        SummarizeRequest: {
-            /**
-             * Url
-             * Format: uri
-             */
-            url: string;
-        };
-        /** SummarizeResponse */
-        SummarizeResponse: {
-            /**
-             * Job Id
-             * Format: uuid
-             */
-            job_id: string;
-        };
-        /** SummaryPdfResponse */
-        SummaryPdfResponse: {
-            /**
-             * Summary Id
-             * Format: uuid
-             */
-            summary_id: string;
-            /** Pdf Url */
-            pdf_url: string;
-        };
-        /** SummaryResponse */
-        SummaryResponse: {
-            /**
-             * Summary Id
-             * Format: uuid
-             */
-            summary_id: string;
-            /** Markdown */
-            markdown: string;
-            /** Pdf Url */
-            pdf_url: string | null;
-        };
         /** UsageHistoryEntry */
         UsageHistoryEntry: {
             /** Job Id */
             job_id: string | null;
+            /** Session Path */
+            session_path?: string | null;
             /** Title */
-            title: string | null;
+            title?: string | null;
             /** Seconds Used */
             seconds_used: number;
             /** Source */
@@ -614,83 +649,7 @@ export interface operations {
             };
         };
     };
-    get_job_jobs__job_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                job_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["JobStatusResponse"];
-                };
-            };
-            /** @description Invalid job id. */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Missing or invalid auth token. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Job not found. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Unexpected server error. */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Upstream provider failed. */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    summarize_summarize_post: {
+    create_session_briefing_sessions_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -699,7 +658,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SummarizeRequest"];
+                "application/json": components["schemas"]["BriefingSessionCreateRequest"];
             };
         };
         responses: {
@@ -709,7 +668,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SummarizeResponse"];
+                    "application/json": components["schemas"]["BriefingSessionResponse"];
                 };
             };
             /** @description Invalid input (e.g., malformed URL). */
@@ -759,12 +718,12 @@ export interface operations {
             };
         };
     };
-    get_summary_summaries__summary_id__get: {
+    get_session_briefing_sessions__session_id__get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                summary_id: string;
+                session_id: string;
             };
             cookie?: never;
         };
@@ -776,10 +735,10 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SummaryResponse"];
+                    "application/json": components["schemas"]["BriefingSessionResponse"];
                 };
             };
-            /** @description Invalid summary id. */
+            /** @description Invalid session id. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -797,7 +756,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Summary not found. */
+            /** @description Session not found. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -835,12 +794,12 @@ export interface operations {
             };
         };
     };
-    generate_summary_pdf_summaries__summary_id__pdf_post: {
+    get_session_events_briefing_sessions__session_id__events_get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                summary_id: string;
+                session_id: string;
             };
             cookie?: never;
         };
@@ -852,10 +811,10 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SummaryPdfResponse"];
+                    "application/json": unknown;
                 };
             };
-            /** @description Invalid summary id. */
+            /** @description Invalid session id. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -873,7 +832,159 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Summary not found. */
+            /** @description Session not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Unexpected server error. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Upstream provider failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_briefing_by_id_briefings__briefing_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                briefing_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BriefingResponse"];
+                };
+            };
+            /** @description Invalid briefing id. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or invalid auth token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Briefing not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Unexpected server error. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Upstream provider failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    generate_briefing_pdf_briefings__briefing_id__pdf_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                briefing_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BriefingPdfResponse"];
+                };
+            };
+            /** @description Invalid briefing id. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or invalid auth token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Briefing not found. */
             404: {
                 headers: {
                     [name: string]: unknown;

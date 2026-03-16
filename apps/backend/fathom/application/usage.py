@@ -343,7 +343,8 @@ async def get_usage_overview(user_id: str, settings: Settings) -> UsageOverview:
 
 async def get_usage_history(user_id: str, settings: Settings, limit: int = 50) -> list[dict[str, Any]]:
     admin_client = await create_supabase_admin_client(settings)
-    entries = await fetch_usage_history(admin_client, user_id=user_id, limit=limit)
+    raw_entries = await fetch_usage_history(admin_client, user_id=user_id, limit=max(limit * 3, limit))
+    entries = _collapse_usage_entries(raw_entries, limit=limit)
     job_ids = [str(entry.get("job_id")) for entry in entries if entry.get("job_id")]
     if not job_ids:
         return entries
@@ -373,6 +374,38 @@ async def get_usage_history(user_id: str, settings: Settings, limit: int = 50) -
         entry["title"] = str(source_title).strip() if isinstance(source_title, str) and source_title.strip() else None
 
     return entries
+
+
+def _collapse_usage_entries(entries: list[dict[str, Any]], *, limit: int) -> list[dict[str, Any]]:
+    grouped: dict[str, dict[str, Any]] = {}
+    passthrough: list[dict[str, Any]] = []
+
+    for entry in entries:
+        job_id = entry.get("job_id")
+        if not job_id:
+            passthrough.append(dict(entry))
+            continue
+
+        key = str(job_id)
+        created_at = entry.get("created_at")
+        if key not in grouped:
+            grouped[key] = {
+                **entry,
+                "job_id": job_id,
+                "seconds_used": int(entry.get("seconds_used") or 0),
+                "created_at": created_at,
+            }
+            continue
+
+        current = grouped[key]
+        current["seconds_used"] = int(current.get("seconds_used") or 0) + int(entry.get("seconds_used") or 0)
+        current_created_at = current.get("created_at")
+        if created_at and (not current_created_at or created_at > current_created_at):
+            current["created_at"] = created_at
+
+    collapsed = [*grouped.values(), *passthrough]
+    collapsed.sort(key=lambda entry: str(entry.get("created_at") or ""), reverse=True)
+    return collapsed[:limit]
 
 
 async def record_usage_for_job(

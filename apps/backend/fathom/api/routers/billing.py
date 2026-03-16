@@ -164,6 +164,7 @@ async def get_briefings(
             seconds_used=int(entry.get("seconds_used") or 0),
             source=str(entry.get("source") or ""),
             created_at=entry.get("created_at"),
+            session_path=f"/app/briefings/sessions/{entry.get('job_id')}" if entry.get("job_id") else None,
         )
         for entry in entries
     ]
