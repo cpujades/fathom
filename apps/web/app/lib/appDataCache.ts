@@ -2,10 +2,12 @@ import type {
   BillingAccountResponse,
   BriefingSessionResponse,
   PlanResponse,
-  UsageHistoryEntry,
   UsageOverviewResponse
 } from "@fathom/api-client";
-import { createApiClient } from "@fathom/api-client";
+import { createApiClient, getApiBaseUrl } from "@fathom/api-client";
+
+import type { BriefingListResponse, BriefingsQueryOptions } from "./briefings";
+import { DEFAULT_BRIEFINGS_QUERY } from "./briefings";
 
 export type BillingSnapshot = {
   accountData: BillingAccountResponse | null;
@@ -15,8 +17,8 @@ export type BillingSnapshot = {
 
 const CACHE_TTL_MS = 30_000;
 
-let briefingsCache: { briefings: UsageHistoryEntry[]; fetchedAt: number } | null = null;
-let briefingsRequest: Promise<UsageHistoryEntry[]> | null = null;
+let briefingsCache: { response: BriefingListResponse; fetchedAt: number } | null = null;
+let briefingsRequest: Promise<BriefingListResponse> | null = null;
 
 let billingCache: (BillingSnapshot & { fetchedAt: number }) | null = null;
 let billingRequest: Promise<BillingSnapshot> | null = null;
@@ -24,38 +26,95 @@ let billingRequest: Promise<BillingSnapshot> | null = null;
 let sessionCache = new Map<string, { snapshot: BriefingSessionResponse; fetchedAt: number }>();
 let sessionRequests = new Map<string, Promise<BriefingSessionResponse | null>>();
 
-export function getCachedBriefings(): UsageHistoryEntry[] | null {
-  return briefingsCache?.briefings ?? null;
+export function getCachedBriefings(): BriefingListResponse | null {
+  return briefingsCache?.response ?? null;
+}
+
+export function invalidateBriefingsCache(): void {
+  briefingsCache = null;
 }
 
 export function hasFreshBriefingsCache(): boolean {
   return Boolean(briefingsCache && Date.now() - briefingsCache.fetchedAt < CACHE_TTL_MS);
 }
 
-export async function loadBriefings(accessToken: string): Promise<UsageHistoryEntry[]> {
-  if (briefingsRequest) {
+function normalizeBriefingsQuery(
+  options?: BriefingsQueryOptions
+): Required<BriefingsQueryOptions> {
+  const normalizedQuery = options?.query?.trim() ?? "";
+
+  return {
+    limit: options?.limit ?? DEFAULT_BRIEFINGS_QUERY.limit,
+    offset: options?.offset ?? DEFAULT_BRIEFINGS_QUERY.offset,
+    query: normalizedQuery,
+    sort: options?.sort ?? DEFAULT_BRIEFINGS_QUERY.sort,
+    sourceType: options?.sourceType ?? DEFAULT_BRIEFINGS_QUERY.sourceType
+  };
+}
+
+function isDefaultBriefingsQuery(query: Required<BriefingsQueryOptions>): boolean {
+  return (
+    query.limit === DEFAULT_BRIEFINGS_QUERY.limit &&
+    query.offset === DEFAULT_BRIEFINGS_QUERY.offset &&
+    query.query === DEFAULT_BRIEFINGS_QUERY.query &&
+    query.sort === DEFAULT_BRIEFINGS_QUERY.sort &&
+    query.sourceType === DEFAULT_BRIEFINGS_QUERY.sourceType
+  );
+}
+
+export async function loadBriefings(
+  accessToken: string,
+  options?: BriefingsQueryOptions
+): Promise<BriefingListResponse> {
+  const query = normalizeBriefingsQuery(options);
+  const cacheable = isDefaultBriefingsQuery(query);
+
+  if (cacheable && briefingsRequest) {
     return briefingsRequest;
   }
 
-  const api = createApiClient(accessToken);
-  briefingsRequest = (async () => {
-    const { data, error } = await api.GET("/billing/briefings");
-    if (error) {
-      throw error;
+  const request = (async () => {
+    const url = new URL("/briefings", getApiBaseUrl());
+    url.searchParams.set("limit", String(query.limit));
+    url.searchParams.set("offset", String(query.offset));
+    url.searchParams.set("sort", query.sort);
+    url.searchParams.set("sourceType", query.sourceType);
+
+    if (query.query) {
+      url.searchParams.set("query", query.query);
     }
 
-    const briefings = data ?? [];
-    briefingsCache = {
-      briefings,
-      fetchedAt: Date.now()
-    };
-    return briefings;
+    const response = await fetch(url.toString(), {
+      headers: {
+        Authorization: `Bearer ${accessToken}`
+      }
+    });
+    const payload = (await response.json()) as BriefingListResponse | { message?: string };
+
+    if (!response.ok) {
+      throw payload;
+    }
+
+    if (cacheable) {
+      briefingsCache = {
+        response: payload as BriefingListResponse,
+        fetchedAt: Date.now()
+      };
+    }
+
+    return payload as BriefingListResponse;
   })();
 
+  if (cacheable) {
+    briefingsRequest = request;
+  }
+
   try {
-    return await briefingsRequest;
+    return await request;
   } finally {
-    briefingsRequest = null;
+    if (cacheable) {
+      briefingsRequest = null;
+    }
   }
 }
 
@@ -140,6 +199,10 @@ export function cacheSessionSnapshot(snapshot: BriefingSessionResponse): void {
     snapshot,
     fetchedAt: Date.now()
   });
+}
+
+export function evictSessionSnapshot(sessionId: string): void {
+  sessionCache.delete(sessionId);
 }
 
 export async function prefetchSessionSnapshot(

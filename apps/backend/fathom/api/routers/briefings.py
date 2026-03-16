@@ -3,15 +3,50 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from fathom.api.deps.auth import AuthContext, get_auth_context
-from fathom.application.briefings import create_briefing_pdf, get_briefing
+from fathom.application.briefings import create_briefing_pdf, get_briefing, list_briefings_for_user
 from fathom.core.config import Settings, get_settings
-from fathom.schemas.briefings import BriefingPdfResponse, BriefingResponse
+from fathom.schemas.briefings import (
+    BriefingListResponse,
+    BriefingListSort,
+    BriefingPdfResponse,
+    BriefingResponse,
+    BriefingSourceFilter,
+)
 from fathom.schemas.errors import ErrorResponse
 
 router = APIRouter(prefix="/briefings", tags=["briefings"])
+
+
+@router.get(
+    "",
+    response_model=BriefingListResponse,
+    responses={
+        401: {"model": ErrorResponse, "description": "Missing or invalid auth token."},
+        422: {"model": ErrorResponse, "description": "Invalid query parameters."},
+        500: {"model": ErrorResponse, "description": "Unexpected server error."},
+    },
+)
+async def list_briefings(
+    auth: Annotated[AuthContext, Depends(get_auth_context)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 24,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    query: Annotated[str | None, Query(max_length=120)] = None,
+    sort: BriefingListSort = "newest",
+    source_type: Annotated[BriefingSourceFilter, Query(alias="sourceType")] = "all",
+) -> BriefingListResponse:
+    return await list_briefings_for_user(
+        user_id=auth.user_id,
+        settings=settings,
+        limit=limit,
+        offset=offset,
+        query=query,
+        sort=sort,
+        source_type=source_type,
+    )
 
 
 @router.get(

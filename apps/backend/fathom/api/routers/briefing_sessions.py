@@ -4,11 +4,12 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
-from starlette.responses import StreamingResponse
+from starlette.responses import Response, StreamingResponse
 
 from fathom.api.deps.auth import AuthContext, get_auth_context
 from fathom.application.briefing_sessions import (
     create_briefing_session,
+    delete_briefing_session,
     get_briefing_session,
     stream_briefing_session_events,
 )
@@ -73,3 +74,22 @@ async def get_session_events(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> StreamingResponse:
     return await stream_briefing_session_events(session_id, auth, settings, request)
+
+
+@router.delete(
+    "/{session_id}",
+    status_code=204,
+    responses={
+        401: {"model": ErrorResponse, "description": "Missing or invalid auth token."},
+        400: {"model": ErrorResponse, "description": "Invalid session id."},
+        404: {"model": ErrorResponse, "description": "Session not found."},
+        500: {"model": ErrorResponse, "description": "Unexpected server error."},
+    },
+)
+async def delete_session(
+    session_id: UUID,
+    auth: Annotated[AuthContext, Depends(get_auth_context)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> Response:
+    await delete_briefing_session(session_id, auth, settings)
+    return Response(status_code=204)

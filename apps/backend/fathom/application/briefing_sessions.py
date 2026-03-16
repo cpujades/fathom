@@ -21,13 +21,16 @@ from fathom.application.guards import validate_video_duration, validate_youtube_
 from fathom.application.usage import ensure_usage_allowed, record_usage_for_job
 from fathom.core.config import Settings
 from fathom.core.constants import SUMMARY_PROMPT_KEY_DEFAULT
+from fathom.core.errors import NotFoundError
 from fathom.core.logging import log_context
 from fathom.crud.supabase.jobs import (
+    archive_job,
     create_job,
     fetch_active_job_for_source,
-    fetch_completed_job_for_source,
     fetch_job,
+    fetch_reusable_job_for_source,
     mark_job_succeeded,
+    restore_job,
     update_job_progress,
 )
 from fathom.crud.supabase.summaries import fetch_summary, fetch_summary_by_keys
@@ -77,12 +80,22 @@ async def create_briefing_session(
                 resolution_type="joined_existing",
             )
 
-        completed_job = await fetch_completed_job_for_source(
+        completed_job = await fetch_reusable_job_for_source(
             user_client,
             user_id=auth.user_id,
             url=source.canonical_url,
         )
         if completed_job:
+            if str(completed_job.get("status") or "") == "deleted":
+                await restore_job(user_client, job_id=str(completed_job["id"]))
+                restored_job = await fetch_job(user_client, str(completed_job["id"]))
+                logger.info("briefing session restored archived briefing", extra={"session_id": restored_job["id"]})
+                return await _build_session_snapshot(
+                    user_client=user_client,
+                    job=restored_job,
+                    source=source,
+                    resolution_type="reused_ready",
+                )
             logger.info("briefing session reused user's existing briefing", extra={"session_id": completed_job["id"]})
             return await _build_session_snapshot(
                 user_client=user_client,
@@ -140,6 +153,8 @@ async def get_briefing_session(session_id: UUID, auth: AuthContext, settings: Se
     with log_context(user_id=auth.user_id, session_id=session_id_str):
         user_client = await create_supabase_user_client(settings, auth.access_token)
         job = await fetch_job(user_client, session_id_str)
+        if str(job.get("status") or "") == "deleted":
+            raise NotFoundError("Briefing session not found.")
         source = normalize_source(job["url"])
         logger.info("briefing session fetched", extra={"state": job.get("stage"), "status": job.get("status")})
         return await _build_session_snapshot(user_client=user_client, job=job, source=source)
@@ -155,6 +170,8 @@ async def stream_briefing_session_events(
         user_client = await create_supabase_user_client(settings, auth.access_token)
         session_id_str = str(session_id)
         job = await fetch_job(user_client, session_id_str)
+        if str(job.get("status") or "") == "deleted":
+            raise NotFoundError("Briefing session not found.")
         source = normalize_source(job["url"])
         snapshot = await _build_session_snapshot(user_client=user_client, job=job, source=source)
         yield "retry: 2000\n\n"
@@ -168,6 +185,7 @@ async def stream_briefing_session_events(
             return
 
         current_signature = _snapshot_signature(snapshot)
+        current_markdown = snapshot.briefing_markdown or ""
         event_counter = 2
 
         async with listen_for_notifications(settings, "job_updates") as queue:
@@ -191,25 +209,53 @@ async def stream_briefing_session_events(
                     job=refreshed_job,
                     source=refreshed_source,
                 )
+                refreshed_markdown = refreshed_snapshot.briefing_markdown or ""
                 refreshed_signature = _snapshot_signature(refreshed_snapshot)
-                if refreshed_signature == current_signature:
+                markdown_changed = refreshed_markdown != current_markdown
+                if refreshed_signature == current_signature and not markdown_changed:
                     continue
 
-                current_signature = refreshed_signature
-                event_type = "session.updated"
-                if refreshed_snapshot.state == "ready":
-                    event_type = "session.ready"
-                elif refreshed_snapshot.state == "failed":
-                    event_type = "session.failed"
+                if markdown_changed and refreshed_markdown.startswith(current_markdown):
+                    delta = refreshed_markdown[len(current_markdown) :]
+                    if delta:
+                        yield encode_sse_event(
+                            event_type="session.content_delta",
+                            event_id=str(event_counter),
+                            data=_build_content_delta_event(refreshed_snapshot, delta, len(refreshed_markdown)),
+                        )
+                        event_counter += 1
+                else:
+                    if refreshed_snapshot.state in {"ready", "failed"} or markdown_changed:
+                        event_type = "session.updated"
+                        if refreshed_snapshot.state == "ready":
+                            event_type = "session.ready"
+                        elif refreshed_snapshot.state == "failed":
+                            event_type = "session.failed"
 
-                yield encode_sse_event(
-                    event_type=event_type,
-                    event_id=str(event_counter),
-                    data=refreshed_snapshot.model_dump(mode="json"),
-                )
-                event_counter += 1
+                        yield encode_sse_event(
+                            event_type=event_type,
+                            event_id=str(event_counter),
+                            data=refreshed_snapshot.model_dump(mode="json"),
+                        )
+                        event_counter += 1
+
+                if refreshed_signature != current_signature and refreshed_snapshot.state not in {"ready", "failed"}:
+                    yield encode_sse_event(
+                        event_type="session.status",
+                        event_id=str(event_counter),
+                        data=_build_status_event(refreshed_snapshot),
+                    )
+                    event_counter += 1
+
+                current_signature = refreshed_signature
+                current_markdown = refreshed_markdown
 
                 if refreshed_snapshot.state in {"ready", "failed"}:
+                    yield encode_sse_event(
+                        event_type="session.snapshot",
+                        event_id=str(event_counter),
+                        data=refreshed_snapshot.model_dump(mode="json"),
+                    )
                     return
 
     return StreamingResponse(
@@ -333,3 +379,49 @@ def _snapshot_signature(snapshot: BriefingSessionResponse) -> tuple[Any, ...]:
         snapshot.error_code,
         snapshot.error_message,
     )
+
+
+async def delete_briefing_session(session_id: UUID, auth: AuthContext, settings: Settings) -> None:
+    session_id_str = str(session_id)
+    with log_context(user_id=auth.user_id, session_id=session_id_str):
+        user_client = await create_supabase_user_client(settings, auth.access_token)
+        job = await fetch_job(user_client, session_id_str)
+        if str(job.get("status") or "") == "deleted":
+            return
+        if not job.get("summary_id"):
+            raise NotFoundError("Briefing session not found.")
+        admin_client = await create_supabase_admin_client(settings)
+        await archive_job(admin_client, job_id=session_id_str)
+
+
+def _build_content_delta_event(
+    snapshot: BriefingSessionResponse,
+    delta: str,
+    markdown_length: int,
+) -> dict[str, Any]:
+    return {
+        "session_id": str(snapshot.session_id),
+        "briefing_id": str(snapshot.briefing_id) if snapshot.briefing_id else None,
+        "state": snapshot.state,
+        "message": snapshot.message,
+        "detail": snapshot.detail,
+        "progress": snapshot.progress,
+        "briefing_has_pdf": snapshot.briefing_has_pdf,
+        "markdown_length": markdown_length,
+        "delta": delta,
+    }
+
+
+def _build_status_event(snapshot: BriefingSessionResponse) -> dict[str, Any]:
+    return {
+        "session_id": str(snapshot.session_id),
+        "briefing_id": str(snapshot.briefing_id) if snapshot.briefing_id else None,
+        "state": snapshot.state,
+        "message": snapshot.message,
+        "detail": snapshot.detail,
+        "progress": snapshot.progress,
+        "resolution_type": snapshot.resolution_type,
+        "briefing_has_pdf": snapshot.briefing_has_pdf,
+        "error_code": snapshot.error_code,
+        "error_message": snapshot.error_message,
+    }

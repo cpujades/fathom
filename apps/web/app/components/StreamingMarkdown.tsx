@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -18,21 +18,25 @@ export function StreamingMarkdown({
   cursorClassName
 }: StreamingMarkdownProps) {
   const [displayedMarkdown, setDisplayedMarkdown] = useState(markdown);
+  const frameRef = useRef<number | null>(null);
+  const lastFrameTimeRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!isStreaming) {
-      return;
+      const frameId = window.requestAnimationFrame(() => {
+        setDisplayedMarkdown(markdown);
+      });
+      return () => {
+        window.cancelAnimationFrame(frameId);
+      };
     }
 
-    let timeoutId: number | null = null;
     if (!displayedMarkdown || markdown.length < displayedMarkdown.length || !markdown.startsWith(displayedMarkdown)) {
-      timeoutId = window.setTimeout(() => {
+      const frameId = window.requestAnimationFrame(() => {
         setDisplayedMarkdown(markdown);
-      }, 0);
+      });
       return () => {
-        if (timeoutId !== null) {
-          window.clearTimeout(timeoutId);
-        }
+        window.cancelAnimationFrame(frameId);
       };
     }
 
@@ -40,21 +44,33 @@ export function StreamingMarkdown({
       return;
     }
 
-    timeoutId = window.setTimeout(() => {
+    const animate = (timestamp: number) => {
+      const lastTimestamp = lastFrameTimeRef.current ?? timestamp;
+      const elapsedMs = Math.max(timestamp - lastTimestamp, 16);
+      lastFrameTimeRef.current = timestamp;
+
       setDisplayedMarkdown((current) => {
         if (!current || markdown.length <= current.length || !markdown.startsWith(current)) {
           return markdown;
         }
 
         const remaining = markdown.length - current.length;
-        const step = Math.min(Math.max(Math.ceil(remaining / 10), 20), 120);
-        return markdown.slice(0, current.length + step);
+        const charsPerSecond = 90 + Math.min(remaining * 6, 540);
+        const nextLength = Math.min(current.length + Math.max(1, Math.floor((charsPerSecond * elapsedMs) / 1000)), markdown.length);
+
+        return markdown.slice(0, nextLength);
       });
-    }, 32);
+
+      frameRef.current = window.requestAnimationFrame(animate);
+    };
+
+    frameRef.current = window.requestAnimationFrame(animate);
 
     return () => {
-      if (timeoutId !== null) {
-        window.clearTimeout(timeoutId);
+      lastFrameTimeRef.current = null;
+      if (frameRef.current !== null) {
+        window.cancelAnimationFrame(frameRef.current);
+        frameRef.current = null;
       }
     };
   }, [displayedMarkdown, isStreaming, markdown]);

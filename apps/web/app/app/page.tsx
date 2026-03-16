@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 
@@ -52,6 +52,11 @@ export default function AppHome() {
     router.push(`/app/briefings/new?url=${encodeURIComponent(url.trim())}`);
   };
 
+  const handleFormSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    handleSubmit();
+  };
+
   const firstName = getFirstName(user);
   const workspaceTitle = loading
     ? "Loading your desk..."
@@ -73,7 +78,7 @@ export default function AppHome() {
           <article className={`${chrome.surfaceStrong} ${styles.workspacePanel}`}>
             <h1 className={styles.workspaceTitle}>{workspaceTitle}</h1>
 
-            <div className={styles.commandBlock}>
+            <form className={styles.commandBlock} onSubmit={handleFormSubmit}>
               <div className={styles.commandRow}>
                 <div className={styles.commandField}>
                   <input
@@ -89,8 +94,7 @@ export default function AppHome() {
                 <div className={styles.commandActions}>
                   <button
                     className={`${chrome.primaryButton} ${styles.commandButton}`}
-                    type="button"
-                    onClick={handleSubmit}
+                    type="submit"
                     disabled={loading || submitting}
                   >
                     {submitting ? "Starting..." : "Start briefing"}
@@ -98,7 +102,7 @@ export default function AppHome() {
                 </div>
               </div>
               {error ? <p className={`${chrome.inlineStatus} ${chrome.inlineStatusError}`}>{error}</p> : null}
-            </div>
+            </form>
           </article>
         </section>
       </main>

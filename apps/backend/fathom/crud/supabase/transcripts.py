@@ -125,7 +125,9 @@ async def fetch_transcripts_by_ids(client: AsyncClient, transcript_ids: list[str
         return []
 
     try:
-        response = await client.table("transcripts").select("id,source_title").in_("id", transcript_ids).execute()
+        response = await (
+            client.table("transcripts").select("id,source_title,source_author").in_("id", transcript_ids).execute()
+        )
     except APIError as exc:
         raise_for_postgrest_error(exc, "Failed to fetch transcripts.")
 
