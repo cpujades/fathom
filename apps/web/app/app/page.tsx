@@ -34,7 +34,7 @@ export default function AppHome() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    router.prefetch("/app/jobs/new");
+    router.prefetch("/app/briefings/new");
   }, [router]);
 
   const handleSubmit = () => {
@@ -49,7 +49,7 @@ export default function AppHome() {
 
     setError(null);
     setSubmitting(true);
-    router.push(`/app/jobs/new?url=${encodeURIComponent(url.trim())}`);
+    router.push(`/app/briefings/new?url=${encodeURIComponent(url.trim())}`);
   };
 
   const firstName = getFirstName(user);

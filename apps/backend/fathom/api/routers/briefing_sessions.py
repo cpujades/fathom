@@ -1,20 +1,27 @@
+from __future__ import annotations
+
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
+from starlette.responses import StreamingResponse
 
 from fathom.api.deps.auth import AuthContext, get_auth_context
-from fathom.application.summaries import create_summary_job, create_summary_pdf, get_summary_with_pdf
+from fathom.application.briefing_sessions import (
+    create_briefing_session,
+    get_briefing_session,
+    stream_briefing_session_events,
+)
 from fathom.core.config import Settings, get_settings
+from fathom.schemas.briefing_sessions import BriefingSessionCreateRequest, BriefingSessionResponse
 from fathom.schemas.errors import ErrorResponse
-from fathom.schemas.summaries import SummarizeRequest, SummarizeResponse, SummaryPdfResponse, SummaryResponse
 
-router = APIRouter(tags=["summaries"])
+router = APIRouter(prefix="/briefing-sessions", tags=["briefing sessions"])
 
 
 @router.post(
-    "/summarize",
-    response_model=SummarizeResponse,
+    "",
+    response_model=BriefingSessionResponse,
     responses={
         401: {"model": ErrorResponse, "description": "Missing or invalid auth token."},
         400: {"model": ErrorResponse, "description": "Invalid input (e.g., malformed URL)."},
@@ -22,47 +29,47 @@ router = APIRouter(tags=["summaries"])
         502: {"model": ErrorResponse, "description": "Upstream provider failed."},
     },
 )
-async def summarize(
-    request: SummarizeRequest,
+async def create_session(
+    request: BriefingSessionCreateRequest,
     auth: Annotated[AuthContext, Depends(get_auth_context)],
     settings: Annotated[Settings, Depends(get_settings)],
-) -> SummarizeResponse:
-    return await create_summary_job(request, auth, settings)
+) -> BriefingSessionResponse:
+    return await create_briefing_session(request, auth, settings)
 
 
 @router.get(
-    "/summaries/{summary_id}",
-    response_model=SummaryResponse,
+    "/{session_id}",
+    response_model=BriefingSessionResponse,
     responses={
         401: {"model": ErrorResponse, "description": "Missing or invalid auth token."},
-        400: {"model": ErrorResponse, "description": "Invalid summary id."},
-        404: {"model": ErrorResponse, "description": "Summary not found."},
+        400: {"model": ErrorResponse, "description": "Invalid session id."},
+        404: {"model": ErrorResponse, "description": "Session not found."},
         500: {"model": ErrorResponse, "description": "Unexpected server error."},
         502: {"model": ErrorResponse, "description": "Upstream provider failed."},
     },
 )
-async def get_summary(
-    summary_id: UUID,
+async def get_session(
+    session_id: UUID,
     auth: Annotated[AuthContext, Depends(get_auth_context)],
     settings: Annotated[Settings, Depends(get_settings)],
-) -> SummaryResponse:
-    return await get_summary_with_pdf(summary_id, auth, settings)
+) -> BriefingSessionResponse:
+    return await get_briefing_session(session_id, auth, settings)
 
 
-@router.post(
-    "/summaries/{summary_id}/pdf",
-    response_model=SummaryPdfResponse,
+@router.get(
+    "/{session_id}/events",
     responses={
         401: {"model": ErrorResponse, "description": "Missing or invalid auth token."},
-        400: {"model": ErrorResponse, "description": "Invalid summary id."},
-        404: {"model": ErrorResponse, "description": "Summary not found."},
+        400: {"model": ErrorResponse, "description": "Invalid session id."},
+        404: {"model": ErrorResponse, "description": "Session not found."},
         500: {"model": ErrorResponse, "description": "Unexpected server error."},
         502: {"model": ErrorResponse, "description": "Upstream provider failed."},
     },
 )
-async def generate_summary_pdf(
-    summary_id: UUID,
+async def get_session_events(
+    session_id: UUID,
+    request: Request,
     auth: Annotated[AuthContext, Depends(get_auth_context)],
     settings: Annotated[Settings, Depends(get_settings)],
-) -> SummaryPdfResponse:
-    return await create_summary_pdf(summary_id, auth, settings)
+) -> StreamingResponse:
+    return await stream_briefing_session_events(session_id, auth, settings, request)

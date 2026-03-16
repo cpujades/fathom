@@ -37,7 +37,7 @@ from fathom.crud.supabase.transcripts import (
 )
 from fathom.services.downloader import download_audio
 from fathom.services.summarizer import OPENROUTER_MODEL, stream_summarize_transcript, summarize_transcript
-from fathom.services.supabase import create_supabase_admin_client, wait_for_job_created
+from fathom.services.supabase import create_supabase_admin_client, listen_for_notifications
 from fathom.services.transcriber import transcribe_url
 from fathom.services.youtube import extract_youtube_video_id
 from supabase import AsyncClient
@@ -53,8 +53,8 @@ WORKER_BACKOFF_BASE_SECONDS = 5
 WORKER_STALE_AFTER_SECONDS = 900  # 15 minutes
 
 # Streaming summary flush tuning
-STREAM_FLUSH_CHAR_THRESHOLD = 400
-STREAM_FLUSH_SECONDS = 2.5
+STREAM_FLUSH_CHAR_THRESHOLD = 140
+STREAM_FLUSH_SECONDS = 0.9
 
 
 def _hash_url(url: str) -> str:
@@ -273,6 +273,8 @@ async def _process_job(job: dict[str, Any], settings: Settings, admin_client: As
         last_flush_len = 0
         last_flush_time = time.monotonic()
         progress = 60
+        flush_count = 0
+        first_visible_logged = False
         playful_messages = [
             "Pulling out the best insights",
             "Connecting the dots",
@@ -299,8 +301,16 @@ async def _process_job(job: dict[str, Any], settings: Settings, admin_client: As
                         summary_id=summary_id,
                         summary_markdown=summary_markdown,
                     )
+                    flush_count += 1
                     last_flush_len = len(summary_markdown)
                     last_flush_time = time.monotonic()
+                    if not first_visible_logged:
+                        _log_step(
+                            "draft_first_visible",
+                            duration_ms=(time.perf_counter() - job_start) * 1000,
+                            chars=len(summary_markdown),
+                        )
+                        first_visible_logged = True
                     progress = min(progress + 3, 92)
                     await update_job_progress(
                         admin_client,
@@ -329,11 +339,29 @@ async def _process_job(job: dict[str, Any], settings: Settings, admin_client: As
                 summary_id=summary_id,
                 summary_markdown=summary_markdown,
             )
+            if not first_visible_logged:
+                _log_step(
+                    "draft_first_visible",
+                    duration_ms=(time.perf_counter() - job_start) * 1000,
+                    chars=len(summary_markdown),
+                )
+                first_visible_logged = True
 
         _log_step(
             "summarize_transcript",
             duration_ms=(time.perf_counter() - step_start) * 1000,
             model=OPENROUTER_MODEL,
+            streamed_chars=len(summary_markdown),
+            flush_count=flush_count,
+        )
+
+        await update_job_progress(
+            admin_client,
+            job_id=job_id,
+            stage="finalizing",
+            progress=96,
+            status_message="Finalizing your briefing",
+            summary_id=summary_id,
         )
 
         await update_job_progress(
@@ -425,10 +453,16 @@ async def _handle_claimed_job(job: dict[str, Any], settings: Settings, admin_cli
             )
 
 
-async def _wait_for_job_notification(settings: Settings, timeout_seconds: float) -> bool:
+async def _wait_for_job_notification(
+    queue: asyncio.Queue[dict[str, Any]],
+    *,
+    timeout_seconds: float,
+) -> bool:
     try:
-        payload = await wait_for_job_created(settings, timeout_seconds=timeout_seconds)
+        payload = await asyncio.wait_for(queue.get(), timeout=timeout_seconds)
         return payload is not None
+    except TimeoutError:
+        return False
     except Exception as exc:
         logger.warning("job_created listen failed, falling back to idle sleep", exc_info=exc)
         return False
@@ -451,21 +485,29 @@ async def _run_loop(settings: Settings) -> None:
     running_tasks: set[asyncio.Task[None]] = set()
 
     while True:
-        _drain_completed_tasks(running_tasks)
-        await requeue_stale_jobs(admin_client, stale_after_seconds=WORKER_STALE_AFTER_SECONDS)
-        while len(running_tasks) < max_concurrent_jobs:
-            job = await claim_next_job(admin_client)
-            if not job:
-                break
+        try:
+            async with listen_for_notifications(settings, "job_created") as queue:
+                while True:
+                    _drain_completed_tasks(running_tasks)
+                    await requeue_stale_jobs(admin_client, stale_after_seconds=WORKER_STALE_AFTER_SECONDS)
+                    while len(running_tasks) < max_concurrent_jobs:
+                        job = await claim_next_job(admin_client)
+                        if not job:
+                            break
 
-            task = asyncio.create_task(_handle_claimed_job(job, settings, admin_client))
-            running_tasks.add(task)
+                        task = asyncio.create_task(_handle_claimed_job(job, settings, admin_client))
+                        running_tasks.add(task)
 
-        if running_tasks:
-            await asyncio.sleep(WORKER_IDLE_SLEEP_SECONDS)
-            continue
+                    if running_tasks:
+                        await asyncio.sleep(WORKER_IDLE_SLEEP_SECONDS)
+                        continue
 
-        if not await _wait_for_job_notification(settings, timeout_seconds=notify_timeout_seconds):
+                    if await _wait_for_job_notification(queue, timeout_seconds=notify_timeout_seconds):
+                        continue
+
+                    await asyncio.sleep(WORKER_IDLE_SLEEP_SECONDS)
+        except Exception:
+            logger.warning("job_created listener failed, reconnecting", exc_info=True)
             await asyncio.sleep(WORKER_IDLE_SLEEP_SECONDS)
 
 

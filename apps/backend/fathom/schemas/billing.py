@@ -58,6 +58,7 @@ class UsageHistoryEntry(BaseModel):
     seconds_used: int
     source: str
     created_at: datetime
+    session_path: str | None = None
 
 
 class SubscriptionBillingState(BaseModel):
