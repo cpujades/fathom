@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.15.0](https://github.com/cpujades/fathom/compare/v0.14.0...v0.15.0) (2026-03-16)
+
+
+### Features
+
+* **app:** add searchable briefing library and archiving ([#89](https://github.com/cpujades/fathom/issues/89)) ([d46f1fa](https://github.com/cpujades/fathom/commit/d46f1fac31b613eee2fe3f9d57dd94096b79b33c))
+* **app:** centralize app shell state and rename account and briefings routes ([#85](https://github.com/cpujades/fathom/issues/85)) ([5059c52](https://github.com/cpujades/fathom/commit/5059c523d12d46bcc60f5c0400ad13f8d70867a5))
+* **app:** replace jobs flow with live briefing sessions ([#88](https://github.com/cpujades/fathom/issues/88)) ([6b5ca5a](https://github.com/cpujades/fathom/commit/6b5ca5af97eb6b573680fd58f828dc9869d9af5f))
+
+
+### Bug Fixes
+
+* **deps:** resolve Dependabot security issues ([#90](https://github.com/cpujades/fathom/issues/90)) ([834242d](https://github.com/cpujades/fathom/commit/834242d3dab2382a0374ee10e4e1bfdfc59ad2aa))
+
+
+### Chores
+
+* **deps:** bump dorny/paths-filter in the github-actions group ([#87](https://github.com/cpujades/fathom/issues/87)) ([973092c](https://github.com/cpujades/fathom/commit/973092ccc59d6d6b51674ad2484794f677c0fe3d))
+
 ## [0.14.0](https://github.com/cpujades/fathom/compare/v0.13.0...v0.14.0) (2026-03-10)
 
 
