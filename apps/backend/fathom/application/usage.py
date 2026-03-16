@@ -350,6 +350,13 @@ async def get_usage_history(user_id: str, settings: Settings, limit: int = 50) -
         return entries
 
     jobs = await fetch_jobs_by_ids(admin_client, job_ids)
+    deleted_job_ids = {
+        str(job.get("id")) for job in jobs if str(job.get("status") or "") == "deleted" and job.get("id")
+    }
+    if deleted_job_ids:
+        entries = [entry for entry in entries if str(entry.get("job_id") or "") not in deleted_job_ids]
+        jobs = [job for job in jobs if str(job.get("id") or "") not in deleted_job_ids]
+
     summary_ids = [str(job.get("summary_id")) for job in jobs if job.get("summary_id")]
     summaries = await fetch_summaries_by_ids(admin_client, summary_ids)
     transcript_ids = [str(summary.get("transcript_id")) for summary in summaries if summary.get("transcript_id")]

@@ -8,7 +8,7 @@ SYSTEM_PROMPT = (
     "podcast transcript. Use clear section headings, and make it feel like a professional briefing. "
     "Do not invent facts; if something is unclear in the transcript, explicitly say so.\n\n"
     "Required structure (use Markdown headings):\n"
-    "1) Title (H1)\n"
+    "1) Title (H1, use the specific episode or topic name, never a generic title like 'Briefing' or 'Summary')\n"
     "2) TL;DR (short paragraph)\n"
     "3) Key Takeaways (bullet list, include emojis like ✅, 💡, ⚠️ where appropriate)\n"
     "4) Detailed Summary (multi-paragraph, well-structured)\n"

@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from postgrest import APIError
+from postgrest.types import CountMethod
 
 from fathom.services.supabase.helpers import first_row, raise_for_postgrest_error
 from supabase import AsyncClient
@@ -83,7 +84,7 @@ async def fetch_active_job_for_source(
     return first_row(data, error_message="Supabase returned an unexpected jobs shape.")
 
 
-async def fetch_completed_job_for_source(
+async def fetch_reusable_job_for_source(
     client: AsyncClient,
     *,
     user_id: str,
@@ -95,14 +96,14 @@ async def fetch_completed_job_for_source(
             .select("id,status,url,summary_id,error_code,error_message,stage,progress,status_message")
             .eq("user_id", user_id)
             .eq("url", url)
-            .eq("status", "succeeded")
+            .in_("status", ["succeeded", "deleted"])
             .not_.is_("summary_id", "null")
             .order("created_at", desc=True)
             .limit(1)
             .execute()
         )
     except APIError as exc:
-        raise_for_postgrest_error(exc, "Failed to fetch completed job.")
+        raise_for_postgrest_error(exc, "Failed to fetch reusable job.")
 
     data = response.data or []
     if not data:
@@ -116,12 +117,39 @@ async def fetch_jobs_by_ids(client: AsyncClient, job_ids: list[str]) -> list[dic
         return []
 
     try:
-        response = await client.table("jobs").select("id,summary_id").in_("id", job_ids).execute()
+        response = await client.table("jobs").select("id,summary_id,status").in_("id", job_ids).execute()
     except APIError as exc:
         raise_for_postgrest_error(exc, "Failed to fetch jobs.")
 
     data = response.data or []
     return [row for row in data if isinstance(row, dict)]
+
+
+async def fetch_briefing_jobs_page(
+    client: AsyncClient,
+    *,
+    user_id: str,
+    limit: int,
+    offset: int,
+    sort_desc: bool,
+) -> tuple[list[dict[str, Any]], int]:
+    try:
+        response = await (
+            client.table("jobs")
+            .select("id,summary_id,status,url,created_at,duration_seconds", count=CountMethod.exact)
+            .eq("user_id", user_id)
+            .eq("status", "succeeded")
+            .not_.is_("summary_id", "null")
+            .order("created_at", desc=sort_desc)
+            .range(offset, max(offset + limit - 1, offset))
+            .execute()
+        )
+    except APIError as exc:
+        raise_for_postgrest_error(exc, "Failed to fetch briefing jobs.")
+
+    data = response.data or []
+    count = response.count if isinstance(response.count, int) else len(data)
+    return [row for row in data if isinstance(row, dict)], count
 
 
 async def claim_next_job(client: AsyncClient) -> dict[str, Any] | None:
@@ -277,3 +305,41 @@ async def update_job_progress(
         await client.table("jobs").update(payload).eq("id", job_id).execute()
     except APIError as exc:
         raise_for_postgrest_error(exc, "Failed to update job progress.")
+
+
+async def archive_job(client: AsyncClient, *, job_id: str) -> None:
+    try:
+        await (
+            client.table("jobs")
+            .update(
+                {
+                    "status": "deleted",
+                    "stage": "deleted",
+                    "progress": 100,
+                    "status_message": "Briefing removed from history",
+                }
+            )
+            .eq("id", job_id)
+            .execute()
+        )
+    except APIError as exc:
+        raise_for_postgrest_error(exc, "Failed to archive job.")
+
+
+async def restore_job(client: AsyncClient, *, job_id: str) -> None:
+    try:
+        await (
+            client.table("jobs")
+            .update(
+                {
+                    "status": "succeeded",
+                    "stage": "completed",
+                    "progress": 100,
+                    "status_message": "Using an existing briefing",
+                }
+            )
+            .eq("id", job_id)
+            .execute()
+        )
+    except APIError as exc:
+        raise_for_postgrest_error(exc, "Failed to restore job.")

@@ -53,8 +53,8 @@ WORKER_BACKOFF_BASE_SECONDS = 5
 WORKER_STALE_AFTER_SECONDS = 900  # 15 minutes
 
 # Streaming summary flush tuning
-STREAM_FLUSH_CHAR_THRESHOLD = 140
-STREAM_FLUSH_SECONDS = 0.9
+STREAM_FLUSH_CHAR_THRESHOLD = 80
+STREAM_FLUSH_SECONDS = 0.35
 
 
 def _hash_url(url: str) -> str:
@@ -311,7 +311,7 @@ async def _process_job(job: dict[str, Any], settings: Settings, admin_client: As
                             chars=len(summary_markdown),
                         )
                         first_visible_logged = True
-                    progress = min(progress + 3, 92)
+                    progress = min(progress + 1, 92)
                     await update_job_progress(
                         admin_client,
                         job_id=job_id,

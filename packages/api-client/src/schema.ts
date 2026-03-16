@@ -83,7 +83,8 @@ export interface paths {
         get: operations["get_session_briefing_sessions__session_id__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /** Delete Session */
+        delete: operations["delete_session_briefing_sessions__session_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -98,6 +99,23 @@ export interface paths {
         };
         /** Get Session Events */
         get: operations["get_session_events_briefing_sessions__session_id__events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/briefings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Briefings */
+        get: operations["list_briefings_briefings_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -310,6 +328,66 @@ export interface components {
              */
             created_at: string;
         };
+        /** BriefingListItem */
+        BriefingListItem: {
+            /**
+             * Session Id
+             * Format: uuid
+             */
+            session_id: string;
+            /**
+             * Briefing Id
+             * Format: uuid
+             */
+            briefing_id: string;
+            /** Title */
+            title: string;
+            /** Author */
+            author?: string | null;
+            /** Source Url */
+            source_url: string;
+            /** Source Host */
+            source_host: string;
+            /**
+             * Source Type
+             * @enum {string}
+             */
+            source_type: "youtube" | "url";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Duration Seconds */
+            duration_seconds?: number | null;
+            /** Session Path */
+            session_path: string;
+        };
+        /** BriefingListResponse */
+        BriefingListResponse: {
+            /** Items */
+            items: components["schemas"]["BriefingListItem"][];
+            /** Total Count */
+            total_count: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Has More */
+            has_more: boolean;
+            /** Query */
+            query?: string | null;
+            /**
+             * Sort
+             * @enum {string}
+             */
+            sort: "newest" | "oldest";
+            /**
+             * Source Type
+             * @enum {string}
+             */
+            source_type: "all" | "youtube" | "url";
+        };
         /** BriefingPdfResponse */
         BriefingPdfResponse: {
             /**
@@ -386,8 +464,11 @@ export interface components {
             error_message?: string | null;
             /** Briefing Markdown */
             briefing_markdown?: string | null;
-            /** Briefing Has Pdf */
-            briefing_has_pdf?: boolean;
+            /**
+             * Briefing Has Pdf
+             * @default false
+             */
+            briefing_has_pdf: boolean;
         };
         /** CheckoutSessionRequest */
         CheckoutSessionRequest: {
@@ -540,8 +621,6 @@ export interface components {
         UsageHistoryEntry: {
             /** Job Id */
             job_id: string | null;
-            /** Session Path */
-            session_path?: string | null;
             /** Title */
             title?: string | null;
             /** Seconds Used */
@@ -553,6 +632,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Session Path */
+            session_path?: string | null;
         };
         /** UsageOverviewResponse */
         UsageOverviewResponse: {
@@ -794,6 +875,71 @@ export interface operations {
             };
         };
     };
+    delete_session_briefing_sessions__session_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid session id. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or invalid auth token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Session not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Unexpected server error. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     get_session_events_briefing_sessions__session_id__events_get: {
         parameters: {
             query?: never;
@@ -861,6 +1007,59 @@ export interface operations {
             };
             /** @description Upstream provider failed. */
             502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_briefings_briefings_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                query?: string | null;
+                sort?: "newest" | "oldest";
+                sourceType?: "all" | "youtube" | "url";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BriefingListResponse"];
+                };
+            };
+            /** @description Missing or invalid auth token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Invalid query parameters. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected server error. */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };

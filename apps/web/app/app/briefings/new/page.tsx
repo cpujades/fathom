@@ -11,7 +11,7 @@ import { useAppShell } from "../../../components/AppShellProvider";
 import chrome from "../../../components/app-chrome.module.css";
 import { getApiErrorMessage } from "../../../lib/apiErrors";
 import { getAccountLabel } from "../../../lib/accountLabel";
-import { cacheSessionSnapshot } from "../../../lib/appDataCache";
+import { cacheSessionSnapshot, invalidateBriefingsCache } from "../../../lib/appDataCache";
 import styles from "../session.module.css";
 
 function BriefingCreatePageContent() {
@@ -54,6 +54,9 @@ function BriefingCreatePageContent() {
 
         if (data?.session_id) {
           cacheSessionSnapshot(data);
+          if (data.resolution_type === "reused_ready") {
+            invalidateBriefingsCache();
+          }
           router.replace(`/app/briefings/sessions/${data.session_id}`);
           return;
         }
