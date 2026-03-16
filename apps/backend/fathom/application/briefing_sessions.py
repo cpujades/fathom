@@ -34,7 +34,11 @@ from fathom.crud.supabase.jobs import (
     update_job_progress,
 )
 from fathom.crud.supabase.summaries import fetch_summary, fetch_summary_by_keys
-from fathom.crud.supabase.transcripts import fetch_transcript_by_hash, fetch_transcript_by_video_id
+from fathom.crud.supabase.transcripts import (
+    fetch_transcript_by_hash,
+    fetch_transcript_by_id,
+    fetch_transcript_by_video_id,
+)
 from fathom.schemas.briefing_sessions import (
     BriefingSessionCreateRequest,
     BriefingSessionResolution,
@@ -65,6 +69,7 @@ async def create_briefing_session(
         validate_youtube_url(submitted_url)
         source = normalize_source(submitted_url)
         user_client = await create_supabase_user_client(settings, auth.access_token)
+        admin_client = await create_supabase_admin_client(settings)
 
         active_job = await fetch_active_job_for_source(
             user_client,
@@ -75,6 +80,7 @@ async def create_briefing_session(
             logger.info("briefing session joined existing work", extra={"session_id": active_job["id"]})
             return await _build_session_snapshot(
                 user_client=user_client,
+                admin_client=admin_client,
                 job=active_job,
                 source=source,
                 resolution_type="joined_existing",
@@ -92,6 +98,7 @@ async def create_briefing_session(
                 logger.info("briefing session restored archived briefing", extra={"session_id": restored_job["id"]})
                 return await _build_session_snapshot(
                     user_client=user_client,
+                    admin_client=admin_client,
                     job=restored_job,
                     source=source,
                     resolution_type="reused_ready",
@@ -99,6 +106,7 @@ async def create_briefing_session(
             logger.info("briefing session reused user's existing briefing", extra={"session_id": completed_job["id"]})
             return await _build_session_snapshot(
                 user_client=user_client,
+                admin_client=admin_client,
                 job=completed_job,
                 source=source,
                 resolution_type="reused_ready",
@@ -117,7 +125,6 @@ async def create_briefing_session(
             settings=settings,
         )
 
-        admin_client = await create_supabase_admin_client(settings)
         cached_summary = await _find_ready_cached_summary(admin_client, source)
         if cached_summary:
             ready_job = await _create_ready_reused_session(
@@ -132,6 +139,7 @@ async def create_briefing_session(
             logger.info("briefing session reused cached briefing", extra={"session_id": ready_job["id"]})
             return await _build_session_snapshot(
                 user_client=user_client,
+                admin_client=admin_client,
                 job=ready_job,
                 source=source,
                 resolution_type="reused_ready",
@@ -145,19 +153,26 @@ async def create_briefing_session(
         )
         job = await fetch_job(user_client, str(created_job["id"]))
         logger.info("briefing session created", extra={"session_id": job["id"]})
-        return await _build_session_snapshot(user_client=user_client, job=job, source=source, resolution_type="new")
+        return await _build_session_snapshot(
+            user_client=user_client,
+            admin_client=admin_client,
+            job=job,
+            source=source,
+            resolution_type="new",
+        )
 
 
 async def get_briefing_session(session_id: UUID, auth: AuthContext, settings: Settings) -> BriefingSessionResponse:
     session_id_str = str(session_id)
     with log_context(user_id=auth.user_id, session_id=session_id_str):
         user_client = await create_supabase_user_client(settings, auth.access_token)
+        admin_client = await create_supabase_admin_client(settings)
         job = await fetch_job(user_client, session_id_str)
         if str(job.get("status") or "") == "deleted":
             raise NotFoundError("Briefing session not found.")
         source = normalize_source(job["url"])
         logger.info("briefing session fetched", extra={"state": job.get("stage"), "status": job.get("status")})
-        return await _build_session_snapshot(user_client=user_client, job=job, source=source)
+        return await _build_session_snapshot(user_client=user_client, admin_client=admin_client, job=job, source=source)
 
 
 async def stream_briefing_session_events(
@@ -168,12 +183,18 @@ async def stream_briefing_session_events(
 ) -> StreamingResponse:
     async def event_stream() -> AsyncIterator[str]:
         user_client = await create_supabase_user_client(settings, auth.access_token)
+        admin_client = await create_supabase_admin_client(settings)
         session_id_str = str(session_id)
         job = await fetch_job(user_client, session_id_str)
         if str(job.get("status") or "") == "deleted":
             raise NotFoundError("Briefing session not found.")
         source = normalize_source(job["url"])
-        snapshot = await _build_session_snapshot(user_client=user_client, job=job, source=source)
+        snapshot = await _build_session_snapshot(
+            user_client=user_client,
+            admin_client=admin_client,
+            job=job,
+            source=source,
+        )
         yield "retry: 2000\n\n"
         yield encode_sse_event(
             event_type="session.snapshot",
@@ -206,6 +227,7 @@ async def stream_briefing_session_events(
                 refreshed_source = normalize_source(refreshed_job["url"])
                 refreshed_snapshot = await _build_session_snapshot(
                     user_client=user_client,
+                    admin_client=admin_client,
                     job=refreshed_job,
                     source=refreshed_source,
                 )
@@ -272,24 +294,37 @@ async def stream_briefing_session_events(
 async def _build_session_snapshot(
     *,
     user_client: Any,
+    admin_client: Any,
     job: dict[str, Any],
     source: NormalizedSource,
     resolution_type: BriefingSessionResolution | None = None,
 ) -> BriefingSessionResponse:
-    summary = await _fetch_summary_for_job(user_client, job)
+    summary, transcript = await _fetch_summary_and_transcript_for_job(user_client, admin_client, job)
     return build_briefing_session_snapshot(
         job=job,
         source=source,
         resolution_type=resolution_type,
         summary=summary,
+        transcript=transcript,
     )
 
 
-async def _fetch_summary_for_job(user_client: Any, job: dict[str, Any]) -> dict[str, Any] | None:
+async def _fetch_summary_and_transcript_for_job(
+    user_client: Any,
+    admin_client: Any,
+    job: dict[str, Any],
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     summary_id = job.get("summary_id")
     if not summary_id:
-        return None
-    return await fetch_summary(user_client, str(summary_id))
+        return None, None
+
+    summary = await fetch_summary(user_client, str(summary_id))
+    transcript_id = summary.get("transcript_id")
+    if not transcript_id:
+        return summary, None
+
+    transcript = await fetch_transcript_by_id(admin_client, str(transcript_id))
+    return summary, transcript
 
 
 async def _create_ready_reused_session(
@@ -406,6 +441,10 @@ def _build_content_delta_event(
         "message": snapshot.message,
         "detail": snapshot.detail,
         "progress": snapshot.progress,
+        "source_title": snapshot.source_title,
+        "source_author": snapshot.source_author,
+        "source_duration_seconds": snapshot.source_duration_seconds,
+        "source_thumbnail_url": snapshot.source_thumbnail_url,
         "briefing_has_pdf": snapshot.briefing_has_pdf,
         "markdown_length": markdown_length,
         "delta": delta,
@@ -421,6 +460,10 @@ def _build_status_event(snapshot: BriefingSessionResponse) -> dict[str, Any]:
         "detail": snapshot.detail,
         "progress": snapshot.progress,
         "resolution_type": snapshot.resolution_type,
+        "source_title": snapshot.source_title,
+        "source_author": snapshot.source_author,
+        "source_duration_seconds": snapshot.source_duration_seconds,
+        "source_thumbnail_url": snapshot.source_thumbnail_url,
         "briefing_has_pdf": snapshot.briefing_has_pdf,
         "error_code": snapshot.error_code,
         "error_message": snapshot.error_message,

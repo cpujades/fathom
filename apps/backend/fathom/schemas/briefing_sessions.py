@@ -35,6 +35,10 @@ class BriefingSessionResponse(BaseModel):
     canonical_source_url: str
     source_type: BriefingSourceType
     source_identity_key: str
+    source_title: str
+    source_author: str | None = None
+    source_duration_seconds: int | None = None
+    source_thumbnail_url: str | None = None
     session_url: str
     events_url: str
     error_code: str | None = None

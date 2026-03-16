@@ -41,6 +41,9 @@ class BriefingSessionSnapshotTests(unittest.TestCase):
         self.assertEqual(snapshot.resolution_type, "reused_ready")
         self.assertEqual(str(snapshot.briefing_id), "22222222-2222-2222-2222-222222222222")
         self.assertEqual(snapshot.message, "Using an existing briefing")
+        self.assertEqual(snapshot.source_title, "Untitled YouTube briefing")
+        self.assertEqual(snapshot.source_thumbnail_url, "https://i.ytimg.com/vi/abc123/hqdefault.jpg")
+        self.assertIsNone(snapshot.source_author)
 
     def test_map_finalizing_job_into_finalizing_snapshot(self) -> None:
         source = normalize_source("https://www.youtube.com/watch?v=abc123")
@@ -60,12 +63,22 @@ class BriefingSessionSnapshotTests(unittest.TestCase):
                 "summary_markdown": "# Draft",
                 "pdf_object_key": None,
             },
+            transcript={
+                "video_id": "abc123",
+                "source_title": "How to Think Better",
+                "source_author": "Chris Williamson",
+                "source_length_seconds": 5472,
+            },
         )
 
         self.assertEqual(snapshot.state, "finalizing_briefing")
         self.assertEqual(snapshot.message, "Finalizing your briefing")
         self.assertEqual(snapshot.briefing_markdown, "# Draft")
         self.assertFalse(snapshot.briefing_has_pdf)
+        self.assertEqual(snapshot.source_title, "How to Think Better")
+        self.assertEqual(snapshot.source_author, "Chris Williamson")
+        self.assertEqual(snapshot.source_duration_seconds, 5472)
+        self.assertEqual(snapshot.source_thumbnail_url, "https://i.ytimg.com/vi/abc123/hqdefault.jpg")
 
 
 class SseEncodingTests(unittest.TestCase):

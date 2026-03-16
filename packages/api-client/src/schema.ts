@@ -454,6 +454,14 @@ export interface components {
             source_type: "youtube" | "url";
             /** Source Identity Key */
             source_identity_key: string;
+            /** Source Title */
+            source_title: string;
+            /** Source Author */
+            source_author?: string | null;
+            /** Source Duration Seconds */
+            source_duration_seconds?: number | null;
+            /** Source Thumbnail Url */
+            source_thumbnail_url?: string | null;
             /** Session Url */
             session_url: string;
             /** Events Url */

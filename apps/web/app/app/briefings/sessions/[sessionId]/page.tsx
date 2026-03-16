@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -12,6 +13,7 @@ import { useAppShell } from "../../../../components/AppShellProvider";
 import chrome from "../../../../components/app-chrome.module.css";
 import { getApiErrorMessage } from "../../../../lib/apiErrors";
 import { getAccountLabel } from "../../../../lib/accountLabel";
+import { formatExactDuration } from "../../../../lib/format";
 import {
   cacheSessionSnapshot,
   evictSessionSnapshot,
@@ -59,6 +61,10 @@ type SessionContentDeltaPayload = {
   message: string;
   detail: string | null;
   progress: number;
+  source_title: string;
+  source_author: string | null;
+  source_duration_seconds: number | null;
+  source_thumbnail_url: string | null;
   briefing_has_pdf: boolean;
   markdown_length: number;
   delta: string;
@@ -72,6 +78,10 @@ type SessionStatusPayload = {
   detail: string | null;
   progress: number;
   resolution_type: BriefingSessionResponse["resolution_type"];
+  source_title: string;
+  source_author: string | null;
+  source_duration_seconds: number | null;
+  source_thumbnail_url: string | null;
   briefing_has_pdf: boolean;
   error_code: string | null;
   error_message: string | null;
@@ -160,6 +170,10 @@ export default function BriefingSessionPage() {
           detail: statusUpdate.detail,
           progress: statusUpdate.progress,
           resolution_type: statusUpdate.resolution_type,
+          source_title: statusUpdate.source_title,
+          source_author: statusUpdate.source_author,
+          source_duration_seconds: statusUpdate.source_duration_seconds,
+          source_thumbnail_url: statusUpdate.source_thumbnail_url,
           briefing_has_pdf: statusUpdate.briefing_has_pdf,
           error_code: statusUpdate.error_code,
           error_message: statusUpdate.error_message,
@@ -200,6 +214,10 @@ export default function BriefingSessionPage() {
           message: contentDelta.message,
           detail: contentDelta.detail,
           progress: contentDelta.progress,
+          source_title: contentDelta.source_title,
+          source_author: contentDelta.source_author,
+          source_duration_seconds: contentDelta.source_duration_seconds,
+          source_thumbnail_url: contentDelta.source_thumbnail_url,
           briefing_has_pdf: contentDelta.briefing_has_pdf,
           briefing_markdown: nextMarkdown
         };
@@ -475,6 +493,7 @@ export default function BriefingSessionPage() {
       ? "Download PDF"
       : "Generate PDF";
   const liveReaderMessage = session ? STATE_HINTS[session.state] : null;
+  const sourceActionLabel = session?.source_type === "youtube" ? "Open video" : "Open source";
 
   return (
     <div className={chrome.pageFrame}>
@@ -578,6 +597,58 @@ export default function BriefingSessionPage() {
             </article>
 
             <aside className={chrome.readerSide}>
+              <div className={`${chrome.readerSideCard} ${styles.sourceCard}`}>
+                <div className={styles.sourceHeader}>
+                  <div className={styles.sourceMedia}>
+                    {session?.source_thumbnail_url ? (
+                      <div className={styles.sourceThumbnailFrame}>
+                        <Image
+                          className={styles.sourceThumbnail}
+                          src={session.source_thumbnail_url}
+                          alt=""
+                          fill
+                          sizes="112px"
+                        />
+                      </div>
+                    ) : (
+                      <div className={styles.sourceThumbnailFrame}>
+                        <div className={styles.sourceThumbnailFallback}>
+                          <span>{session?.source_type === "youtube" ? "YouTube" : "Source"}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className={styles.sourceHeaderBody}>
+                    <div>
+                      <h2 className={chrome.surfaceTitle}>Source</h2>
+                    </div>
+                    <span className={chrome.statusPillMuted}>{session?.source_type === "youtube" ? "YouTube" : "Link"}</span>
+                  </div>
+                </div>
+
+                <div className={styles.sourceBody}>
+                  <div className={styles.sourceSummary}>
+                    <h3 className={styles.sourceTitle}>{session?.source_title ?? "Untitled briefing source"}</h3>
+                    <div className={styles.sourceMeta}>
+                      {session?.source_author ? <span>By {session.source_author}</span> : null}
+                      {session?.source_duration_seconds ? <span>{formatExactDuration(session.source_duration_seconds)}</span> : null}
+                    </div>
+                  </div>
+
+                  <a
+                    className={chrome.secondaryButton}
+                    href={session?.canonical_source_url ?? session?.submitted_url ?? "#"}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {sourceActionLabel}
+                  </a>
+
+                  <p className={styles.sourceUrl}>{session?.canonical_source_url ?? session?.submitted_url}</p>
+                </div>
+              </div>
+
               <div className={chrome.readerSideCard}>
                 <div className={chrome.surfaceHeader}>
                   <div>

@@ -53,12 +53,23 @@ def build_briefing_session_snapshot(
     source: NormalizedSource,
     resolution_type: BriefingSessionResolution | None = None,
     summary: dict[str, Any] | None = None,
+    transcript: dict[str, Any] | None = None,
 ) -> BriefingSessionResponse:
     session_id = str(job["id"])
     state = _map_job_to_session_state(job)
     resolved_resolution = resolution_type or _infer_resolution_type(job)
     progress = _resolve_progress(job, state)
     message = _build_message(state, resolved_resolution)
+    source_title = resolve_source_title(source, transcript.get("source_title") if transcript else None)
+    source_author = _clean_optional_text(transcript.get("source_author") if transcript else None)
+    source_duration_seconds = _resolve_source_duration_seconds(
+        transcript.get("source_length_seconds") if transcript else None,
+        job.get("duration_seconds"),
+    )
+    source_thumbnail_url = build_source_thumbnail_url(
+        source,
+        transcript.get("video_id") if transcript else None,
+    )
 
     return BriefingSessionResponse(
         session_id=session_id,
@@ -72,6 +83,10 @@ def build_briefing_session_snapshot(
         canonical_source_url=source.canonical_url,
         source_type=source.source_type,
         source_identity_key=source.source_identity_key,
+        source_title=source_title,
+        source_author=source_author,
+        source_duration_seconds=source_duration_seconds,
+        source_thumbnail_url=source_thumbnail_url,
         session_url=f"/briefing-sessions/{session_id}",
         events_url=f"/briefing-sessions/{session_id}/events",
         error_code=job.get("error_code"),
@@ -172,3 +187,33 @@ def _build_message(state: BriefingSessionState, resolution_type: BriefingSession
     if state == "finalizing_briefing":
         return "Finalizing your briefing"
     return "Drafting your briefing"
+
+
+def resolve_source_title(source: NormalizedSource, source_title: Any) -> str:
+    cleaned = _clean_optional_text(source_title)
+    if cleaned:
+        return cleaned
+    if source.source_type == "youtube":
+        return "Untitled YouTube briefing"
+    return "Untitled briefing"
+
+
+def build_source_thumbnail_url(source: NormalizedSource, video_id: str | None = None) -> str | None:
+    resolved_video_id = video_id or source.video_id
+    if source.source_type != "youtube" or not isinstance(resolved_video_id, str) or not resolved_video_id:
+        return None
+    return f"https://i.ytimg.com/vi/{resolved_video_id}/hqdefault.jpg"
+
+
+def _resolve_source_duration_seconds(primary: Any, fallback: Any) -> int | None:
+    for candidate in (primary, fallback):
+        if isinstance(candidate, int) and candidate > 0:
+            return candidate
+    return None
+
+
+def _clean_optional_text(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip()
+    return cleaned or None

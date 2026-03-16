@@ -42,7 +42,7 @@ async def fetch_job(client: AsyncClient, job_id: str) -> dict[str, Any]:
     try:
         response = await (
             client.table("jobs")
-            .select("id,status,url,summary_id,error_code,error_message,stage,progress,status_message")
+            .select("id,status,url,summary_id,error_code,error_message,stage,progress,status_message,duration_seconds")
             .eq("id", job_id)
             .limit(1)
             .execute()
@@ -66,7 +66,7 @@ async def fetch_active_job_for_source(
     try:
         response = await (
             client.table("jobs")
-            .select("id,status,url,summary_id,error_code,error_message,stage,progress,status_message")
+            .select("id,status,url,summary_id,error_code,error_message,stage,progress,status_message,duration_seconds")
             .eq("user_id", user_id)
             .eq("url", url)
             .in_("status", ["queued", "running"])
@@ -93,7 +93,7 @@ async def fetch_reusable_job_for_source(
     try:
         response = await (
             client.table("jobs")
-            .select("id,status,url,summary_id,error_code,error_message,stage,progress,status_message")
+            .select("id,status,url,summary_id,error_code,error_message,stage,progress,status_message,duration_seconds")
             .eq("user_id", user_id)
             .eq("url", url)
             .in_("status", ["succeeded", "deleted"])
