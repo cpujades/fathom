@@ -41,7 +41,7 @@ async def fetch_job(client: AsyncClient, job_id: str) -> dict[str, Any]:
     try:
         response = await (
             client.table("jobs")
-            .select("id,status,summary_id,error_code,error_message,stage,progress,status_message")
+            .select("id,status,url,summary_id,error_code,error_message,stage,progress,status_message")
             .eq("id", job_id)
             .limit(1)
             .execute()
@@ -54,6 +54,61 @@ async def fetch_job(client: AsyncClient, job_id: str) -> dict[str, Any]:
         error_message="Supabase returned an unexpected jobs shape.",
         not_found_message="Job not found.",
     )
+
+
+async def fetch_active_job_for_source(
+    client: AsyncClient,
+    *,
+    user_id: str,
+    url: str,
+) -> dict[str, Any] | None:
+    try:
+        response = await (
+            client.table("jobs")
+            .select("id,status,url,summary_id,error_code,error_message,stage,progress,status_message")
+            .eq("user_id", user_id)
+            .eq("url", url)
+            .in_("status", ["queued", "running"])
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+    except APIError as exc:
+        raise_for_postgrest_error(exc, "Failed to fetch active job.")
+
+    data = response.data or []
+    if not data:
+        return None
+
+    return first_row(data, error_message="Supabase returned an unexpected jobs shape.")
+
+
+async def fetch_completed_job_for_source(
+    client: AsyncClient,
+    *,
+    user_id: str,
+    url: str,
+) -> dict[str, Any] | None:
+    try:
+        response = await (
+            client.table("jobs")
+            .select("id,status,url,summary_id,error_code,error_message,stage,progress,status_message")
+            .eq("user_id", user_id)
+            .eq("url", url)
+            .eq("status", "succeeded")
+            .not_.is_("summary_id", "null")
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+    except APIError as exc:
+        raise_for_postgrest_error(exc, "Failed to fetch completed job.")
+
+    data = response.data or []
+    if not data:
+        return None
+
+    return first_row(data, error_message="Supabase returned an unexpected jobs shape.")
 
 
 async def fetch_jobs_by_ids(client: AsyncClient, job_ids: list[str]) -> list[dict[str, Any]]:

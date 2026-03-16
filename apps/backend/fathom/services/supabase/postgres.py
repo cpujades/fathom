@@ -77,26 +77,18 @@ async def create_postgres_connection(settings: Settings) -> AsyncIterator[asyncp
         raise ConfigurationError(f"Failed to connect to Postgres: {exc}") from exc
 
 
-async def wait_for_job_created(
+@asynccontextmanager
+async def listen_for_notifications(
     settings: Settings,
-    *,
-    timeout_seconds: float = 10.0,
-) -> dict[str, Any] | None:
-    """Wait for a job_created notification.
-
-    Returns the payload dict if a notification arrives before timeout, otherwise None.
-    """
+    channel: str,
+) -> AsyncIterator[asyncio.Queue[dict[str, Any]]]:
     async with create_postgres_connection(settings) as conn:
         queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
         notification_handler = partial(_enqueue_notification, queue=queue)
-        await conn.add_listener("job_created", notification_handler)
-        logger.debug("listening to job_created channel")
-
+        await conn.add_listener(channel, notification_handler)
+        logger.debug("listening to %s channel", channel)
         try:
-            try:
-                return await asyncio.wait_for(queue.get(), timeout=timeout_seconds)
-            except TimeoutError:
-                return None
+            yield queue
         finally:
-            await conn.remove_listener("job_created", notification_handler)
-            logger.debug("stopped listening to job_created channel")
+            await conn.remove_listener(channel, notification_handler)
+            logger.debug("stopped listening to %s channel", channel)

@@ -1,4 +1,10 @@
-import type { BillingAccountResponse, PlanResponse, UsageHistoryEntry, UsageOverviewResponse } from "@fathom/api-client";
+import type {
+  BillingAccountResponse,
+  BriefingSessionResponse,
+  PlanResponse,
+  UsageHistoryEntry,
+  UsageOverviewResponse
+} from "@fathom/api-client";
 import { createApiClient } from "@fathom/api-client";
 
 export type BillingSnapshot = {
@@ -14,6 +20,9 @@ let briefingsRequest: Promise<UsageHistoryEntry[]> | null = null;
 
 let billingCache: (BillingSnapshot & { fetchedAt: number }) | null = null;
 let billingRequest: Promise<BillingSnapshot> | null = null;
+
+let sessionCache = new Map<string, { snapshot: BriefingSessionResponse; fetchedAt: number }>();
+let sessionRequests = new Map<string, Promise<BriefingSessionResponse | null>>();
 
 export function getCachedBriefings(): UsageHistoryEntry[] | null {
   return briefingsCache?.briefings ?? null;
@@ -109,5 +118,70 @@ export async function loadBillingSnapshot(accessToken: string): Promise<BillingS
     return await billingRequest;
   } finally {
     billingRequest = null;
+  }
+}
+
+export function getCachedSessionSnapshot(sessionId: string): BriefingSessionResponse | null {
+  const cached = sessionCache.get(sessionId);
+  if (!cached) {
+    return null;
+  }
+
+  if (Date.now() - cached.fetchedAt >= CACHE_TTL_MS) {
+    sessionCache.delete(sessionId);
+    return null;
+  }
+
+  return cached.snapshot;
+}
+
+export function cacheSessionSnapshot(snapshot: BriefingSessionResponse): void {
+  sessionCache.set(String(snapshot.session_id), {
+    snapshot,
+    fetchedAt: Date.now()
+  });
+}
+
+export async function prefetchSessionSnapshot(
+  accessToken: string,
+  sessionId: string
+): Promise<BriefingSessionResponse | null> {
+  const cached = getCachedSessionSnapshot(sessionId);
+  if (cached) {
+    return cached;
+  }
+
+  const inFlight = sessionRequests.get(sessionId);
+  if (inFlight) {
+    return inFlight;
+  }
+
+  const api = createApiClient(accessToken);
+  const request = (async () => {
+    const { data, error } = await api.GET("/briefing-sessions/{session_id}", {
+      params: {
+        path: {
+          session_id: sessionId
+        }
+      }
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    if (data) {
+      cacheSessionSnapshot(data);
+      return data;
+    }
+
+    return null;
+  })();
+
+  sessionRequests.set(sessionId, request);
+  try {
+    return await request;
+  } finally {
+    sessionRequests.delete(sessionId);
   }
 }

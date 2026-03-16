@@ -3,12 +3,12 @@ import type { components } from "./schema";
 type HealthResponse = components["schemas"]["HealthResponse"];
 type ReadyResponse = components["schemas"]["ReadyResponse"];
 type StatusResponse = components["schemas"]["StatusResponse"];
-type SummarizeRequest = components["schemas"]["SummarizeRequest"];
-type SummarizeResponse = components["schemas"]["SummarizeResponse"];
-type SummaryResponse = components["schemas"]["SummaryResponse"];
-type SummaryPdfResponse = components["schemas"]["SummaryPdfResponse"];
-type JobStatusResponse = components["schemas"]["JobStatusResponse"];
-type JobStatus = JobStatusResponse["status"];
+type BriefingSessionCreateRequest = components["schemas"]["BriefingSessionCreateRequest"];
+type BriefingSessionResponse = components["schemas"]["BriefingSessionResponse"];
+type BriefingSessionState = BriefingSessionResponse["state"];
+type BriefingSessionResolution = BriefingSessionResponse["resolution_type"];
+type BriefingResponse = components["schemas"]["BriefingResponse"];
+type BriefingPdfResponse = components["schemas"]["BriefingPdfResponse"];
 type PlanResponse = components["schemas"]["PlanResponse"];
 type UsageOverviewResponse = components["schemas"]["UsageOverviewResponse"];
 type UsageHistoryEntry = components["schemas"]["UsageHistoryEntry"];
@@ -28,19 +28,19 @@ type ApiErrorBody = ErrorResponse | HTTPValidationError;
 
 export type {
   ApiErrorBody,
+  BriefingPdfResponse,
+  BriefingResponse,
+  BriefingSessionCreateRequest,
+  BriefingSessionResolution,
+  BriefingSessionResponse,
+  BriefingSessionState,
   HealthResponse,
-  JobStatus,
-  JobStatusResponse,
   ReadyResponse,
   StatusResponse,
-  SummarizeRequest,
-  SummarizeResponse,
   CheckoutSessionRequest,
   CheckoutSessionResponse,
   CustomerPortalSessionResponse,
   PackRefundResponse,
-  SummaryPdfResponse,
-  SummaryResponse,
   PlanResponse,
   BillingAccountResponse,
   BillingOrderHistoryEntry,

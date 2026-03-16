@@ -3,6 +3,10 @@
   gap: 1rem;
 }
 
+.loadingCard p {
+  margin: 0;
+}
+
 .loadingTop {
   display: flex;
   justify-content: space-between;
@@ -17,6 +21,15 @@
   flex-wrap: wrap;
   color: #435247;
   font-size: 0.86rem;
+}
+
+.loadingBeacon {
+  width: 100%;
+  height: 0.82rem;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(40, 92, 70, 0.08), rgba(40, 92, 70, 0.22), rgba(142, 123, 73, 0.12));
+  background-size: 220% 100%;
+  animation: loadingSweep 1.4s ease-in-out infinite;
 }
 
 .readerCard {
@@ -72,6 +85,43 @@
   color: #8d312f;
   font-size: 0.88rem;
   line-height: 1.56;
+}
+
+.progressTrackLive {
+  overflow: hidden;
+}
+
+.progressFillLive {
+  position: relative;
+  animation: progressPulse 1.8s ease-in-out infinite;
+}
+
+.progressFillLive::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  transform: translateX(-100%);
+  animation: progressSweep 2.2s linear infinite;
+}
+
+.liveStatus {
+  color: #285c46;
+  background: rgba(40, 92, 70, 0.12);
+  border: 1px solid rgba(40, 92, 70, 0.24);
+  position: relative;
+  padding-left: 1.2rem;
+}
+
+.liveStatus::before {
+  content: "";
+  position: absolute;
+  left: 0.62rem;
+  width: 0.38rem;
+  height: 0.38rem;
+  border-radius: 999px;
+  background: currentColor;
+  animation: livePulse 1.4s ease-in-out infinite;
 }
 
 .markdown {
@@ -198,6 +248,35 @@
 @keyframes blink {
   50% {
     opacity: 0.1;
+  }
+}
+
+@keyframes progressSweep {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes progressPulse {
+  50% {
+    filter: saturate(1.12) brightness(1.04);
+  }
+}
+
+@keyframes livePulse {
+  50% {
+    transform: scale(1.35);
+    opacity: 0.35;
+  }
+}
+
+@keyframes loadingSweep {
+  0% {
+    background-position: 100% 0;
+  }
+
+  100% {
+    background-position: -100% 0;
   }
 }
 

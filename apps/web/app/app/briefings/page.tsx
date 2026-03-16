@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { UsageHistoryEntry } from "@fathom/api-client";
 
@@ -7,13 +8,27 @@ import { AppShellHeader } from "../../components/AppShellHeader";
 import { useAppShell } from "../../components/AppShellProvider";
 import chrome from "../../components/app-chrome.module.css";
 import styles from "../app.module.css";
-import { formatDate, formatDuration } from "../../lib/format";
+import { formatDateTime, formatDuration } from "../../lib/format";
 import { getApiErrorMessage } from "../../lib/apiErrors";
 import { getAccountLabel } from "../../lib/accountLabel";
-import { getCachedBriefings, hasFreshBriefingsCache, loadBriefings } from "../../lib/appDataCache";
+import {
+  getCachedBriefings,
+  hasFreshBriefingsCache,
+  loadBriefings,
+  prefetchSessionSnapshot
+} from "../../lib/appDataCache";
 
 function formatBriefingCount(count: number): string {
   return `${count} ${count === 1 ? "briefing" : "briefings"}`;
+}
+
+function getSessionIdFromPath(path: string | null | undefined): string | null {
+  if (!path) {
+    return null;
+  }
+
+  const match = path.match(/\/app\/briefings\/sessions\/([^/?#]+)/);
+  return match?.[1] ?? null;
 }
 
 export default function BriefingsPage() {
@@ -99,15 +114,33 @@ export default function BriefingsPage() {
           ) : (
             <div className={`${chrome.list} ${styles.briefingsList}`}>
               {briefings.map((entry, index) => (
-                <article className={chrome.listRow} key={`${entry.job_id ?? "job"}-${index}`}>
+                <Link
+                  className={chrome.listRow}
+                  href={entry.session_path ?? "/app"}
+                  key={`${entry.job_id ?? "job"}-${index}`}
+                  onMouseEnter={() => {
+                    const sessionId = getSessionIdFromPath(entry.session_path);
+                    if (!accessToken || !sessionId) {
+                      return;
+                    }
+                    void prefetchSessionSnapshot(accessToken, sessionId);
+                  }}
+                  onFocus={() => {
+                    const sessionId = getSessionIdFromPath(entry.session_path);
+                    if (!accessToken || !sessionId) {
+                      return;
+                    }
+                    void prefetchSessionSnapshot(accessToken, sessionId);
+                  }}
+                >
                   <div className={chrome.listPrimary}>
                     <p className={chrome.listTitle}>{entry.title ?? "Untitled podcast briefing"}</p>
-                    <p className={chrome.listMeta}>{formatDate(entry.created_at)}</p>
+                    <p className={chrome.listMeta}>{formatDateTime(entry.created_at)}</p>
                   </div>
                   <div className={chrome.listAside}>
                     <span>{formatDuration(entry.seconds_used)} used</span>
                   </div>
-                </article>
+                </Link>
               ))}
             </div>
           )}

@@ -7,21 +7,29 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createApiClient } from "@fathom/api-client";
 
 import { AppShellHeader } from "../../../components/AppShellHeader";
+import { useAppShell } from "../../../components/AppShellProvider";
 import chrome from "../../../components/app-chrome.module.css";
-import styles from "../[jobId]/job.module.css";
 import { getApiErrorMessage } from "../../../lib/apiErrors";
-import { getSupabaseClient } from "../../../lib/supabaseClient";
+import { getAccountLabel } from "../../../lib/accountLabel";
+import { cacheSessionSnapshot } from "../../../lib/appDataCache";
+import styles from "../session.module.css";
 
-function JobCreatePageContent() {
+function BriefingCreatePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { accessToken, loading, remainingSeconds, signOut, user } = useAppShell();
   const [error, setError] = useState<string | null>(null);
   const startedRef = useRef(false);
 
   useEffect(() => {
-    if (startedRef.current) {
+    if (loading || startedRef.current) {
       return;
     }
+    if (!accessToken) {
+      router.replace("/signin");
+      return;
+    }
+
     startedRef.current = true;
 
     const run = async () => {
@@ -32,28 +40,21 @@ function JobCreatePageContent() {
       }
 
       try {
-        const supabase = getSupabaseClient();
-        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-
-        if (sessionError || !sessionData.session) {
-          router.replace("/signin");
-          return;
-        }
-
-        const api = createApiClient(sessionData.session.access_token);
-        const { data, error: apiError } = await api.POST("/summarize", {
+        const api = createApiClient(accessToken);
+        const { data, error: apiError } = await api.POST("/briefing-sessions", {
           body: {
             url: rawUrl
           }
         });
 
         if (apiError) {
-          setError(getApiErrorMessage(apiError, "Unable to create a briefing job."));
+          setError(getApiErrorMessage(apiError, "Unable to start the briefing."));
           return;
         }
 
-        if (data?.job_id) {
-          router.replace(`/app/jobs/${data.job_id}`);
+        if (data?.session_id) {
+          cacheSessionSnapshot(data);
+          router.replace(`/app/briefings/sessions/${data.session_id}`);
           return;
         }
 
@@ -64,18 +65,23 @@ function JobCreatePageContent() {
     };
 
     void run();
-  }, [router, searchParams]);
+  }, [accessToken, loading, router, searchParams]);
 
   return (
     <div className={chrome.pageFrame}>
-      <AppShellHeader active={null} remainingSeconds={null} accountLabel={null} />
+      <AppShellHeader
+        active={null}
+        remainingSeconds={remainingSeconds}
+        accountLabel={getAccountLabel(user)}
+        onSignOut={signOut}
+      />
 
       <main className={chrome.mainFrame}>
         <section className={chrome.heroBlock}>
           <div>
-            <p className={chrome.heroEyebrow}>Briefing job</p>
+            <p className={chrome.heroEyebrow}>Briefing</p>
             <h1 className={chrome.heroTitle}>Starting your briefing</h1>
-            <p className={chrome.heroText}>We’re creating the job and moving you into the live progress view.</p>
+            <p className={chrome.heroText}>Talven is opening a live session and checking for reusable work first.</p>
           </div>
           <div className={chrome.heroActions}>
             <Link className={chrome.ghostButton} href="/app">
@@ -87,7 +93,7 @@ function JobCreatePageContent() {
         <section className={`${chrome.surfaceStrong} ${styles.loadingCard}`}>
           <div className={styles.loadingTop}>
             <div>
-              <h2 className={chrome.surfaceTitle}>Connecting to the pipeline</h2>
+              <h2 className={chrome.surfaceTitle}>Creating your session</h2>
               <p className={chrome.surfaceText}>This should take just a moment.</p>
             </div>
             <span className={chrome.statusPillMuted}>Starting</span>
@@ -101,31 +107,41 @@ function JobCreatePageContent() {
             <div className={chrome.stepRow}>
               <span className={chrome.stepDotActive} />
               <div>
-                <p className={chrome.stepLabel}>Queueing the request</p>
-                <p className={chrome.stepHint}>Talven is registering the episode and preparing the job.</p>
+                <p className={chrome.stepLabel}>Opening a session</p>
+                <p className={chrome.stepHint}>Talven is validating the source and connecting you to live updates.</p>
               </div>
             </div>
           </div>
 
-          {error ? <div className={styles.errorCard}>{error}</div> : null}
+          {error ? (
+            <div className={styles.errorCard}>
+              <p>{error}</p>
+              {isCreditError(error) ? (
+                <div className={chrome.actionRow}>
+                  <Link className={chrome.primaryButton} href="/app/billing#billing-offers">
+                    Get more listening time
+                  </Link>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </section>
       </main>
     </div>
   );
 }
 
-export default function JobCreatePage() {
+export default function BriefingCreatePage() {
   return (
     <Suspense
       fallback={
         <div className={chrome.pageFrame}>
-          <AppShellHeader active={null} remainingSeconds={null} accountLabel={null} />
           <main className={chrome.mainFrame}>
             <section className={`${chrome.surfaceStrong} ${styles.loadingCard}`}>
               <div className={styles.loadingTop}>
                 <div>
                   <h2 className={chrome.surfaceTitle}>Starting your briefing</h2>
-                  <p className={chrome.surfaceText}>Preparing request details.</p>
+                  <p className={chrome.surfaceText}>Preparing the request details.</p>
                 </div>
               </div>
             </section>
@@ -133,7 +149,12 @@ export default function JobCreatePage() {
         </div>
       }
     >
-      <JobCreatePageContent />
+      <BriefingCreatePageContent />
     </Suspense>
   );
+}
+
+function isCreditError(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return normalized.includes("insufficient credits") || normalized.includes("no remaining credits");
 }

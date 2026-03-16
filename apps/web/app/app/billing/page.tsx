@@ -479,7 +479,7 @@ function BillingPageContent() {
         </section>
 
         {syncStatus ? (
-          <section className={`${chrome.notice} ${syncStatus === "delayed" ? chrome.noticeWarning : chrome.noticeInfo}`}>
+          <section className={`${chrome.notice} ${styles.pageColumn} ${syncStatus === "delayed" ? chrome.noticeWarning : chrome.noticeInfo}`}>
             <h2 className={chrome.noticeTitle}>Purchase status</h2>
             <p className={chrome.noticeText}>
               {syncStatus === "syncing"
@@ -492,7 +492,7 @@ function BillingPageContent() {
         ) : null}
 
         {refundSyncOrderId && refundSyncStatus ? (
-          <section className={`${chrome.notice} ${refundSyncStatus === "delayed" ? chrome.noticeWarning : chrome.noticeInfo}`}>
+          <section className={`${chrome.notice} ${styles.pageColumn} ${refundSyncStatus === "delayed" ? chrome.noticeWarning : chrome.noticeInfo}`}>
             <h2 className={chrome.noticeTitle}>Refund status</h2>
             <p className={chrome.noticeText}>
               {refundSyncStatus === "syncing"
@@ -503,7 +503,7 @@ function BillingPageContent() {
         ) : null}
 
         {error ? (
-          <section className={`${chrome.notice} ${chrome.noticeError}`}>
+          <section className={`${chrome.notice} ${styles.pageColumn} ${chrome.noticeError}`}>
             <h2 className={chrome.noticeTitle}>Billing action failed</h2>
             <p className={chrome.noticeText}>{error}</p>
           </section>
