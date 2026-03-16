@@ -10,7 +10,8 @@ export type BriefingListItem = {
   source_host: string;
   source_type: "youtube" | "url";
   created_at: string;
-  duration_seconds: number | null;
+  source_duration_seconds: number | null;
+  source_thumbnail_url: string | null;
   session_path: string;
 };
 

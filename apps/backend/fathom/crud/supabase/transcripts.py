@@ -109,7 +109,13 @@ async def create_transcript(
 async def fetch_transcript_by_id(client: AsyncClient, transcript_id: str) -> dict[str, Any]:
     """Fetch a transcript by ID."""
     try:
-        response = await client.table("transcripts").select("id,video_id").eq("id", transcript_id).limit(1).execute()
+        response = await (
+            client.table("transcripts")
+            .select("id,video_id,source_title,source_author,source_length_seconds")
+            .eq("id", transcript_id)
+            .limit(1)
+            .execute()
+        )
     except APIError as exc:
         raise_for_postgrest_error(exc, "Failed to fetch transcript.")
 
@@ -126,7 +132,10 @@ async def fetch_transcripts_by_ids(client: AsyncClient, transcript_ids: list[str
 
     try:
         response = await (
-            client.table("transcripts").select("id,source_title,source_author").in_("id", transcript_ids).execute()
+            client.table("transcripts")
+            .select("id,video_id,source_title,source_author,source_length_seconds")
+            .in_("id", transcript_ids)
+            .execute()
         )
     except APIError as exc:
         raise_for_postgrest_error(exc, "Failed to fetch transcripts.")

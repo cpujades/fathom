@@ -32,7 +32,8 @@ class BriefingListItem(BaseModel):
     source_host: str
     source_type: BriefingSourceType
     created_at: datetime
-    duration_seconds: int | None = None
+    source_duration_seconds: int | None = None
+    source_thumbnail_url: str | None = None
     session_path: str
 
 

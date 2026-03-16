@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { createApiClient } from "@fathom/api-client";
@@ -17,7 +18,7 @@ import type {
   BriefingListSort
 } from "../../lib/briefings";
 import { DEFAULT_BRIEFINGS_LIMIT } from "../../lib/briefings";
-import { formatDateTime, formatDuration } from "../../lib/format";
+import { formatDateTime, formatDuration, formatExactDuration } from "../../lib/format";
 import {
   getCachedBriefings,
   hasFreshBriefingsCache,
@@ -351,98 +352,120 @@ export default function BriefingsPage() {
                     key={entry.session_id}
                   >
                     <div className={styles.libraryRowBody}>
-                      <div className={styles.libraryRowHeader}>
-                        <div className={styles.libraryTitleBlock}>
-                          <div className={styles.titleRow}>
-                            <Link
-                              className={styles.libraryTitleLink}
-                              href={entry.session_path}
-                              onMouseEnter={() => prefetchBriefing(entry)}
-                              onFocus={() => prefetchBriefing(entry)}
-                            >
-                              {entry.title}
-                            </Link>
-                            <span className={chrome.statusPillMuted}>{getSourceTypeLabel(entry.source_type)}</span>
-                          </div>
-
-                          <div className={styles.metaRow}>
-                            <span>{formatDateTime(entry.created_at)}</span>
-                            {entry.author ? <span>By {entry.author}</span> : null}
-                            {entry.duration_seconds ? <span>{formatDuration(entry.duration_seconds)}</span> : null}
+                      <div className={styles.libraryRowMain}>
+                        <div className={styles.libraryMedia}>
+                          <div className={styles.libraryThumbnailFrame}>
+                            {entry.source_thumbnail_url ? (
+                              <Image
+                                className={styles.libraryThumbnail}
+                                src={entry.source_thumbnail_url}
+                                alt=""
+                                fill
+                                sizes="72px"
+                              />
+                            ) : (
+                              <div className={styles.libraryThumbnailFallback}>
+                                <span>{getSourceTypeLabel(entry.source_type)}</span>
+                              </div>
+                            )}
                           </div>
                         </div>
 
-                        <div className={styles.rowActions}>
-                          <button
-                            className={styles.actionTrigger}
-                            type="button"
-                            onClick={() => {
-                              setActiveMenuSessionId((current) => {
-                                if (current === entry.session_id) {
-                                  return current;
-                                }
-
-                                return entry.session_id;
-                              });
-                              setConfirmDeleteSessionId(null);
-                            }}
-                            aria-expanded={menuIsOpen}
-                            aria-haspopup="menu"
-                          >
-                            Actions
-                          </button>
-
-                          {menuIsOpen ? (
-                            <div className={styles.actionsMenu}>
-                              <Link
-                                className={styles.menuAction}
-                                href={entry.session_path}
-                                onMouseEnter={() => prefetchBriefing(entry)}
-                                onFocus={() => prefetchBriefing(entry)}
-                              >
-                                Open briefing
-                              </Link>
-                              <a
-                                className={styles.menuAction}
-                                href={entry.source_url}
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                Open video
-                              </a>
-
-                              {confirmingDelete ? (
-                                <div className={styles.confirmBlock}>
-                                  <p className={styles.confirmText}>Remove this briefing from history?</p>
-                                  <div className={styles.confirmActions}>
-                                    <button
-                                      className={chrome.ghostButton}
-                                      type="button"
-                                      onClick={() => setConfirmDeleteSessionId(null)}
-                                    >
-                                      Cancel
-                                    </button>
-                                    <button
-                                      className={styles.dangerButton}
-                                      type="button"
-                                      onClick={() => void handleDeleteBriefing(entry)}
-                                      disabled={deletingThisEntry}
-                                    >
-                                      {deletingThisEntry ? "Removing…" : "Remove from history"}
-                                    </button>
-                                  </div>
-                                </div>
-                              ) : (
-                                <button
-                                  className={styles.menuDangerAction}
-                                  type="button"
-                                  onClick={() => setConfirmDeleteSessionId(entry.session_id)}
+                        <div className={styles.libraryRowContent}>
+                          <div className={styles.libraryRowHeader}>
+                            <div className={styles.libraryTitleBlock}>
+                              <div className={styles.titleRow}>
+                                <Link
+                                  className={styles.libraryTitleLink}
+                                  href={entry.session_path}
+                                  onMouseEnter={() => prefetchBriefing(entry)}
+                                  onFocus={() => prefetchBriefing(entry)}
                                 >
-                                  Remove from history
-                                </button>
-                              )}
+                                  {entry.title}
+                                </Link>
+                                <span className={chrome.statusPillMuted}>{getSourceTypeLabel(entry.source_type)}</span>
+                              </div>
+
+                              <div className={styles.metaRow}>
+                                <span>{formatDateTime(entry.created_at)}</span>
+                                {entry.author ? <span>By {entry.author}</span> : null}
+                                {entry.source_duration_seconds ? <span>{formatExactDuration(entry.source_duration_seconds)}</span> : null}
+                              </div>
                             </div>
-                          ) : null}
+
+                            <div className={styles.rowActions}>
+                              <button
+                                className={styles.actionTrigger}
+                                type="button"
+                                onClick={() => {
+                                  setActiveMenuSessionId((current) => {
+                                    if (current === entry.session_id) {
+                                      return current;
+                                    }
+
+                                    return entry.session_id;
+                                  });
+                                  setConfirmDeleteSessionId(null);
+                                }}
+                                aria-expanded={menuIsOpen}
+                                aria-haspopup="menu"
+                              >
+                                Actions
+                              </button>
+
+                              {menuIsOpen ? (
+                                <div className={styles.actionsMenu}>
+                                  <Link
+                                    className={styles.menuAction}
+                                    href={entry.session_path}
+                                    onMouseEnter={() => prefetchBriefing(entry)}
+                                    onFocus={() => prefetchBriefing(entry)}
+                                  >
+                                    Open briefing
+                                  </Link>
+                                  <a
+                                    className={styles.menuAction}
+                                    href={entry.source_url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                  >
+                                    Open video
+                                  </a>
+
+                                  {confirmingDelete ? (
+                                    <div className={styles.confirmBlock}>
+                                      <p className={styles.confirmText}>Remove this briefing from history?</p>
+                                      <div className={styles.confirmActions}>
+                                        <button
+                                          className={chrome.ghostButton}
+                                          type="button"
+                                          onClick={() => setConfirmDeleteSessionId(null)}
+                                        >
+                                          Cancel
+                                        </button>
+                                        <button
+                                          className={styles.dangerButton}
+                                          type="button"
+                                          onClick={() => void handleDeleteBriefing(entry)}
+                                          disabled={deletingThisEntry}
+                                        >
+                                          {deletingThisEntry ? "Removing…" : "Remove from history"}
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      className={styles.menuDangerAction}
+                                      type="button"
+                                      onClick={() => setConfirmDeleteSessionId(entry.session_id)}
+                                    >
+                                      Remove from history
+                                    </button>
+                                  )}
+                                </div>
+                              ) : null}
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>

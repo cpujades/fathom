@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 from uuid import UUID
 
 from fathom.api.deps.auth import AuthContext
-from fathom.application.briefing_contract import normalize_source
+from fathom.application.briefing_contract import build_source_thumbnail_url, normalize_source, resolve_source_title
 from fathom.core.config import Settings
 from fathom.core.constants import SIGNED_URL_TTL_SECONDS, SUPABASE_PDF_BUCKET
 from fathom.core.errors import ExternalServiceError
@@ -222,18 +222,26 @@ async def _build_briefing_list_items(admin_client: Any, jobs: Sequence[dict[str,
 
         source_title = transcript.get("source_title") if isinstance(transcript, dict) else None
         source_author = transcript.get("source_author") if isinstance(transcript, dict) else None
+        source_duration_seconds = transcript.get("source_length_seconds") if isinstance(transcript, dict) else None
+        source_thumbnail_url = build_source_thumbnail_url(
+            normalized_source,
+            transcript.get("video_id") if isinstance(transcript, dict) else None,
+        )
 
         items.append(
             BriefingListItem(
                 session_id=job_id,
                 briefing_id=summary_id,
-                title=_resolve_briefing_title(normalized_source.source_type, source_title),
+                title=resolve_source_title(normalized_source, source_title),
                 author=_clean_optional_text(source_author),
                 source_url=normalized_source.canonical_url,
                 source_host=_resolve_source_host(normalized_source.canonical_url),
                 source_type=normalized_source.source_type,
                 created_at=created_at,
-                duration_seconds=_coerce_positive_int(job.get("duration_seconds")),
+                source_duration_seconds=(
+                    _coerce_positive_int(source_duration_seconds) or _coerce_positive_int(job.get("duration_seconds"))
+                ),
+                source_thumbnail_url=source_thumbnail_url,
                 session_path=f"/app/briefings/sessions/{job_id}",
             )
         )
@@ -253,15 +261,6 @@ def _clean_optional_text(value: Any) -> str | None:
         return None
     cleaned = value.strip()
     return cleaned or None
-
-
-def _resolve_briefing_title(source_type: str, source_title: Any) -> str:
-    cleaned = _clean_optional_text(source_title)
-    if cleaned:
-        return cleaned
-    if source_type == "youtube":
-        return "Untitled YouTube briefing"
-    return "Untitled briefing"
 
 
 def _resolve_source_host(source_url: str) -> str:

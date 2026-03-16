@@ -35,8 +35,20 @@ class BriefingLibraryTests(unittest.IsolatedAsyncioTestCase):
             {"id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "transcript_id": "transcript-2"},
         ]
         transcripts = [
-            {"id": "transcript-1", "source_title": "The Founders Podcast", "source_author": "David Senra"},
-            {"id": "transcript-2", "source_title": "AI Research Notes", "source_author": "Open Source Lab"},
+            {
+                "id": "transcript-1",
+                "video_id": "abc123",
+                "source_title": "The Founders Podcast",
+                "source_author": "David Senra",
+                "source_length_seconds": 3660,
+            },
+            {
+                "id": "transcript-2",
+                "video_id": None,
+                "source_title": "AI Research Notes",
+                "source_author": "Open Source Lab",
+                "source_length_seconds": 1800,
+            },
         ]
 
         with (
@@ -65,7 +77,8 @@ class BriefingLibraryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.items[0].source_type, "youtube")
         self.assertEqual(response.items[0].source_host, "youtube.com")
         self.assertEqual(response.items[0].session_path, "/app/briefings/sessions/11111111-1111-1111-1111-111111111111")
-        self.assertEqual(response.items[0].duration_seconds, 3660)
+        self.assertEqual(response.items[0].source_duration_seconds, 3660)
+        self.assertEqual(response.items[0].source_thumbnail_url, "https://i.ytimg.com/vi/abc123/hqdefault.jpg")
         self.assertEqual(response.items[1].source_host, "example.com")
 
     async def test_filters_briefings_by_query_and_source_type(self) -> None:
@@ -93,8 +106,20 @@ class BriefingLibraryTests(unittest.IsolatedAsyncioTestCase):
             {"id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "transcript_id": "transcript-2"},
         ]
         transcripts = [
-            {"id": "transcript-1", "source_title": "Lex Fridman with Demis Hassabis", "source_author": "Lex Fridman"},
-            {"id": "transcript-2", "source_title": "AI Research Notes", "source_author": "Open Source Lab"},
+            {
+                "id": "transcript-1",
+                "video_id": "abc123",
+                "source_title": "Lex Fridman with Demis Hassabis",
+                "source_author": "Lex Fridman",
+                "source_length_seconds": 3660,
+            },
+            {
+                "id": "transcript-2",
+                "video_id": None,
+                "source_title": "AI Research Notes",
+                "source_author": "Open Source Lab",
+                "source_length_seconds": 1800,
+            },
         ]
 
         with (

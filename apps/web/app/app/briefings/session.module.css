@@ -50,6 +50,133 @@
   padding: 1.3rem;
 }
 
+.sourceCard {
+  padding: 1rem;
+  display: grid;
+  gap: 0.9rem;
+}
+
+.sourceHeader {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 0.9rem;
+  align-items: start;
+}
+
+.sourceMedia {
+  width: 112px;
+}
+
+.sourceHeaderBody {
+  min-width: 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  align-items: flex-start;
+}
+
+.sourceThumbnailFrame {
+  position: relative;
+  width: 112px;
+  aspect-ratio: 16 / 9;
+}
+
+.sourceThumbnail,
+.sourceThumbnailFallback {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 12px;
+}
+
+.sourceThumbnail {
+  background: rgba(233, 227, 216, 0.9);
+}
+
+.sourceThumbnailFallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(120% 120% at 0% 0%, rgba(40, 92, 70, 0.18), transparent 45%),
+    linear-gradient(180deg, rgba(237, 232, 222, 0.96), rgba(227, 220, 207, 0.92));
+  color: #667267;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.sourceBody {
+  display: grid;
+  gap: 0.8rem;
+  min-width: 0;
+}
+
+.sourceSummary {
+  display: grid;
+  gap: 0.42rem;
+}
+
+.sourceTitle {
+  margin: 0;
+  font-size: 0.94rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.35;
+  color: #18211d;
+}
+
+.sourceMeta {
+  display: flex;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+  align-items: center;
+  color: #435247;
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.sourceMeta span {
+  position: relative;
+}
+
+.sourceMeta span:not(:first-child)::before {
+  content: "";
+  position: absolute;
+  left: -0.42rem;
+  top: 0.55rem;
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(67, 82, 71, 0.35);
+}
+
+.sourceUrl {
+  margin: 0;
+  color: #667267;
+  font-size: 0.76rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+  .sourceHeader {
+    grid-template-columns: 96px minmax(0, 1fr);
+    gap: 0.75rem;
+  }
+
+  .sourceMedia,
+  .sourceThumbnailFrame {
+    width: 96px;
+  }
+
+  .sourceHeaderBody {
+    gap: 0.65rem;
+  }
+}
+
 .liveReaderBanner {
   display: flex;
   justify-content: space-between;
