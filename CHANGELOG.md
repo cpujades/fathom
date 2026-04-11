@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.16.0](https://github.com/cpujades/fathom/compare/v0.15.0...v0.16.0) (2026-04-11)
+
+
+### Features
+
+* **briefings:** add source metadata and thumbnails to sessions and list ([#91](https://github.com/cpujades/fathom/issues/91)) ([9ec53ff](https://github.com/cpujades/fathom/commit/9ec53ff0d6d0cc17519ec83565fc23937583edbc))
+
+
+### Chores
+
+* **deps:** bump next in the npm_and_yarn group across 1 directory ([#93](https://github.com/cpujades/fathom/issues/93)) ([254a924](https://github.com/cpujades/fathom/commit/254a92423e20427d0f55eab9a008dc0ce15a41e5))
+* **deps:** bump next in the npm_and_yarn group across 1 directory ([#95](https://github.com/cpujades/fathom/issues/95)) ([97c29c7](https://github.com/cpujades/fathom/commit/97c29c71ac72cb2a23c88d6ba72bb5dec37d0437))
+* **deps:** bump requests in the uv group across 1 directory ([#94](https://github.com/cpujades/fathom/issues/94)) ([489c477](https://github.com/cpujades/fathom/commit/489c4776f277611dde0e1f375e036dd484763e16))
+* **deps:** bump the uv group across 1 directory with 2 updates ([#96](https://github.com/cpujades/fathom/issues/96)) ([b5b24cd](https://github.com/cpujades/fathom/commit/b5b24cd8c52da1e48519794c8a47dcf3c785601a))
+* **deps:** bump transitive pygments to 2.20.0 for security ([#99](https://github.com/cpujades/fathom/issues/99)) ([2e506c3](https://github.com/cpujades/fathom/commit/2e506c3d9bf5f9451e886c6a988a29267ba62cd4))
+* **deps:** pin workspace package versions and patch vulnerable transitive deps ([#97](https://github.com/cpujades/fathom/issues/97)) ([a7d46bd](https://github.com/cpujades/fathom/commit/a7d46bd8d34debb63d6fee4377534c931817f71a))
+* **deps:** update brace-expansion minimatch deps ([#98](https://github.com/cpujades/fathom/issues/98)) ([525d1aa](https://github.com/cpujades/fathom/commit/525d1aa3658c57670719fd2a3eb2dbfde9aafa34))
+
 ## [0.15.0](https://github.com/cpujades/fathom/compare/v0.14.0...v0.15.0) (2026-03-16)
 
 
