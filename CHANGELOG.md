@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.16.1](https://github.com/cpujades/fathom/compare/v0.16.0...v0.16.1) (2026-04-12)
+
+_Automated release from [#101](https://github.com/cpujades/fathom/pull/101) fix(ci): use release automation token for protected main pushes_
+
+### Bug Fixes
+
+- fix(ci): use release automation token for protected main pushes (86f203f)
+
 ## [0.16.0](https://github.com/cpujades/fathom/compare/v0.15.0...v0.16.0) (2026-04-11)
 
 
