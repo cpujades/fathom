@@ -46,16 +46,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-          cache: pnpm
-
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 10
+          cache: true
+          cache_dependency_path: pnpm-lock.yaml
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
 
       - name: Install deps
         run: pnpm install --frozen-lockfile
