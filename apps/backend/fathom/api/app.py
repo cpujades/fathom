@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any, cast
+
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from starlette.middleware import Middleware
@@ -37,7 +39,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     if settings.cors_allow_origins:
         middleware.append(
             Middleware(
-                CORSMiddleware,
+                cast(Any, CORSMiddleware),
                 allow_origins=settings.cors_allow_origins,
                 allow_credentials=True,
                 allow_methods=["*"],
@@ -60,9 +62,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.state.rate_limit = settings.rate_limit
 
-    app.add_middleware(BaseHTTPMiddleware, dispatch=log_requests)
-    app.add_exception_handler(AppError, handle_app_error)  # type: ignore[arg-type]
-    app.add_exception_handler(RequestValidationError, handle_validation_error)  # type: ignore[arg-type]
+    # Starlette's middleware typing is stricter than the runtime API here.
+    app.add_middleware(cast(Any, BaseHTTPMiddleware), dispatch=log_requests)
+    app.add_exception_handler(AppError, cast(Any, handle_app_error))
+    app.add_exception_handler(RequestValidationError, cast(Any, handle_validation_error))
 
     return app
 

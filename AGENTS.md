@@ -1,103 +1,145 @@
 ## Project overview
 
-**Fathom** is a FastAPI service that turns a long-form audio URL into:
-- a transcript (Deepgram)
-- a structured Markdown summary (OpenRouter via the OpenAI Python SDK)
-- a PDF export (WeasyPrint)
+**Talven** is a FastAPI + Next.js application for turning long-form YouTube content into reusable written briefings.
 
-Entry point: `apps/backend/fathom/api/app.py`
+Repository/package namespace remains `fathom`; the current product and web branding is `Talven`.
+
+Current stack:
+
+- transcript: Groq audio transcription
+- summary: OpenRouter via the OpenAI Python SDK
+- auth: Supabase Auth
+- billing: Polar checkout, portal, refunds, and webhooks
+- storage/data: Supabase
+
+Backend entry point: `apps/backend/fathom/api/app.py`
+Frontend app: `apps/web`
 
 ## Quickstart (local)
 
-For full setup details (including system deps like `ffmpeg` and WeasyPrint requirements), see `README.md`.
+For full setup details, see `README.md`.
+
+### Backend
 
 ```bash
-# Use Python 3.11–3.13 (3.14 is currently unsupported by some compiled deps like `pydantic-core`)
 uv venv
 source .venv/bin/activate
 uv sync
 uvicorn --app-dir apps/backend fathom.api.app:app --host 127.0.0.1 --port 8080 --reload
 ```
 
+### Worker
+
+```bash
+PYTHONPATH=apps/backend python -m fathom.orchestration.runner
+```
+
+### Frontend
+
+```bash
+pnpm install
+pnpm --filter @fathom/web dev
+```
+
 ## Request flow (high level)
 
-- **HTTP layer**: `apps/backend/fathom/api/routers`
- - `POST /summarize` creates a job row and returns a `job_id`.
- - `GET /jobs/{job_id}` returns job status (and `summary_id` when ready).
- - `GET /summaries/{summary_id}` returns the summary and a signed `pdf_url` when available.
-- **Orchestration**: `apps/backend/fathom/orchestration/pipeline.py`
- - Used by a separate worker process: downloads audio → transcribes → summarizes → renders PDF bytes → uploads to Supabase Storage.
-- **Integrations**: `apps/backend/fathom/services/*`
-  - `downloader.py` (yt-dlp), `transcriber.py` (Deepgram), `summarizer.py` (OpenRouter via OpenAI SDK), `pdf.py` (WeasyPrint).
+- **Frontend**
+  - `apps/web` handles auth, billing UI, briefing creation, and briefing session streaming.
+- **HTTP layer**
+  - `POST /briefing-sessions` creates or reuses a session.
+  - `GET /briefing-sessions/{session_id}` returns the current session snapshot.
+  - `GET /briefing-sessions/{session_id}/events` streams session updates over SSE.
+  - `GET /briefings` and `GET /briefings/{briefing_id}` expose saved briefings.
+  - `POST /billing/checkout` and `POST /billing/portal` start Polar flows.
+  - `POST /webhooks/polar` receives Polar webhooks.
+- **Worker orchestration**
+  - `apps/backend/fathom/orchestration/runner.py` claims jobs, downloads audio, transcribes with Groq, summarizes with OpenRouter, and updates progress.
 
 ## Configuration (env vars)
 
 Configuration is read from environment variables via `apps/backend/fathom/core/config.py:get_settings()`.
 
-```bash
-cp env.example .env
-```
+### Backend env
 
-- **Required**
-  - `DEEPGRAM_API_KEY`
-  - `OPENROUTER_API_KEY`
-  - `SUPABASE_URL`
-  - `SUPABASE_PUBLISHABLE_KEY`
-  - `SUPABASE_SECRET_KEY`
-- **Optional**
-  - `OPENROUTER_MODEL` (default: `x-ai/grok-4.1-fast`)
-  - `OPENROUTER_SITE_URL` (sent as `HTTP-Referer` header; recommended by OpenRouter)
-  - `OPENROUTER_APP_NAME` (sent as `X-Title` header; default: `fathom`)
-  - `SUPABASE_BUCKET` (default: `fathom`)
-  - `SUPABASE_SIGNED_URL_TTL_SECONDS` (default: `3600`)
+Copy `env.example` to `.env`.
 
-Use `env.example` as the source of truth for local `.env` setup. Do not commit secrets.
+Required backend variables include:
 
-## Running checks (same as CI)
+- `OPENROUTER_API_KEY`
+- `GROQ_API_KEY`
+- `POLAR_ACCESS_TOKEN`
+- `POLAR_WEBHOOK_SECRET`
+- `POLAR_SUCCESS_URL`
+- `POLAR_PORTAL_RETURN_URL`
+- `SUPABASE_URL`
+- `SUPABASE_PUBLISHABLE_KEY`
+- `SUPABASE_SECRET_KEY`
+- `SUPABASE_DB_PASSWORD`
+- `SUPABASE_DB_HOST`
 
-Install dev dependencies:
+### Frontend env
+
+Copy `apps/web/env.example` to `apps/web/.env.local`.
+
+Required frontend public variables:
+
+- `NEXT_PUBLIC_API_BASE_URL`
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+
+Recommended frontend public variable:
+
+- `NEXT_PUBLIC_SITE_URL`
+
+Use `env.example` and `apps/web/env.example` as the tracked source of truth. Do not commit secrets.
+
+## Running checks (same as current local validation)
+
+### Backend
 
 ```bash
 uv sync --group dev
-```
-
-Run checks:
-
-```bash
 uv run ruff check .
 uv run ruff format --check .
-uv run mypy apps/backend
-uv run ty check apps/backend  # informational (non-blocking)
+uv run ty check apps/backend/fathom
+PYTHONPATH=apps/backend ./.venv/bin/python -m unittest discover -s apps/backend/tests
 ```
 
-Git hooks (recommended):
+### Frontend
 
 ```bash
-uv run pre-commit install
-uv run pre-commit run --all-files
+pnpm --filter @fathom/web lint
+pnpm --filter @fathom/web typecheck
+pnpm --filter @fathom/web build
 ```
 
 ## Conventions
 
 - **Architecture boundaries**
-  - `apps/backend/fathom/api/*` owns HTTP concerns (request/response models, status codes, file responses).
-  - `apps/backend/fathom/services/*` owns IO/integrations and should stay small and composable.
-  - `apps/backend/fathom/orchestration/pipeline.py` coordinates services; keep orchestration readable and linear.
+  - `apps/backend/fathom/api/*` owns HTTP concerns.
+  - `apps/backend/fathom/application/*` owns orchestration and business rules.
+  - `apps/backend/fathom/services/*` owns external IO/integrations and should stay small.
+  - `apps/backend/fathom/orchestration/runner.py` owns background job execution.
+  - `apps/web` owns presentation, auth UX, billing UX, and session streaming UX.
 - **Error handling**
-  - Raise domain errors (`AppError` and subclasses) from services/pipeline.
-  - `apps/backend/fathom/api/app.py` maps `AppError` to the API error shape; avoid raising `HTTPException` from deep layers.
+  - Raise domain errors (`AppError` and subclasses) from backend layers.
+  - Avoid raising `HTTPException` from deep layers.
 - **Configuration**
-  - Read config via `get_settings()`; avoid implicit global state.
+  - Read backend config via `get_settings()`.
   - Keep secrets out of logs and out of the repo.
+  - Frontend public env vars must be explicit; do not rely on localhost defaults in production.
 
 ## Packaging & tooling
 
-- Build backend: `hatchling`
-- Python packages live in `apps/backend/fathom/*` (api, core, services, etc). The distribution name is `fathom`.
-- `uv.lock` is committed for reproducible installs.
+- Backend build system: `hatchling`
+- Backend package root: `apps/backend/fathom`
+- Frontend package: `apps/web`
+- API client package: `packages/api-client`
+- `uv.lock` and `pnpm-lock.yaml` are committed for reproducible installs.
 
 ## Principles
 
 - Prefer explicit, readable code over clever abstractions.
 - Keep functions small and composable.
-- Errors should never pass silently (unless explicitly handled).
+- Keep docs and env examples aligned with the current code.
+- Errors should never pass silently unless explicitly handled.

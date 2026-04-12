@@ -28,8 +28,6 @@ dev = [
   # Lint/format
   "ruff==0.14.10",
   # Type-checking
-  "mypy==1.19.0",
-  # Type-checking (fast, informational for now)
   "ty==0.0.8",
   # Git hooks runner
   "pre-commit==4.5.1",
@@ -55,22 +53,27 @@ line-length = 120
 target-version = "py311"
 extend-exclude = ["data", "playground"]
 
+[tool.ruff.format]
+docstring-code-format = true
+
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["fathom"]
 
-[tool.mypy]
-python_version = "3.11"
-warn_return_any = true
-warn_unused_configs = true
-disallow_untyped_defs = true
-no_implicit_optional = true
-check_untyped_defs = true
-strict_equality = true
-pretty = true
-plugins = ["pydantic.mypy"]
-mypy_path = ["apps/backend"]
+[tool.ty.environment]
+root = ["apps/backend"]
 
-disable_error_code = ["import-untyped"]
+[tool.ty.terminal]
+error-on-warning = false
+
+[tool.ty.src]
+respect-ignore-files = true
+
+[tool.ty.rules]
+invalid-argument-type = "error"
+invalid-return-type = "error"
+missing-argument = "error"
+unknown-argument = "error"
+unresolved-reference = "error"

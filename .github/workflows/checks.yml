@@ -2,15 +2,13 @@ name: ✅ PR checks (quality gate)
 
 on:
   pull_request:
-  push:
-    branches: ["main"]
 
 permissions:
   contents: read
 
 jobs:
-  pre-commit:
-    name: 🧹 Pre-commit (lint + typecheck)
+  backend:
+    name: 🐍 Backend
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -35,9 +33,39 @@ jobs:
       - name: Ruff (format check)
         run: uv run ruff format --check .
 
-      - name: Mypy
-        run: uv run mypy apps/backend/fathom
-
-      - name: Ty (informational)
-        continue-on-error: true
+      - name: Ty
         run: uv run ty check apps/backend/fathom
+
+      - name: Backend tests
+        run: ./.venv/bin/python -m unittest discover -s apps/backend/tests -t apps/backend
+
+  frontend:
+    name: 🌐 Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          cache: true
+          cache_dependency_path: pnpm-lock.yaml
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm --filter @fathom/web lint
+
+      - name: Typecheck
+        run: pnpm --filter @fathom/web typecheck
+
+      - name: Build
+        run: pnpm --filter @fathom/web build

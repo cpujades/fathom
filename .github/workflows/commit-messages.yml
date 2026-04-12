@@ -1,0 +1,48 @@
+name: 🧾 Commit messages
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  conventional-commits:
+    name: 🧾 Validate PR commit messages
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check all PR commits
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const conventional = /^(feat|fix|perf|refactor|docs|test|build|ci|style|chore|revert)(\([^)]+\))?!?: .+/;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const pullNumber = context.payload.pull_request.number;
+
+            const commits = await github.paginate(github.rest.pulls.listCommits, {
+              owner,
+              repo,
+              pull_number: pullNumber,
+              per_page: 100,
+            });
+
+            const invalid = commits
+              .map((commit) => ({
+                sha: commit.sha.slice(0, 7),
+                subject: commit.commit.message.trim().split("\n")[0],
+              }))
+              .filter((commit) => !conventional.test(commit.subject));
+
+            if (invalid.length > 0) {
+              core.setFailed(
+                [
+                  "Every commit in the PR must use Conventional Commits.",
+                  "Invalid commits:",
+                  ...invalid.map((commit) => `- ${commit.sha}: ${commit.subject}`),
+                ].join("\n")
+              );
+            }
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

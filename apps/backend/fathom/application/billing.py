@@ -5,6 +5,8 @@ from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from pydantic import HttpUrl, TypeAdapter
+
 from fathom.api.deps.auth import AuthContext
 from fathom.core.config import Settings
 from fathom.core.errors import ExternalServiceError, InvalidRequestError
@@ -56,6 +58,7 @@ logger = logging.getLogger(__name__)
 WEBHOOK_PROCESSING_STALE_SECONDS = 300
 WEBHOOK_ID_HEADERS = ("webhook-id", "svix-id")
 FREE_TIER_PRODUCT_ID = "internal_free"
+HTTP_URL_ADAPTER = TypeAdapter(HttpUrl)
 
 
 def _as_str(value: Any) -> str | None:
@@ -237,7 +240,7 @@ async def create_checkout_session(
         )
 
         logger.info("polar checkout session created", extra={"user_id": auth.user_id, "plan_id": plan_id})
-        return CheckoutSessionResponse(checkout_url=checkout_url)
+        return CheckoutSessionResponse(checkout_url=HTTP_URL_ADAPTER.validate_python(checkout_url))
 
 
 async def create_portal_session(auth: AuthContext, settings: Settings) -> CustomerPortalSessionResponse:
@@ -253,7 +256,7 @@ async def create_portal_session(auth: AuthContext, settings: Settings) -> Custom
         external_customer_id=auth.user_id,
     )
 
-    return CustomerPortalSessionResponse(portal_url=portal_url)
+    return CustomerPortalSessionResponse(portal_url=HTTP_URL_ADAPTER.validate_python(portal_url))
 
 
 async def get_billing_account(
