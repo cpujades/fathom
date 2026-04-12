@@ -5,6 +5,9 @@ from dataclasses import dataclass
 from hashlib import sha256
 from typing import Any
 from urllib.parse import ParseResult, parse_qsl, urlencode, urlparse, urlunparse
+from uuid import UUID
+
+from pydantic import TypeAdapter
 
 from fathom.schemas.briefing_sessions import (
     BriefingSessionResolution,
@@ -13,6 +16,8 @@ from fathom.schemas.briefing_sessions import (
     BriefingSourceType,
 )
 from fathom.services.youtube import extract_youtube_video_id
+
+UUID_ADAPTER = TypeAdapter(UUID)
 
 
 @dataclass(frozen=True)
@@ -55,7 +60,7 @@ def build_briefing_session_snapshot(
     summary: dict[str, Any] | None = None,
     transcript: dict[str, Any] | None = None,
 ) -> BriefingSessionResponse:
-    session_id = str(job["id"])
+    session_id = UUID_ADAPTER.validate_python(job["id"])
     state = _map_job_to_session_state(job)
     resolved_resolution = resolution_type or _infer_resolution_type(job)
     progress = _resolve_progress(job, state)
@@ -73,7 +78,7 @@ def build_briefing_session_snapshot(
 
     return BriefingSessionResponse(
         session_id=session_id,
-        briefing_id=job.get("summary_id"),
+        briefing_id=UUID_ADAPTER.validate_python(summary_id) if (summary_id := job.get("summary_id")) else None,
         state=state,
         message=message,
         detail=job.get("status_message"),

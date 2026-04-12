@@ -1,6 +1,8 @@
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Path
+from pydantic import TypeAdapter
 
 from fathom.api.deps.auth import AuthContext, get_auth_context
 from fathom.application.billing import (
@@ -24,6 +26,7 @@ from fathom.schemas.billing import (
 from fathom.schemas.errors import ErrorResponse
 
 router = APIRouter(prefix="/billing", tags=["billing"])
+DATETIME_ADAPTER = TypeAdapter(datetime)
 
 
 @router.post(
@@ -163,7 +166,7 @@ async def get_briefings(
             title=entry.get("title"),
             seconds_used=int(entry.get("seconds_used") or 0),
             source=str(entry.get("source") or ""),
-            created_at=entry.get("created_at"),
+            created_at=DATETIME_ADAPTER.validate_python(entry.get("created_at")),
             session_path=f"/app/briefings/sessions/{entry.get('job_id')}" if entry.get("job_id") else None,
         )
         for entry in entries

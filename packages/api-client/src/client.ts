@@ -6,11 +6,19 @@ type EnvVars = Record<string, string | undefined>;
 
 declare const process: { env?: EnvVars } | undefined;
 
-const getApiBaseUrl = (): string => {
-  const envBaseUrl =
-    typeof process !== "undefined" ? process.env?.NEXT_PUBLIC_API_BASE_URL : undefined;
+const getRequiredPublicEnv = (name: string): string => {
+  const value = typeof process !== "undefined" ? process.env?.[name]?.trim() : undefined;
+  if (!value) {
+    throw new Error(
+      `Missing ${name}. Set it in apps/web/.env.local for local development and in your deployment environment for production.`
+    );
+  }
 
-  return envBaseUrl ?? "http://localhost:8080";
+  return value.replace(/\/+$/, "");
+};
+
+const getApiBaseUrl = (): string => {
+  return getRequiredPublicEnv("NEXT_PUBLIC_API_BASE_URL");
 };
 
 const createApiClient = (accessToken?: string) => {

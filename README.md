@@ -1,117 +1,192 @@
 # Fathom
 
-Fathom helps you explore long-form audio faster by turning podcasts into searchable, chat-friendly knowledge.
+Fathom turns long-form YouTube audio/video into structured briefings with streaming progress, usage-aware billing, and reusable transcript/summary caching.
 
-## MVP flow
-1) Paste a YouTube link
-2) Transcribe the episode
-3) Generate a focused summary + action items
-4) Export a PDF
+## Stack
 
-## Local setup
+- Backend: FastAPI, Supabase, Polar, Groq, OpenRouter
+- Frontend: Next.js 16, React 19, Supabase Auth
+- Worker: separate Python process for download, transcription, summarization, and job progress updates
+
+## Repo Layout
+
+- `apps/backend/fathom`: FastAPI app, application logic, worker, integrations
+- `apps/web`: Next.js frontend
+- `packages/api-client`: generated API client used by the frontend
+- `supabase`: migrations and local Supabase config
+
+## Current Product Flow
+
+1. User signs in with Supabase Auth.
+2. Frontend creates a briefing session via `POST /briefing-sessions`.
+3. Backend reuses existing work when possible, or queues a new job.
+4. Worker downloads the source, transcribes it with Groq, summarizes it with OpenRouter, and streams progress through job updates.
+5. Frontend subscribes to session events and renders the evolving briefing.
+6. Billing uses Polar checkout, portal sessions, refunds, and webhooks.
+
+## Local Setup
 
 ### Requirements
-- Python 3.11–3.13 (Python 3.14 is currently unsupported by some compiled deps like `pydantic-core`)
-- `ffmpeg` (recommended for best audio downloads)
-- WeasyPrint system dependencies (for PDF export)
 
-### Install
+- Python 3.11-3.13
+- Node 24+
+- `pnpm`
+- `ffmpeg`
+- WeasyPrint system dependencies
+
+### Install backend dependencies
 
 ```bash
-# Option A (recommended): uv + a supported interpreter
-# If you use pyenv:
-#   pyenv install 3.13.11
-#   pyenv local 3.13.11
 uv venv
 source .venv/bin/activate
 uv sync
-
-# Option B: plain venv (not recommended if you want reproducibility)
-# python -m venv .venv
-# source .venv/bin/activate
-# pip install -r requirements.txt
 ```
 
-### Dev tooling (recommended)
-Install dev dependencies and enable git hooks:
+### Install frontend dependencies
 
 ```bash
-uv sync --group dev
-uv run pre-commit install
+pnpm install
 ```
 
-Run all hooks manually:
+## Environment
 
-```bash
-uv run pre-commit run --all-files
-```
+### Backend
 
-### Configure
+Copy the backend example file:
 
 ```bash
 cp env.example .env
 ```
 
-Fill in:
-- `DEEPGRAM_API_KEY`
-- `OPENROUTER_API_KEY`
-- `OPENROUTER_MODEL` (e.g. `x-ai/grok-4.1-fast`)
-Optional best‑practice guardrails:
-- `CORS_ALLOW_ORIGINS` (comma-separated list)
-- `RATE_LIMIT_REQUESTS` and `RATE_LIMIT_WINDOW_SECONDS`
-- `MAX_REQUEST_BYTES`
-- `MAX_DURATION_SECONDS`
+Root `.env` is for the FastAPI API and the worker only.
 
-### Run
+Required backend variables are defined in [env.example](./env.example). The main ones are:
+
+- `OPENROUTER_API_KEY`
+- `GROQ_API_KEY`
+- `POLAR_ACCESS_TOKEN`
+- `POLAR_WEBHOOK_SECRET`
+- `POLAR_SUCCESS_URL`
+- `POLAR_PORTAL_RETURN_URL`
+- `SUPABASE_URL`
+- `SUPABASE_PUBLISHABLE_KEY`
+- `SUPABASE_SECRET_KEY`
+- `SUPABASE_DB_PASSWORD`
+- `SUPABASE_DB_HOST`
+
+Optional backend deployment variables:
+
+- `APP_ENV`
+- `CORS_ALLOW_ORIGINS`
+- `RATE_LIMIT`
+- `WORKER_MAX_CONCURRENT_JOBS`
+- `WORKER_JOB_NOTIFY_TIMEOUT_SECONDS`
+- `BILLING_DEBT_CAP_SECONDS`
+- `POLAR_CHECKOUT_RETURN_URL`
+- `POLAR_SERVER`
+
+### Frontend
+
+Copy the frontend example file:
 
 ```bash
-uvicorn --app-dir apps/backend fathom.api.app:app --reload
+cp apps/web/env.example apps/web/.env.local
+```
+
+Required frontend public variables:
+
+- `NEXT_PUBLIC_API_BASE_URL`
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+
+Recommended frontend public variable:
+
+- `NEXT_PUBLIC_SITE_URL`
+
+## Run Locally
+
+### API
+
+```bash
+uvicorn --app-dir apps/backend fathom.api.app:app --host 127.0.0.1 --port 8080 --reload
 ```
 
 ### Worker
-Run the background worker in a separate process:
+
+Run the worker in a separate shell:
 
 ```bash
 PYTHONPATH=apps/backend python -m fathom.orchestration.runner
 ```
 
-### Use
+### Frontend
 
 ```bash
-curl -X POST http://127.0.0.1:8000/summarize \
-  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"url": "https://www.youtube.com/watch?v=VIDEO_ID"}'
+pnpm --filter @fathom/web dev
 ```
 
-This returns a `job_id`. Poll:
+## Main API Routes
+
+### Meta
+
+- `GET /meta/health`
+- `GET /meta/ready`
+- `GET /meta/status`
+
+### Briefing sessions
+
+- `POST /briefing-sessions`
+- `GET /briefing-sessions/{session_id}`
+- `GET /briefing-sessions/{session_id}/events`
+- `DELETE /briefing-sessions/{session_id}`
+
+### Briefings
+
+- `GET /briefings`
+- `GET /briefings/{briefing_id}`
+- `POST /briefings/{briefing_id}/pdf`
+
+### Billing
+
+- `POST /billing/checkout`
+- `POST /billing/portal`
+- `POST /billing/packs/{polar_order_id}/refund`
+- `GET /billing/plans`
+- `GET /billing/usage`
+- `GET /billing/briefings`
+- `GET /billing/account`
+
+### Webhooks
+
+- `POST /webhooks/polar`
+
+## Quality Checks
+
+### Backend
 
 ```bash
-curl http://127.0.0.1:8000/jobs/$JOB_ID \
-  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN"
+uv sync --group dev
+uv run ruff check .
+uv run ruff format --check .
+uv run ty check apps/backend/fathom
+PYTHONPATH=apps/backend ./.venv/bin/python -m unittest discover -s apps/backend/tests
 ```
 
-When the job succeeds, it will include a `summary_id`. Fetch the summary (includes a signed `pdf_url` if the PDF is ready):
+### Frontend
 
 ```bash
-curl http://127.0.0.1:8000/summaries/$SUMMARY_ID \
-  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN"
+pnpm --filter @fathom/web lint
+pnpm --filter @fathom/web typecheck
+pnpm --filter @fathom/web build
 ```
 
-## Versioning & releases
-This repo uses **Release Please** on `main`. If you use **Conventional Commits** (e.g. `feat: ...`, `fix: ...`), it will open a release PR that:
-- bumps the version in `pyproject.toml`
-- updates `CHANGELOG.md`
-- creates a git tag when the release PR is merged
+## Production Notes
 
-### Error format
-Errors use a consistent shape:
+- The worker is required in production. `RUN_WORKER_IN_API=1` is for local development only.
+- The frontend must set `NEXT_PUBLIC_API_BASE_URL`. It no longer falls back to localhost.
+- Polar webhooks should target your public backend URL at `/webhooks/polar`.
+- Supabase migrations are managed from `supabase/` and deployed through GitHub Actions.
 
-```json
-{
-  "error": {
-    "code": "invalid_request",
-    "message": "Invalid summary id"
-  }
-}
-```
+## Release Flow
+
+This repository uses Release Please on `main` to manage version bumps and changelog updates.

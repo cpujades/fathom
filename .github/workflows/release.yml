@@ -1,0 +1,125 @@
+name: 📦 Release on main
+
+on:
+  push:
+    branches: ["main"]
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Install deps
+        run: uv sync --group dev
+
+      - name: Collect merged PR commits
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require("node:fs");
+
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const commitSha = context.sha;
+
+            const { data: pulls } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+              owner,
+              repo,
+              commit_sha: commitSha,
+            });
+
+            const mergedPull = pulls.find((pull) => pull.base.ref === "main" && pull.merged_at) ?? null;
+            const payload = {
+              pull_request: mergedPull
+                ? {
+                    number: mergedPull.number,
+                    title: mergedPull.title,
+                    url: mergedPull.html_url,
+                  }
+                : null,
+              commits: [],
+            };
+
+            if (mergedPull) {
+              const commits = await github.paginate(github.rest.pulls.listCommits, {
+                owner,
+                repo,
+                pull_number: mergedPull.number,
+                per_page: 100,
+              });
+
+              payload.commits = commits.map((commit) => ({
+                sha: commit.sha,
+                message: commit.commit.message,
+              }));
+            } else {
+              const pushCommits = context.payload.commits ?? [];
+              payload.commits = pushCommits.map((commit) => ({
+                sha: commit.id,
+                message: commit.message,
+              }));
+            }
+
+            if (payload.commits.length === 0) {
+              payload.commits = [{ sha: commitSha, message: context.payload.head_commit?.message ?? "chore: release" }];
+            }
+
+            fs.mkdirSync(".github/tmp", { recursive: true });
+            fs.writeFileSync(".github/tmp/release-commits.json", JSON.stringify(payload, null, 2));
+
+      - name: Compute release files
+        id: release
+        run: python .github/scripts/release.py --commits-file .github/tmp/release-commits.json
+
+      - name: Update lockfile
+        run: uv lock
+
+      - name: Commit release
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+
+          git add CHANGELOG.md pyproject.toml uv.lock
+
+          if git diff --cached --quiet; then
+            echo "No release changes to commit."
+            exit 0
+          fi
+
+          git commit -m "chore(release): v${VERSION} [skip ci]"
+          git tag -a "v${VERSION}" -m "Release v${VERSION}"
+          git push origin HEAD:main --follow-tags
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.release.outputs.version }}
+          body_path: .github/tmp/release-notes.md
