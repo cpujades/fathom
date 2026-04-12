@@ -16,12 +16,15 @@ jobs:
   release:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
+    env:
+      RELEASE_AUTOMATION_TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          token: ${{ env.RELEASE_AUTOMATION_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -101,11 +104,18 @@ jobs:
       - name: Commit release
         env:
           VERSION: ${{ steps.release.outputs.version }}
+          RELEASE_AUTOMATION_TOKEN: ${{ env.RELEASE_AUTOMATION_TOKEN }}
         run: |
           set -euo pipefail
 
+          if [[ -z "${RELEASE_AUTOMATION_TOKEN}" ]]; then
+            echo "RELEASE_AUTOMATION_TOKEN is not configured."
+            exit 1
+          fi
+
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git config user.name "github-actions[bot]"
+          git remote set-url origin "https://x-access-token:${RELEASE_AUTOMATION_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
 
           git add CHANGELOG.md pyproject.toml uv.lock
 
