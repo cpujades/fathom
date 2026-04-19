@@ -161,36 +161,6 @@ async def claim_webhook_event_for_processing(client: AsyncClient, *, event_id: s
     return int(response.count or 0) > 0
 
 
-async def reclaim_stale_processing_webhook_event(
-    client: AsyncClient,
-    *,
-    event_id: str,
-    stale_before: datetime,
-) -> bool:
-    """Move stale in-flight webhook events back to failed so they can be retried."""
-    try:
-        response = (
-            await client.table("billing_webhook_events")
-            .update(
-                {
-                    "status": "failed",
-                    "processed_at": datetime.now(UTC).isoformat(),
-                    "error": "stale_processing_reclaimed",
-                },
-                count=CountMethod.exact,
-                returning=ReturnMethod.minimal,
-            )
-            .eq("event_id", event_id)
-            .eq("status", "processing")
-            .lt("received_at", stale_before.isoformat())
-            .execute()
-        )
-    except APIError as exc:
-        raise_for_postgrest_error(exc, "Failed to reclaim stale processing webhook event.")
-
-    return int(response.count or 0) > 0
-
-
 async def mark_webhook_event_processed(client: AsyncClient, event_id: str) -> None:
     try:
         await (
@@ -386,6 +356,82 @@ async def fetch_polar_order_ids_refund_pending(client: AsyncClient, user_id: str
 
     data = response.data or []
     return [str(row["polar_order_id"]) for row in data if isinstance(row, dict) and row.get("polar_order_id")]
+
+
+async def list_refund_pending_pack_orders(
+    client: AsyncClient,
+    *,
+    updated_before: datetime,
+    limit: int,
+) -> list[dict[str, Any]]:
+    try:
+        response = (
+            await client.table("billing_orders")
+            .select(ORDER_SELECT_FIELDS)
+            .eq("plan_type", "pack")
+            .eq("status", "refund_pending")
+            .lt("updated_at", updated_before.isoformat())
+            .order("updated_at", desc=False)
+            .limit(limit)
+            .execute()
+        )
+    except APIError as exc:
+        raise_for_postgrest_error(exc, "Failed to list refund-pending pack orders.")
+
+    return [cast(dict[str, Any], row) for row in (response.data or []) if isinstance(row, dict)]
+
+
+async def list_subscription_entitlements_for_reconciliation(
+    client: AsyncClient,
+    *,
+    updated_before: datetime,
+    limit: int,
+) -> list[dict[str, Any]]:
+    try:
+        response = (
+            await client.table("entitlements")
+            .select(ENTITLEMENT_SELECT_FIELDS)
+            .not_.is_("subscription_plan_id", "null")
+            .lt("last_balance_sync_at", updated_before.isoformat())
+            .order("last_balance_sync_at", desc=False)
+            .limit(limit)
+            .execute()
+        )
+    except APIError as exc:
+        raise_for_postgrest_error(exc, "Failed to list subscription entitlements for reconciliation.")
+
+    return [cast(dict[str, Any], row) for row in (response.data or []) if isinstance(row, dict)]
+
+
+async def list_latest_subscription_orders_for_users(
+    client: AsyncClient,
+    *,
+    user_ids: set[str],
+) -> dict[str, dict[str, Any]]:
+    if not user_ids:
+        return {}
+
+    try:
+        response = (
+            await client.table("billing_orders")
+            .select(ORDER_SELECT_FIELDS)
+            .in_("user_id", list(user_ids))
+            .not_.is_("polar_subscription_id", "null")
+            .neq("plan_type", "pack")
+            .order("created_at", desc=True)
+            .execute()
+        )
+    except APIError as exc:
+        raise_for_postgrest_error(exc, "Failed to list latest subscription orders for users.")
+
+    latest_by_user: dict[str, dict[str, Any]] = {}
+    for row in response.data or []:
+        if not isinstance(row, dict):
+            continue
+        user_id = str(row.get("user_id") or "")
+        if user_id and user_id not in latest_by_user:
+            latest_by_user[user_id] = cast(dict[str, Any], row)
+    return latest_by_user
 
 
 async def fetch_pack_lots_by_order_ids(

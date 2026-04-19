@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 from uuid import UUID
 
 from fathom.api.deps.auth import AuthContext
-from fathom.application.briefing_contract import build_source_thumbnail_url, normalize_source, resolve_source_title
+from fathom.application.briefings.contract import build_source_thumbnail_url, normalize_source, resolve_source_title
 from fathom.core.config import Settings
 from fathom.core.constants import SIGNED_URL_TTL_SECONDS, SUPABASE_PDF_BUCKET
 from fathom.core.errors import ExternalServiceError

@@ -11,7 +11,7 @@ from fastapi import Request
 from starlette.responses import StreamingResponse
 
 from fathom.api.deps.auth import AuthContext
-from fathom.application.briefing_contract import (
+from fathom.application.briefings.contract import (
     NormalizedSource,
     build_briefing_session_snapshot,
     encode_sse_event,
