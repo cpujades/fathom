@@ -36,17 +36,11 @@
 }
 
 .libraryRow {
-  position: relative;
-  z-index: 0;
   border: 1px solid var(--app-line);
   border-radius: 22px;
   background: rgba(248, 244, 236, 0.72);
   box-shadow: var(--app-shadow);
   backdrop-filter: blur(24px) saturate(1.08);
-}
-
-.libraryRowMenuOpen {
-  z-index: 12;
 }
 
 .libraryRowBody {
@@ -163,98 +157,49 @@
 }
 
 .rowActions {
-  position: relative;
   flex-shrink: 0;
-  z-index: 2;
-}
-
-.actionTrigger {
-  min-height: 32px;
-  border: none;
-  border-radius: 999px;
-  background: rgba(240, 233, 222, 0.78);
-  color: var(--app-text-soft);
-  padding: 0.38rem 0.78rem;
-  font-size: 0.78rem;
-  font-weight: 620;
-  letter-spacing: 0.01em;
-  cursor: pointer;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.5),
-    0 1px 2px rgba(18, 28, 23, 0.04);
-  transition: background-color 180ms ease, color 180ms ease, transform 180ms ease;
-}
-
-.actionTrigger:hover {
-  background: rgba(232, 223, 207, 0.66);
-  color: var(--app-text-muted);
-  transform: translateY(-1px);
-}
-
-.actionTrigger[aria-expanded="true"] {
-  background: rgba(228, 218, 201, 0.8);
-  color: var(--app-text);
-}
-
-.actionTrigger:focus-visible {
-  outline: 2px solid rgba(40, 92, 70, 0.24);
-  outline-offset: 2px;
-}
-
-.actionsMenu {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 0.5rem);
-  width: min(260px, 72vw);
   display: grid;
-  gap: 0.36rem;
-  padding: 0.6rem;
-  border-radius: 18px;
-  border: 1px solid var(--app-line);
-  background:
-    radial-gradient(120% 120% at 0% 0%, rgba(40, 92, 70, 0.1), transparent 42%),
-    rgba(249, 246, 239, 0.96);
-  box-shadow: 0 18px 44px rgba(18, 28, 23, 0.16);
-  z-index: 20;
+  gap: 0.6rem;
+  align-items: end;
 }
 
-.menuAction,
-.menuDangerAction {
-  min-height: 36px;
-  border: none;
-  border-radius: 12px;
+.actionSet {
   display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  padding: 0.58rem 0.7rem;
-  background: transparent;
-  color: var(--app-text-muted);
-  font-size: 0.82rem;
-  font-weight: 580;
-  text-decoration: none;
-  cursor: pointer;
-  transition: background-color 180ms ease, color 180ms ease;
-}
-
-.menuAction:hover,
-.menuDangerAction:hover {
-  background: rgba(232, 223, 207, 0.34);
-  color: var(--app-text);
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .menuDangerAction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  border: 1px solid rgba(182, 75, 71, 0.18);
+  border-radius: 999px;
+  padding: 0.58rem 0.94rem;
+  background: rgba(182, 75, 71, 0.06);
   color: #9c4b45;
+  font-size: 0.82rem;
+  font-weight: 620;
+  cursor: pointer;
+  transition:
+    transform 180ms ease,
+    background-color 180ms ease,
+    color 180ms ease,
+    border-color 180ms ease;
 }
 
 .menuDangerAction:hover {
   background: rgba(182, 75, 71, 0.08);
   color: #7b2c2a;
+  border-color: rgba(182, 75, 71, 0.26);
+  transform: translateY(-1px);
 }
 
 .confirmBlock {
   display: grid;
   gap: 0.55rem;
-  margin-top: 0.15rem;
   padding: 0.85rem;
   border-radius: 16px;
   border: 1px solid rgba(182, 75, 71, 0.16);
@@ -336,10 +281,16 @@
   }
 
   .rowActions {
-    align-self: flex-end;
+    align-items: stretch;
   }
 
-  .actionsMenu {
-    width: min(320px, 82vw);
+  .actionSet,
+  .confirmActions {
+    justify-content: stretch;
+  }
+
+  .actionSet > *,
+  .confirmActions > * {
+    width: 100%;
   }
 }

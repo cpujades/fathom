@@ -84,7 +84,6 @@ export default function BriefingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState(cachedBriefings?.query ?? "");
   const [sort, setSort] = useState<BriefingListSort>(cachedBriefings?.sort ?? "newest");
-  const [activeMenuSessionId, setActiveMenuSessionId] = useState<string | null>(null);
   const [confirmDeleteSessionId, setConfirmDeleteSessionId] = useState<string | null>(null);
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
 
@@ -108,7 +107,6 @@ export default function BriefingsPage() {
     }
 
     setLoading(true);
-    setActiveMenuSessionId(null);
     setConfirmDeleteSessionId(null);
 
     const syncBriefings = async () => {
@@ -141,45 +139,6 @@ export default function BriefingsPage() {
       active = false;
     };
   }, [accessToken, deferredSearch, sort]);
-
-  useEffect(() => {
-    if (!activeMenuSessionId) {
-      return;
-    }
-
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Element)) {
-        setActiveMenuSessionId(null);
-        setConfirmDeleteSessionId(null);
-        return;
-      }
-
-      if (target.closest(`.${styles.rowActions}`)) {
-        return;
-      }
-
-      setActiveMenuSessionId(null);
-      setConfirmDeleteSessionId(null);
-    };
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") {
-        return;
-      }
-
-      setActiveMenuSessionId(null);
-      setConfirmDeleteSessionId(null);
-    };
-
-    document.addEventListener("pointerdown", handlePointerDown);
-    document.addEventListener("keydown", handleEscape);
-
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, [activeMenuSessionId]);
 
   const hasFilters = deferredSearch.length > 0 || sort !== "newest";
   const helperText = useMemo(() => {
@@ -263,7 +222,6 @@ export default function BriefingsPage() {
           has_more: nextItems.length < nextTotalCount
         };
       });
-      setActiveMenuSessionId(null);
       setConfirmDeleteSessionId(null);
       setError(null);
     } catch (err) {
@@ -342,15 +300,11 @@ export default function BriefingsPage() {
           ) : (
             <div className={styles.libraryList}>
               {briefings.items.map((entry) => {
-                const menuIsOpen = activeMenuSessionId === entry.session_id;
                 const confirmingDelete = confirmDeleteSessionId === entry.session_id;
                 const deletingThisEntry = deletingSessionId === entry.session_id;
 
                 return (
-                  <article
-                    className={`${styles.libraryRow} ${menuIsOpen ? styles.libraryRowMenuOpen : ""}`}
-                    key={entry.session_id}
-                  >
+                  <article className={styles.libraryRow} key={entry.session_id}>
                     <div className={styles.libraryRowBody}>
                       <div className={styles.libraryRowMain}>
                         <div className={styles.libraryMedia}>
@@ -394,74 +348,54 @@ export default function BriefingsPage() {
                             </div>
 
                             <div className={styles.rowActions}>
-                              <button
-                                className={styles.actionTrigger}
-                                type="button"
-                                onClick={() => {
-                                  setActiveMenuSessionId((current) => {
-                                    if (current === entry.session_id) {
-                                      return current;
-                                    }
-
-                                    return entry.session_id;
-                                  });
-                                  setConfirmDeleteSessionId(null);
-                                }}
-                                aria-expanded={menuIsOpen}
-                                aria-haspopup="menu"
-                              >
-                                Actions
-                              </button>
-
-                              {menuIsOpen ? (
-                                <div className={styles.actionsMenu}>
-                                  <Link
-                                    className={styles.menuAction}
-                                    href={entry.session_path}
-                                    onMouseEnter={() => prefetchBriefing(entry)}
-                                    onFocus={() => prefetchBriefing(entry)}
+                              <div className={styles.actionSet}>
+                                <Link
+                                  className={chrome.secondaryButton}
+                                  href={entry.session_path}
+                                  onMouseEnter={() => prefetchBriefing(entry)}
+                                  onFocus={() => prefetchBriefing(entry)}
+                                >
+                                  Open briefing
+                                </Link>
+                                <a
+                                  className={chrome.ghostButton}
+                                  href={entry.source_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  Open source
+                                </a>
+                                {!confirmingDelete ? (
+                                  <button
+                                    className={styles.menuDangerAction}
+                                    type="button"
+                                    onClick={() => setConfirmDeleteSessionId(entry.session_id)}
                                   >
-                                    Open briefing
-                                  </Link>
-                                  <a
-                                    className={styles.menuAction}
-                                    href={entry.source_url}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                  >
-                                    Open video
-                                  </a>
+                                    Remove
+                                  </button>
+                                ) : null}
+                              </div>
 
-                                  {confirmingDelete ? (
-                                    <div className={styles.confirmBlock}>
-                                      <p className={styles.confirmText}>Remove this briefing from history?</p>
-                                      <div className={styles.confirmActions}>
-                                        <button
-                                          className={chrome.ghostButton}
-                                          type="button"
-                                          onClick={() => setConfirmDeleteSessionId(null)}
-                                        >
-                                          Cancel
-                                        </button>
-                                        <button
-                                          className={styles.dangerButton}
-                                          type="button"
-                                          onClick={() => void handleDeleteBriefing(entry)}
-                                          disabled={deletingThisEntry}
-                                        >
-                                          {deletingThisEntry ? "Removing…" : "Remove from history"}
-                                        </button>
-                                      </div>
-                                    </div>
-                                  ) : (
+                              {confirmingDelete ? (
+                                <div className={styles.confirmBlock}>
+                                  <p className={styles.confirmText}>Remove this briefing from history?</p>
+                                  <div className={styles.confirmActions}>
                                     <button
-                                      className={styles.menuDangerAction}
+                                      className={chrome.ghostButton}
                                       type="button"
-                                      onClick={() => setConfirmDeleteSessionId(entry.session_id)}
+                                      onClick={() => setConfirmDeleteSessionId(null)}
                                     >
-                                      Remove from history
+                                      Keep briefing
                                     </button>
-                                  )}
+                                    <button
+                                      className={styles.dangerButton}
+                                      type="button"
+                                      onClick={() => void handleDeleteBriefing(entry)}
+                                      disabled={deletingThisEntry}
+                                    >
+                                      {deletingThisEntry ? "Removing…" : "Remove from history"}
+                                    </button>
+                                  </div>
                                 </div>
                               ) : null}
                             </div>

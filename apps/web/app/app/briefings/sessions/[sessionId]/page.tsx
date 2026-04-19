@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { createApiClient, getApiBaseUrl, type BriefingSessionResponse } from "@fathom/api-client";
 
@@ -20,6 +20,7 @@ import {
   getCachedSessionSnapshot,
   invalidateBriefingsCache
 } from "../../../../lib/appDataCache";
+import { buildSignInPath } from "../../../../lib/url";
 import { readSessionStream, type SessionStreamEvent } from "../../sessionStream";
 import styles from "../../session.module.css";
 
@@ -87,10 +88,18 @@ type SessionStatusPayload = {
   error_message: string | null;
 };
 
+type StreamHealth = "live" | "reconnecting";
+
 export default function BriefingSessionPage() {
   const router = useRouter();
   const params = useParams();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const sessionId = useMemo(() => params?.sessionId?.toString() ?? "", [params]);
+  const signInPath = useMemo(() => {
+    const queryString = searchParams.toString();
+    return buildSignInPath(`${pathname}${queryString ? `?${queryString}` : ""}`);
+  }, [pathname, searchParams]);
   const cachedSnapshot = useMemo(
     () => (sessionId ? getCachedSessionSnapshot(sessionId) : null),
     [sessionId]
@@ -104,7 +113,10 @@ export default function BriefingSessionPage() {
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteConfirming, setDeleteConfirming] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [sessionLoadError, setSessionLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [connectionNotice, setConnectionNotice] = useState<string | null>(null);
+  const [streamHealth, setStreamHealth] = useState<StreamHealth>("live");
   const [progress, setProgress] = useState(cachedSnapshot?.progress ?? 5);
   const [loadingSupportIndex, setLoadingSupportIndex] = useState(0);
   const lastEventIdRef = useRef<string | null>(null);
@@ -116,7 +128,7 @@ export default function BriefingSessionPage() {
       return;
     }
     if (!accessToken) {
-      router.replace("/signin");
+      router.replace(signInPath);
       return;
     }
 
@@ -126,7 +138,10 @@ export default function BriefingSessionPage() {
     setPdfError(null);
     setDeleteLoading(false);
     setDeleteConfirming(false);
-    setError(null);
+    setSessionLoadError(null);
+    setActionError(null);
+    setConnectionNotice(null);
+    setStreamHealth("live");
 
     const prefetchedSnapshot = getCachedSessionSnapshot(sessionId);
     if (prefetchedSnapshot) {
@@ -154,6 +169,7 @@ export default function BriefingSessionPage() {
       setInitialSnapshotLoaded(true);
       terminalStateRef.current = snapshot.state === "ready" || snapshot.state === "failed";
       lastStreamActivityRef.current = Date.now();
+      setSessionLoadError(null);
     };
 
     const handleStatusUpdate = (statusUpdate: SessionStatusPayload) => {
@@ -237,6 +253,8 @@ export default function BriefingSessionPage() {
 
       lastEventIdRef.current = event.id;
       lastStreamActivityRef.current = Date.now();
+      setStreamHealth("live");
+      setConnectionNotice(null);
       if (event.event === "session.content_delta") {
         handleContentDelta(event.data as SessionContentDeltaPayload);
       } else if (event.event === "session.status") {
@@ -244,10 +262,9 @@ export default function BriefingSessionPage() {
       } else {
         handleSessionSnapshot(event.data as BriefingSessionResponse);
       }
-      setError(null);
     };
 
-    const refreshSessionSnapshot = async (currentSessionId: string) => {
+    const refreshSessionSnapshot = async (currentSessionId: string, blocking = false) => {
       const { data, error: apiError } = await api.GET("/briefing-sessions/{session_id}", {
         params: {
           path: {
@@ -258,13 +275,19 @@ export default function BriefingSessionPage() {
 
       if (apiError) {
         setInitialSnapshotLoaded(true);
-        setError(getApiErrorMessage(apiError, "Unable to fetch briefing session."));
+        if (blocking) {
+          setSessionLoadError(getApiErrorMessage(apiError, "Unable to fetch briefing session."));
+        } else {
+          setStreamHealth("reconnecting");
+          setConnectionNotice("Live updates are reconnecting. Your latest saved progress is still shown below.");
+        }
         return null;
       }
 
       if (data) {
         handleSessionSnapshot(data);
-        setError(null);
+        setConnectionNotice(null);
+        setStreamHealth("live");
       }
 
       return data ?? null;
@@ -273,14 +296,13 @@ export default function BriefingSessionPage() {
     const streamSession = async () => {
       let data = prefetchedSnapshot;
       if (!data) {
-        data = await refreshSessionSnapshot(sessionId);
+        data = await refreshSessionSnapshot(sessionId, true);
       } else if (data.state !== "ready" && data.state !== "failed") {
-        void refreshSessionSnapshot(sessionId);
+        void refreshSessionSnapshot(sessionId, false);
       }
 
       if (!data) {
         setInitialSnapshotLoaded(true);
-        setError("Unable to load the briefing session.");
         return;
       }
 
@@ -325,6 +347,8 @@ export default function BriefingSessionPage() {
             }
 
             reconnectDelay = RECONNECT_BASE_DELAY_MS;
+            setStreamHealth("live");
+            setConnectionNotice(null);
             await readSessionStream<unknown>(response.body, async (event) => {
               await handleStreamEvent(event);
             });
@@ -336,7 +360,12 @@ export default function BriefingSessionPage() {
             if (abortController.signal.aborted) {
               return;
             }
-            setError(streamError instanceof Error ? streamError.message : "The live stream disconnected.");
+            setStreamHealth("reconnecting");
+            setConnectionNotice(
+              streamError instanceof Error && streamError.message.includes("live session stream")
+                ? "Live updates are reconnecting. Your latest saved progress is still shown below."
+                : "The live connection dropped for a moment. Reconnecting now."
+            );
           }
 
           if (terminalStateRef.current || abortController.signal.aborted) {
@@ -358,7 +387,7 @@ export default function BriefingSessionPage() {
     return () => {
       abortController.abort();
     };
-  }, [accessToken, loading, router, sessionId]);
+  }, [accessToken, loading, router, sessionId, signInPath]);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -425,7 +454,7 @@ export default function BriefingSessionPage() {
     }
 
     setDeleteLoading(true);
-    setError(null);
+    setActionError(null);
 
     try {
       const response = await fetch(new URL(`/briefing-sessions/${sessionId}`, getApiBaseUrl()).toString(), {
@@ -445,7 +474,7 @@ export default function BriefingSessionPage() {
           // Ignore parsing failures and keep the fallback.
         }
 
-        setError(message);
+        setActionError(message);
         return;
       }
 
@@ -454,7 +483,7 @@ export default function BriefingSessionPage() {
       setDeleteConfirming(false);
       router.replace("/app/briefings");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to remove this briefing.");
+      setActionError(err instanceof Error ? err.message : "Unable to remove this briefing.");
     } finally {
       setDeleteLoading(false);
     }
@@ -482,7 +511,8 @@ export default function BriefingSessionPage() {
       ? "The run stopped before the final briefing was delivered."
       : "Talven is working through the source and shaping the briefing.";
   const showProgressPanel = initialSnapshotLoaded && !hasMarkdown && !isReady && !isFailed;
-  const showCreditCta = Boolean(error && isCreditError(error));
+  const creditCtaMessage = session?.error_message ?? sessionLoadError;
+  const showCreditCta = Boolean(creditCtaMessage && isCreditError(creditCtaMessage));
   const canShowReader = initialSnapshotLoaded && (hasMarkdown || isReady || isFailed);
   const showHeroLivePill = !isReady && !isFailed && !showProgressPanel;
   const primaryPdfActionLabel = pdfLoading
@@ -529,9 +559,16 @@ export default function BriefingSessionPage() {
             <div className={styles.loadingBeacon} aria-hidden="true" />
             <p className={chrome.surfaceText}>No reload needed. This page keeps itself in sync.</p>
 
-            {error ? (
+            {sessionLoadError ? (
               <div className={styles.errorCard}>
-                <p>{error}</p>
+                <p>{sessionLoadError}</p>
+                {showCreditCta ? (
+                  <div className={chrome.actionRow}>
+                    <Link className={chrome.primaryButton} href="/app/billing#billing-offers">
+                      Get more listening time
+                    </Link>
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </section>
@@ -550,20 +587,15 @@ export default function BriefingSessionPage() {
             </div>
 
             <div className={styles.loadingSignalRow}>
-              <span className={`${chrome.statusPillMuted} ${styles.liveStatus}`}>Live</span>
+              <span className={`${chrome.statusPillMuted} ${styles.liveStatus}`}>
+                {streamHealth === "reconnecting" ? "Reconnecting" : "Live"}
+              </span>
               <p className={styles.loadingSignalText}>{LOADING_SUPPORT_MESSAGES[loadingSupportIndex]}</p>
             </div>
 
-            {error ? (
-              <div className={styles.errorCard}>
-                <p>{error}</p>
-                {showCreditCta ? (
-                  <div className={chrome.actionRow}>
-                    <Link className={chrome.primaryButton} href="/app/billing#billing-offers">
-                      Get more listening time
-                    </Link>
-                  </div>
-                ) : null}
+            {connectionNotice ? (
+              <div className={styles.connectionCard}>
+                <p>{connectionNotice}</p>
               </div>
             ) : null}
           </section>
@@ -573,10 +605,18 @@ export default function BriefingSessionPage() {
               {isStreaming && liveReaderMessage ? (
                 <div className={styles.liveReaderBanner}>
                   <div className={styles.liveReaderMeta}>
-                    <span className={`${chrome.statusPillMuted} ${styles.liveStatus}`}>{stageLabel}</span>
+                    <span className={`${chrome.statusPillMuted} ${styles.liveStatus}`}>
+                      {streamHealth === "reconnecting" ? "Reconnecting" : stageLabel}
+                    </span>
                     <p className={chrome.surfaceText}>{liveReaderMessage}</p>
                   </div>
                   <span className={styles.liveProgressLabel}>{clampedProgress}%</span>
+                </div>
+              ) : null}
+
+              {connectionNotice ? (
+                <div className={styles.connectionCard}>
+                  <p>{connectionNotice}</p>
                 </div>
               ) : null}
 
@@ -704,7 +744,7 @@ export default function BriefingSessionPage() {
                       type="button"
                       onClick={() => {
                         setDeleteConfirming(true);
-                        setError(null);
+                        setActionError(null);
                       }}
                       disabled={deleteLoading}
                     >
@@ -736,11 +776,8 @@ export default function BriefingSessionPage() {
               ) : null}
 
               {isFailed ? (
-                <div className={styles.errorCard}>Error: {session?.error_message ?? "This briefing failed."}</div>
-              ) : null}
-              {error ? (
                 <div className={styles.errorCard}>
-                  <p>{error}</p>
+                  <p>Error: {session?.error_message ?? "This briefing failed."}</p>
                   {showCreditCta ? (
                     <div className={chrome.actionRow}>
                       <Link className={chrome.primaryButton} href="/app/billing#billing-offers">
@@ -748,6 +785,11 @@ export default function BriefingSessionPage() {
                       </Link>
                     </div>
                   ) : null}
+                </div>
+              ) : null}
+              {actionError ? (
+                <div className={styles.errorCard}>
+                  <p>{actionError}</p>
                 </div>
               ) : null}
             </aside>

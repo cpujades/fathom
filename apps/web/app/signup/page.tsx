@@ -8,7 +8,7 @@ import { useEffect, useMemo, useState } from "react";
 import styles from "../auth/auth.module.css";
 import { mapAuthError } from "../lib/authErrors";
 import { getSupabaseClient } from "../lib/supabaseClient";
-import { buildAuthCallbackUrl, getSafeNextPath } from "../lib/url";
+import { buildAuthCallbackUrl, buildSignInPath, getSafeNextPath } from "../lib/url";
 
 export default function SignUpPage() {
   const router = useRouter();
@@ -29,19 +29,10 @@ export default function SignUpPage() {
   }, [nextPath]);
 
   const signInHref = useMemo(() => {
-    const params = new URLSearchParams();
-    if (nextPath !== "/app") {
-      params.set("next", nextPath);
-    }
-    if (intent) {
-      params.set("intent", intent);
-    }
-    if (plan) {
-      params.set("plan", plan);
-    }
-
-    const query = params.toString();
-    return query ? `/signin?${query}` : "/signin";
+    return buildSignInPath(nextPath, {
+      intent,
+      plan
+    });
   }, [intent, nextPath, plan]);
 
   const [email, setEmail] = useState("");

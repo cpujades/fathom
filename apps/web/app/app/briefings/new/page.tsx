@@ -1,8 +1,8 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { createApiClient } from "@fathom/api-client";
 
@@ -12,32 +12,35 @@ import chrome from "../../../components/app-chrome.module.css";
 import { getApiErrorMessage } from "../../../lib/apiErrors";
 import { getAccountLabel } from "../../../lib/accountLabel";
 import { cacheSessionSnapshot, invalidateBriefingsCache } from "../../../lib/appDataCache";
+import { buildSignInPath } from "../../../lib/url";
 import styles from "../session.module.css";
 
 function BriefingCreatePageContent() {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const { accessToken, loading, remainingSeconds, signOut, user } = useAppShell();
+  const initialUrl = useMemo(() => searchParams.get("url")?.trim() ?? "", [searchParams]);
+  const [draftUrl, setDraftUrl] = useState(initialUrl);
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const startedRef = useRef(false);
+  const signInPath = buildSignInPath(
+    `${pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ""}`
+  );
 
   useEffect(() => {
-    if (loading || startedRef.current) {
-      return;
-    }
-    if (!accessToken) {
-      router.replace("/signin");
-      return;
-    }
+    setDraftUrl(initialUrl);
+  }, [initialUrl]);
 
-    startedRef.current = true;
-
-    const run = async () => {
-      const rawUrl = searchParams.get("url")?.trim();
-      if (!rawUrl) {
-        setError("Missing URL. Head back and try again.");
+  const startSession = useCallback(
+    async (rawUrl: string) => {
+      if (!accessToken || submitting) {
         return;
       }
+
+      setSubmitting(true);
+      setError(null);
 
       try {
         const api = createApiClient(accessToken);
@@ -64,11 +67,41 @@ function BriefingCreatePageContent() {
         setError("Unexpected response from the server.");
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong.");
+      } finally {
+        setSubmitting(false);
       }
-    };
+    },
+    [accessToken, router, submitting]
+  );
 
-    void run();
-  }, [accessToken, loading, router, searchParams]);
+  useEffect(() => {
+    if (loading || startedRef.current) {
+      return;
+    }
+    if (!accessToken) {
+      router.replace(signInPath);
+      return;
+    }
+
+    startedRef.current = true;
+
+    if (!initialUrl) {
+      setError("No source link reached this step. Paste one below to continue.");
+      return;
+    }
+
+    void startSession(initialUrl);
+  }, [accessToken, initialUrl, loading, router, signInPath, startSession]);
+
+  const handleRetry = async () => {
+    const nextUrl = draftUrl.trim();
+    if (!nextUrl) {
+      setError("Paste a valid podcast or YouTube URL to start a briefing.");
+      return;
+    }
+
+    await startSession(nextUrl);
+  };
 
   return (
     <div className={chrome.pageFrame}>
@@ -110,8 +143,12 @@ function BriefingCreatePageContent() {
             <div className={chrome.stepRow}>
               <span className={chrome.stepDotActive} />
               <div>
-                <p className={chrome.stepLabel}>Opening a session</p>
-                <p className={chrome.stepHint}>Talven is validating the source and connecting you to live updates.</p>
+                <p className={chrome.stepLabel}>{initialUrl ? "Opening a session" : "Waiting for a source"}</p>
+                <p className={chrome.stepHint}>
+                  {initialUrl
+                    ? "Talven is validating the source and connecting you to live updates."
+                    : "Paste a source link to continue directly from here."}
+                </p>
               </div>
             </div>
           </div>
@@ -119,6 +156,25 @@ function BriefingCreatePageContent() {
           {error ? (
             <div className={styles.errorCard}>
               <p>{error}</p>
+              <label className={chrome.fieldStack}>
+                <span className={chrome.fieldLabel}>Podcast or YouTube URL</span>
+                <input
+                  className={chrome.input}
+                  type="url"
+                  value={draftUrl}
+                  onChange={(event) => setDraftUrl(event.target.value)}
+                  placeholder="https://www.youtube.com/watch?v=..."
+                  disabled={submitting}
+                />
+              </label>
+              <div className={chrome.actionRow}>
+                <button className={chrome.primaryButton} type="button" onClick={() => void handleRetry()} disabled={submitting}>
+                  {submitting ? "Starting briefing..." : "Start briefing"}
+                </button>
+                <Link className={chrome.secondaryButton} href="/app">
+                  Back to workspace
+                </Link>
+              </div>
               {isCreditError(error) ? (
                 <div className={chrome.actionRow}>
                   <Link className={chrome.primaryButton} href="/app/billing#billing-offers">

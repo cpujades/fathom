@@ -6,6 +6,7 @@ import type { User } from "@supabase/supabase-js";
 import { createApiClient } from "@fathom/api-client";
 
 import { getSupabaseClient } from "../lib/supabaseClient";
+import { buildSignInPath, getCurrentAppPath } from "../lib/url";
 
 type AppShellContextValue = {
   accessToken: string | null;
@@ -21,6 +22,7 @@ const AppShellContext = createContext<AppShellContextValue | null>(null);
 
 const PREFETCH_ROUTES = ["/app", "/app/briefings", "/app/billing", "/app/account", "/app/briefings/new"];
 const USAGE_CACHE_TTL_MS = 30_000;
+const DEFAULT_APP_PATH = "/app";
 
 let usageCache: {
   fetchedAt: number;
@@ -43,6 +45,10 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
     };
     setRemainingSecondsState(value);
   }, []);
+
+  const redirectToSignIn = useCallback(() => {
+    router.replace(buildSignInPath(getCurrentAppPath(DEFAULT_APP_PATH)));
+  }, [router]);
 
   const refreshUsage = useCallback(
     async (token: string) => {
@@ -78,7 +84,7 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
           setAccessToken(null);
           setRemainingSecondsState(null);
           setLoading(false);
-          router.replace("/signin");
+          redirectToSignIn();
           return;
         }
 
@@ -107,7 +113,7 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
         setAccessToken(null);
         setRemainingSecondsState(null);
         setLoading(false);
-        router.replace("/signin");
+        redirectToSignIn();
       }
     };
 
@@ -128,7 +134,7 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
         setUser(null);
         setAccessToken(null);
         setRemainingSecondsState(null);
-        router.replace("/signin");
+        redirectToSignIn();
         return;
       }
 
@@ -150,7 +156,7 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
       active = false;
       authListener.subscription.unsubscribe();
     };
-  }, [refreshUsage, router]);
+  }, [redirectToSignIn, refreshUsage]);
 
   const signOut = useCallback(async () => {
     const supabase = getSupabaseClient();
