@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.16.5](https://github.com/cpujades/fathom/compare/v0.16.4...v0.16.5) (2026-04-19)
+
+_Automated release from [#107](https://github.com/cpujades/fathom/pull/107) fix(backend): harden worker maintenance and proxy-aware rate limiting_
+
+### Bug Fixes
+
+- fix(backend): harden worker maintenance and proxy-aware rate limiting (c2d7fb0)
+- fix: remove sensitive info from log (4abc6e9)
+
 ## [0.16.4](https://github.com/cpujades/fathom/compare/v0.16.3...v0.16.4) (2026-04-19)
 
 _Automated release from [#106](https://github.com/cpujades/fathom/pull/106) fix(web): preserve auth return paths and improve briefing status UX_
