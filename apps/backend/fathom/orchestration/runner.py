@@ -554,15 +554,7 @@ async def _run_loop(settings: Settings) -> None:
 
 def main() -> None:
     settings = get_settings()
-    logger.info(
-        "Starting worker loop",
-        extra={
-            "max_concurrent_jobs": settings.worker_max_concurrent_jobs,
-            "job_notify_timeout_seconds": WORKER_JOB_NOTIFY_TIMEOUT_SECONDS,
-            "sweep_interval_seconds": WORKER_SWEEP_INTERVAL_SECONDS,
-            "billing_maintenance_interval_seconds": WORKER_BILLING_MAINTENANCE_INTERVAL_SECONDS,
-        },
-    )
+    logger.info("Starting worker loop")
     asyncio.run(_run_loop(settings))
 
 
