@@ -232,6 +232,32 @@ async def create_order_refund(
     )
 
 
+async def get_order(
+    settings: Settings,
+    *,
+    order_id: str,
+) -> dict[str, Any]:
+    return await asyncio.to_thread(
+        _polar_request,
+        settings,
+        method="GET",
+        path=f"/v1/orders/{order_id}",
+    )
+
+
+async def get_subscription(
+    settings: Settings,
+    *,
+    subscription_id: str,
+) -> dict[str, Any]:
+    return await asyncio.to_thread(
+        _polar_request,
+        settings,
+        method="GET",
+        path=f"/v1/subscriptions/{subscription_id}",
+    )
+
+
 def _candidate_webhook_secrets(secret: str) -> list[bytes]:
     raw_secret = secret.strip()
     if not raw_secret:

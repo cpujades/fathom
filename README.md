@@ -182,7 +182,7 @@ pnpm --filter @fathom/web build
 
 ## Production Notes
 
-- The worker is required in production. `RUN_WORKER_IN_API=1` is for local development only.
+- The API and worker should run as separate processes in every environment.
 - The frontend must set `NEXT_PUBLIC_API_BASE_URL`. It no longer falls back to localhost.
 - Polar webhooks should target your public backend URL at `/webhooks/polar`.
 - Supabase migrations are managed from `supabase/` and deployed through GitHub Actions.

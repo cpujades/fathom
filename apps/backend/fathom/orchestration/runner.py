@@ -10,6 +10,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import urlparse
 
+from fathom.application.billing import run_billing_maintenance
 from fathom.application.usage import record_usage_for_job
 from fathom.core.config import Settings, get_settings
 from fathom.core.constants import (
@@ -50,7 +51,9 @@ logger = logging.getLogger(__name__)
 WORKER_IDLE_SLEEP_SECONDS = 1
 WORKER_MAX_ATTEMPTS = 3
 WORKER_BACKOFF_BASE_SECONDS = 5
-WORKER_STALE_AFTER_SECONDS = 900  # 15 minutes
+WORKER_STALE_AFTER_SECONDS = 300  # 5 minutes
+WORKER_SWEEP_INTERVAL_SECONDS = 30.0
+WORKER_BILLING_MAINTENANCE_INTERVAL_SECONDS = 60.0
 
 # Streaming summary flush tuning
 STREAM_FLUSH_CHAR_THRESHOLD = 80
@@ -478,18 +481,47 @@ def _drain_completed_tasks(tasks: set[asyncio.Task[None]]) -> None:
             logger.exception("worker task crashed unexpectedly")
 
 
+async def _run_scheduled_maintenance(
+    admin_client: AsyncClient,
+    *,
+    settings: Settings,
+    last_sweep_at: float,
+    last_billing_maintenance_at: float,
+) -> tuple[float, float]:
+    now = time.monotonic()
+    if now - last_sweep_at >= WORKER_SWEEP_INTERVAL_SECONDS:
+        await requeue_stale_jobs(admin_client, stale_after_seconds=WORKER_STALE_AFTER_SECONDS)
+        last_sweep_at = now
+
+    if now - last_billing_maintenance_at >= WORKER_BILLING_MAINTENANCE_INTERVAL_SECONDS:
+        await run_billing_maintenance(
+            admin_client,
+            settings=settings,
+        )
+        last_billing_maintenance_at = now
+
+    return last_sweep_at, last_billing_maintenance_at
+
+
 async def _run_loop(settings: Settings) -> None:
     admin_client = await create_supabase_admin_client(settings)
     max_concurrent_jobs = max(1, settings.worker_max_concurrent_jobs)
     notify_timeout_seconds = max(1.0, settings.worker_job_notify_timeout_seconds)
     running_tasks: set[asyncio.Task[None]] = set()
+    last_sweep_at = 0.0
+    last_billing_maintenance_at = 0.0
 
     while True:
         try:
             async with listen_for_notifications(settings, "job_created") as queue:
                 while True:
                     _drain_completed_tasks(running_tasks)
-                    await requeue_stale_jobs(admin_client, stale_after_seconds=WORKER_STALE_AFTER_SECONDS)
+                    last_sweep_at, last_billing_maintenance_at = await _run_scheduled_maintenance(
+                        admin_client,
+                        settings=settings,
+                        last_sweep_at=last_sweep_at,
+                        last_billing_maintenance_at=last_billing_maintenance_at,
+                    )
                     while len(running_tasks) < max_concurrent_jobs:
                         job = await claim_next_job(admin_client)
                         if not job:
