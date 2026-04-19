@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.16.2](https://github.com/cpujades/fathom/compare/v0.16.1...v0.16.2) (2026-04-19)
+
+_Automated release from [#104](https://github.com/cpujades/fathom/pull/104) refactor(backend): split application modules into packages_
+
+### Bug Fixes
+
+- fix: remove confidential info from logs (ec01ac5)
+
+### Refactoring
+
+- refactor(backend): split application modules into packages (eafd7dd)
+
 ## [0.16.1](https://github.com/cpujades/fathom/compare/v0.16.0...v0.16.1) (2026-04-12)
 
 _Automated release from [#101](https://github.com/cpujades/fathom/pull/101) fix(ci): use release automation token for protected main pushes_
