@@ -82,3 +82,11 @@ export const buildAuthCallbackUrl = (nextPath?: string): string => {
 
   return callbackUrl.toString();
 };
+
+export const getCurrentAppPath = (fallback = DEFAULT_NEXT_PATH): string => {
+  if (typeof window === "undefined") {
+    return fallback;
+  }
+
+  return getSafeNextPath(`${window.location.pathname}${window.location.search}${window.location.hash}`, fallback);
+};
