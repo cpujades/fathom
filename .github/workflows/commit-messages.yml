@@ -32,8 +32,12 @@ jobs:
               .map((commit) => ({
                 sha: commit.sha.slice(0, 7),
                 subject: commit.commit.message.trim().split("\n")[0],
+                isMergeCommit: commit.parents.length > 1,
               }))
-              .filter((commit) => !conventional.test(commit.subject));
+              .filter(
+                (commit) =>
+                  !commit.isMergeCommit && !conventional.test(commit.subject)
+              );
 
             if (invalid.length > 0) {
               core.setFailed(
