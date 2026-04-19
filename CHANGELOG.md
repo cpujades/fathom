@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.16.4](https://github.com/cpujades/fathom/compare/v0.16.3...v0.16.4) (2026-04-19)
+
+_Automated release from [#106](https://github.com/cpujades/fathom/pull/106) fix(web): preserve auth return paths and improve briefing status UX_
+
+### Bug Fixes
+
+- fix(web): preserve auth return paths and improve briefing status UX (11ec07e)
+- fix(web): remove app shell search params bailout from static account prerender (f6a7478)
+
 ## [0.16.3](https://github.com/cpujades/fathom/compare/v0.16.2...v0.16.3) (2026-04-19)
 
 _Automated release from [#102](https://github.com/cpujades/fathom/pull/102) chore(deps): bump pillow from 12.1.1 to 12.2.0 in the uv group across 1 directory_
