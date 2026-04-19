@@ -30,7 +30,7 @@ async def run_billing_maintenance(
     admin_client: Any,
     *,
     settings: Settings,
-) -> None:
+) -> dict[str, int]:
     reclaimed_events = await reclaim_stale_webhook_processing(
         admin_client,
         stale_minutes=WEBHOOK_PROCESSING_STALE_MINUTES,
@@ -44,15 +44,13 @@ async def run_billing_maintenance(
         settings=settings,
     )
 
-    if reclaimed_events or reconciled_orders or reconciled_subscriptions:
-        logger.info(
-            "billing maintenance complete",
-            extra={
-                "reclaimed_webhook_events": reclaimed_events,
-                "reconciled_refund_pending_orders": reconciled_orders,
-                "reconciled_subscriptions": reconciled_subscriptions,
-            },
-        )
+    summary = {
+        "reclaimed_webhook_events": reclaimed_events,
+        "reconciled_refund_pending_orders": reconciled_orders,
+        "reconciled_subscriptions": reconciled_subscriptions,
+    }
+    logger.info("billing maintenance pass", extra=summary)
+    return summary
 
 
 async def reconcile_pending_pack_refunds(

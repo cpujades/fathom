@@ -79,8 +79,8 @@ Optional backend deployment variables:
 - `APP_ENV`
 - `CORS_ALLOW_ORIGINS`
 - `RATE_LIMIT`
+- `TRUST_PROXY_HEADERS`
 - `WORKER_MAX_CONCURRENT_JOBS`
-- `WORKER_JOB_NOTIFY_TIMEOUT_SECONDS`
 - `BILLING_DEBT_CAP_SECONDS`
 - `POLAR_CHECKOUT_RETURN_URL`
 - `POLAR_SERVER`
@@ -183,9 +183,12 @@ pnpm --filter @fathom/web build
 ## Production Notes
 
 - The API and worker should run as separate processes in every environment.
+- The worker should be configured to restart automatically on failure.
 - The frontend must set `NEXT_PUBLIC_API_BASE_URL`. It no longer falls back to localhost.
+- Rate limiting uses `request.client.host` by default. Only enable `TRUST_PROXY_HEADERS=true` when the app is behind a trusted ingress/proxy that normalizes forwarded headers.
 - Polar webhooks should target your public backend URL at `/webhooks/polar`.
 - Supabase migrations are managed from `supabase/` and deployed through GitHub Actions.
+- Incident notes live in [docs/runbooks/worker-and-billing-incidents.md](./docs/runbooks/worker-and-billing-incidents.md).
 
 ## Release Flow
 
