@@ -200,7 +200,7 @@ async def _handle_order_paid(admin_client: Any, order: dict[str, Any], settings:
         )
         logger.info(
             "preserved billing order status while applying order.paid",
-            extra={"polar_order_id": polar_order_id, "status": preserved_status},
+            extra={"preserved_status_applied": True},
         )
         return
 
