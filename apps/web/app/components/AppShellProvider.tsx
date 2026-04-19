@@ -1,11 +1,12 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { createApiClient } from "@fathom/api-client";
 
 import { getSupabaseClient } from "../lib/supabaseClient";
+import { buildSignInPath } from "../lib/url";
 
 type AppShellContextValue = {
   accessToken: string | null;
@@ -21,6 +22,7 @@ const AppShellContext = createContext<AppShellContextValue | null>(null);
 
 const PREFETCH_ROUTES = ["/app", "/app/briefings", "/app/billing", "/app/account", "/app/briefings/new"];
 const USAGE_CACHE_TTL_MS = 30_000;
+const DEFAULT_APP_PATH = "/app";
 
 let usageCache: {
   fetchedAt: number;
@@ -28,7 +30,9 @@ let usageCache: {
 } | null = null;
 
 export function AppShellProvider({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const hydratedTokenRef = useRef<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -43,6 +47,12 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
     };
     setRemainingSecondsState(value);
   }, []);
+
+  const signInPath = useMemo(() => {
+    const queryString = searchParams.toString();
+    const currentPath = `${pathname ?? DEFAULT_APP_PATH}${queryString ? `?${queryString}` : ""}`;
+    return buildSignInPath(currentPath);
+  }, [pathname, searchParams]);
 
   const refreshUsage = useCallback(
     async (token: string) => {
@@ -78,7 +88,7 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
           setAccessToken(null);
           setRemainingSecondsState(null);
           setLoading(false);
-          router.replace("/signin");
+          router.replace(signInPath);
           return;
         }
 
@@ -107,7 +117,7 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
         setAccessToken(null);
         setRemainingSecondsState(null);
         setLoading(false);
-        router.replace("/signin");
+        router.replace(signInPath);
       }
     };
 
@@ -128,7 +138,7 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
         setUser(null);
         setAccessToken(null);
         setRemainingSecondsState(null);
-        router.replace("/signin");
+        router.replace(signInPath);
         return;
       }
 
@@ -150,7 +160,7 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
       active = false;
       authListener.subscription.unsubscribe();
     };
-  }, [refreshUsage, router]);
+  }, [refreshUsage, router, signInPath]);
 
   const signOut = useCallback(async () => {
     const supabase = getSupabaseClient();

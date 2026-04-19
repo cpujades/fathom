@@ -294,6 +294,16 @@
   line-height: 1.56;
 }
 
+.connectionCard {
+  border: 1px solid rgba(142, 123, 73, 0.22);
+  border-radius: 18px;
+  padding: 0.92rem 1rem;
+  background: rgba(142, 123, 73, 0.08);
+  color: #6e5d36;
+  font-size: 0.88rem;
+  line-height: 1.56;
+}
+
 .progressTrackLive {
   overflow: hidden;
 }

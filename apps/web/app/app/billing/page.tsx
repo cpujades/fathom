@@ -28,6 +28,17 @@ type PlanGroup = {
   plans: PlanResponse[];
 };
 
+type PurchaseSyncState = {
+  status: "syncing" | "synced" | "delayed";
+  orderLabel: string | null;
+};
+
+type RefundSyncState = {
+  orderId: string;
+  orderLabel: string | null;
+  status: "syncing" | "synced" | "delayed";
+};
+
 const formatPrice = (amountCents: number, currency: string, billingInterval: string | null): string => {
   if (amountCents <= 0) {
     return "Free";
@@ -70,6 +81,45 @@ const getStatusTone = (status: string | null): string => {
   return chrome.statusPillMuted;
 };
 
+const getOrderLabel = (
+  order:
+    | Pick<BillingOrderHistoryEntry, "plan_name" | "plan_type">
+    | Pick<PackBillingState, "plan_name">
+    | null
+    | undefined
+): string | null => {
+  if (!order) {
+    return null;
+  }
+
+  if (order.plan_name) {
+    return order.plan_name;
+  }
+
+  if ("plan_type" in order) {
+    return order.plan_type === "subscription" ? "Subscription" : "Pack";
+  }
+
+  return "Pack";
+};
+
+const findRecentOrder = (
+  orders: BillingOrderHistoryEntry[],
+  checkoutStartedAt: number | null
+): BillingOrderHistoryEntry | null => {
+  if (!checkoutStartedAt) {
+    return null;
+  }
+
+  const threshold = checkoutStartedAt - 120_000;
+
+  return (
+    [...orders]
+      .sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime())
+      .find((entry) => new Date(entry.created_at).getTime() >= threshold) ?? null
+  );
+};
+
 function BillingPageContent() {
   const searchParams = useSearchParams();
   const { accessToken, loading: shellLoading, remainingSeconds, setRemainingSeconds, signOut, user } = useAppShell();
@@ -87,9 +137,9 @@ function BillingPageContent() {
   const [refundLoading, setRefundLoading] = useState<string | null>(null);
   const [offerMode, setOfferMode] = useState<"subscription" | "pack">("subscription");
 
-  const [syncStatus, setSyncStatus] = useState<"syncing" | "synced" | "delayed" | null>(null);
-  const [refundSyncOrderId, setRefundSyncOrderId] = useState<string | null>(null);
-  const [refundSyncStatus, setRefundSyncStatus] = useState<"syncing" | "delayed" | null>(null);
+  const [purchaseSync, setPurchaseSync] = useState<PurchaseSyncState | null>(null);
+  const [refundSync, setRefundSync] = useState<RefundSyncState | null>(null);
+  const [syncRefreshLoading, setSyncRefreshLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const checkoutStartRef = useRef<number | null>(null);
@@ -153,26 +203,32 @@ function BillingPageContent() {
       checkoutStartRef.current = Date.now();
     }
 
-    setSyncStatus("syncing");
+    setPurchaseSync({
+      status: "syncing",
+      orderLabel: null
+    });
 
     let attempts = 0;
     const maxAttempts = 20;
     const timer = window.setInterval(async () => {
       attempts += 1;
       const result = await loadBilling(false);
-      const recentOrderFound = (result?.accountData?.orders ?? []).some((entry) => {
-        const createdAt = new Date(entry.created_at).getTime();
-        return createdAt >= (checkoutStartRef.current ?? 0) - 120_000;
-      });
+      const recentOrder = findRecentOrder(result?.accountData?.orders ?? [], checkoutStartRef.current);
 
-      if (recentOrderFound) {
-        setSyncStatus("synced");
+      if (recentOrder) {
+        setPurchaseSync({
+          status: "synced",
+          orderLabel: getOrderLabel(recentOrder)
+        });
         window.clearInterval(timer);
         return;
       }
 
       if (attempts >= maxAttempts) {
-        setSyncStatus("delayed");
+        setPurchaseSync((current) => ({
+          status: "delayed",
+          orderLabel: current?.orderLabel ?? null
+        }));
         window.clearInterval(timer);
       }
     }, 2500);
@@ -365,8 +421,16 @@ function BillingPageContent() {
         };
       });
 
-      setRefundSyncOrderId(polarOrderId);
-      setRefundSyncStatus("syncing");
+      const refundTargetOrder =
+        account?.orders.find((order) => order.polar_order_id === polarOrderId) ??
+        account?.packs.find((pack) => pack.polar_order_id === polarOrderId) ??
+        null;
+
+      setRefundSync({
+        orderId: polarOrderId,
+        orderLabel: getOrderLabel(refundTargetOrder),
+        status: "syncing"
+      });
 
       if (refundPollRef.current !== null) {
         window.clearInterval(refundPollRef.current);
@@ -385,8 +449,14 @@ function BillingPageContent() {
             window.clearInterval(refundPollRef.current);
             refundPollRef.current = null;
           }
-          setRefundSyncOrderId(null);
-          setRefundSyncStatus(null);
+          setRefundSync((current) =>
+            current
+              ? {
+                  ...current,
+                  status: "synced"
+                }
+              : null
+          );
           return;
         }
 
@@ -395,7 +465,14 @@ function BillingPageContent() {
             window.clearInterval(refundPollRef.current);
             refundPollRef.current = null;
           }
-          setRefundSyncStatus("delayed");
+          setRefundSync((current) =>
+            current
+              ? {
+                  ...current,
+                  status: "delayed"
+                }
+              : null
+          );
         }
       }, 2500);
     } catch (err) {
@@ -431,6 +508,41 @@ function BillingPageContent() {
       </button>
     );
   };
+
+  const handleRefreshSyncStatus = useCallback(async () => {
+    if (syncRefreshLoading) {
+      return;
+    }
+
+    setSyncRefreshLoading(true);
+    try {
+      const result = await loadBilling(false);
+      const orders = result?.accountData?.orders ?? [];
+
+      if (purchaseSync) {
+        const recentOrder = findRecentOrder(orders, checkoutStartRef.current);
+        if (recentOrder) {
+          setPurchaseSync({
+            status: "synced",
+            orderLabel: getOrderLabel(recentOrder)
+          });
+        }
+      }
+
+      if (refundSync) {
+        const matchingOrder = orders.find((order) => order.polar_order_id === refundSync.orderId) ?? null;
+        if (matchingOrder?.status === "refunded") {
+          setRefundSync({
+            ...refundSync,
+            orderLabel: refundSync.orderLabel ?? getOrderLabel(matchingOrder),
+            status: "synced"
+          });
+        }
+      }
+    } finally {
+      setSyncRefreshLoading(false);
+    }
+  }, [loadBilling, purchaseSync, refundSync, syncRefreshLoading]);
 
   if (loading) {
     return (
@@ -478,27 +590,61 @@ function BillingPageContent() {
           </div>
         </section>
 
-        {syncStatus ? (
-          <section className={`${chrome.notice} ${styles.pageColumn} ${syncStatus === "delayed" ? chrome.noticeWarning : chrome.noticeInfo}`}>
+        {purchaseSync ? (
+          <section
+            className={`${chrome.notice} ${styles.pageColumn} ${
+              purchaseSync.status === "delayed" ? chrome.noticeWarning : chrome.noticeInfo
+            }`}
+          >
             <h2 className={chrome.noticeTitle}>Purchase status</h2>
             <p className={chrome.noticeText}>
-              {syncStatus === "syncing"
-                ? "Payment received. Updating your access now..."
-                : syncStatus === "synced"
-                  ? "Your access has been updated."
-                  : "Payment succeeded, but the update is taking longer than expected. Refresh in a moment."}
+              {purchaseSync.status === "syncing"
+                ? "Payment received. We are updating your listening balance now."
+                : purchaseSync.status === "synced"
+                  ? `${purchaseSync.orderLabel ?? "Your purchase"} is confirmed and your access is updated below.`
+                  : "Payment succeeded, but provider confirmation is taking longer than expected. You do not need to pay again."}
             </p>
+            {purchaseSync.status === "delayed" ? (
+              <div className={chrome.actionRow}>
+                <button
+                  className={chrome.secondaryButton}
+                  type="button"
+                  onClick={() => void handleRefreshSyncStatus()}
+                  disabled={syncRefreshLoading}
+                >
+                  {syncRefreshLoading ? "Refreshing status..." : "Refresh status"}
+                </button>
+              </div>
+            ) : null}
           </section>
         ) : null}
 
-        {refundSyncOrderId && refundSyncStatus ? (
-          <section className={`${chrome.notice} ${styles.pageColumn} ${refundSyncStatus === "delayed" ? chrome.noticeWarning : chrome.noticeInfo}`}>
+        {refundSync ? (
+          <section
+            className={`${chrome.notice} ${styles.pageColumn} ${
+              refundSync.status === "delayed" ? chrome.noticeWarning : chrome.noticeInfo
+            }`}
+          >
             <h2 className={chrome.noticeTitle}>Refund status</h2>
             <p className={chrome.noticeText}>
-              {refundSyncStatus === "syncing"
-                ? "Refund requested. Waiting for confirmation..."
-                : "Refund is still processing. This can take a few minutes."}
+              {refundSync.status === "syncing"
+                ? `Refund requested for ${refundSync.orderLabel ?? "this pack"}. Waiting for provider confirmation now.`
+                : refundSync.status === "synced"
+                  ? `${refundSync.orderLabel ?? "This pack"} is now marked refunded.`
+                  : "The refund request was accepted, but confirmation is still arriving from the provider. You do not need to submit it again."}
             </p>
+            {refundSync.status === "delayed" ? (
+              <div className={chrome.actionRow}>
+                <button
+                  className={chrome.secondaryButton}
+                  type="button"
+                  onClick={() => void handleRefreshSyncStatus()}
+                  disabled={syncRefreshLoading}
+                >
+                  {syncRefreshLoading ? "Refreshing status..." : "Refresh status"}
+                </button>
+              </div>
+            ) : null}
           </section>
         ) : null}
 
