@@ -44,10 +44,14 @@ class BillingRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 AsyncMock(return_value=False),
             ) as reopen_order,
         ):
-            await run_billing_maintenance(admin_client, settings=SimpleNamespace(billing_debt_cap_seconds=600))
+            summary = await run_billing_maintenance(
+                admin_client,
+                settings=SimpleNamespace(billing_debt_cap_seconds=600),
+            )
 
         apply_refund_state.assert_awaited_once()
         reopen_order.assert_not_awaited()
+        self.assertEqual(summary["reconciled_refund_pending_orders"], 1)
 
     async def test_maintenance_reopens_stuck_refund_pending_order_when_provider_shows_paid(self) -> None:
         admin_client = object()

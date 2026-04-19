@@ -54,6 +54,7 @@ WORKER_BACKOFF_BASE_SECONDS = 5
 WORKER_STALE_AFTER_SECONDS = 300  # 5 minutes
 WORKER_SWEEP_INTERVAL_SECONDS = 30.0
 WORKER_BILLING_MAINTENANCE_INTERVAL_SECONDS = 60.0
+WORKER_JOB_NOTIFY_TIMEOUT_SECONDS = 10.0
 
 # Streaming summary flush tuning
 STREAM_FLUSH_CHAR_THRESHOLD = 80
@@ -399,7 +400,11 @@ def _extract_error(exc: Exception) -> tuple[str, str]:
     return "internal_error", str(exc) or "Unhandled error."
 
 
-async def _handle_claimed_job(job: dict[str, Any], settings: Settings, admin_client: AsyncClient) -> None:
+async def _handle_claimed_job(
+    job: dict[str, Any],
+    settings: Settings,
+    admin_client: AsyncClient,
+) -> None:
     attempt_count = int(job.get("attempt_count") or 0)
     job_id = job.get("id")
     if not job_id:
@@ -490,14 +495,18 @@ async def _run_scheduled_maintenance(
 ) -> tuple[float, float]:
     now = time.monotonic()
     if now - last_sweep_at >= WORKER_SWEEP_INTERVAL_SECONDS:
-        await requeue_stale_jobs(admin_client, stale_after_seconds=WORKER_STALE_AFTER_SECONDS)
+        requeued_jobs = await requeue_stale_jobs(admin_client, stale_after_seconds=WORKER_STALE_AFTER_SECONDS)
+        logger.info(
+            "worker stale-job sweep complete",
+            extra={
+                "stale_after_seconds": WORKER_STALE_AFTER_SECONDS,
+                "requeued_jobs": requeued_jobs,
+            },
+        )
         last_sweep_at = now
 
     if now - last_billing_maintenance_at >= WORKER_BILLING_MAINTENANCE_INTERVAL_SECONDS:
-        await run_billing_maintenance(
-            admin_client,
-            settings=settings,
-        )
+        await run_billing_maintenance(admin_client, settings=settings)
         last_billing_maintenance_at = now
 
     return last_sweep_at, last_billing_maintenance_at
@@ -506,7 +515,7 @@ async def _run_scheduled_maintenance(
 async def _run_loop(settings: Settings) -> None:
     admin_client = await create_supabase_admin_client(settings)
     max_concurrent_jobs = max(1, settings.worker_max_concurrent_jobs)
-    notify_timeout_seconds = max(1.0, settings.worker_job_notify_timeout_seconds)
+    notify_timeout_seconds = WORKER_JOB_NOTIFY_TIMEOUT_SECONDS
     running_tasks: set[asyncio.Task[None]] = set()
     last_sweep_at = 0.0
     last_billing_maintenance_at = 0.0
@@ -545,7 +554,15 @@ async def _run_loop(settings: Settings) -> None:
 
 def main() -> None:
     settings = get_settings()
-    logger.info("Starting worker loop")
+    logger.info(
+        "Starting worker loop",
+        extra={
+            "max_concurrent_jobs": settings.worker_max_concurrent_jobs,
+            "job_notify_timeout_seconds": WORKER_JOB_NOTIFY_TIMEOUT_SECONDS,
+            "sweep_interval_seconds": WORKER_SWEEP_INTERVAL_SECONDS,
+            "billing_maintenance_interval_seconds": WORKER_BILLING_MAINTENANCE_INTERVAL_SECONDS,
+        },
+    )
     asyncio.run(_run_loop(settings))
 
 

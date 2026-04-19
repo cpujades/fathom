@@ -50,8 +50,8 @@ async def _postgres_connection(settings: Settings):
 
 
 async def _check_postgrest(settings: Settings) -> None:
-    client = await create_supabase_admin_client(settings)
     try:
+        client = await create_supabase_admin_client(settings)
         await client.table("jobs").select("id").limit(1).execute()
     except APIError as exc:
         logger.warning(

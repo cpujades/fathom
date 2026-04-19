@@ -59,10 +59,19 @@ def _evict_stale_buckets(now: float) -> None:
             _rate_limit_buckets.pop(ip, None)
 
 
-def _enforce_rate_limit(request: Request, rate_limit: int) -> None:
-    forwarded_for = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+def _get_rate_limit_ip(request: Request, *, trust_proxy_headers: bool) -> str:
     client_host = request.client.host if request.client else ""
-    ip = forwarded_for or client_host or "unknown"
+    if not trust_proxy_headers:
+        return client_host or "unknown"
+
+    forwarded_for = request.headers.get("x-forwarded-for") or ""
+    forwarded_ip = forwarded_for.split(",")[0].strip()
+    return forwarded_ip or client_host or "unknown"
+
+
+def _enforce_rate_limit(request: Request, rate_limit: int) -> None:
+    trust_proxy_headers = bool(getattr(request.app.state, "trust_proxy_headers", False))
+    ip = _get_rate_limit_ip(request, trust_proxy_headers=trust_proxy_headers)
     now = time.monotonic()
 
     _evict_stale_buckets(now)

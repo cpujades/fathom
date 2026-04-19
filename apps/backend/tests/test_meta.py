@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from fathom.application.meta import readiness_status
+from fathom.application.meta import readiness_status, status_snapshot
 from fathom.core.errors import NotReadyError
 
 
@@ -87,3 +87,10 @@ class ReadinessTests(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertEqual(result.status, "ok")
+
+    async def test_status_snapshot_returns_version_and_uptime(self) -> None:
+        result = await status_snapshot()
+
+        self.assertEqual(result.status, "ok")
+        self.assertIsNotNone(result.version)
+        self.assertIsNotNone(result.uptime_seconds)

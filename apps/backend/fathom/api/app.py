@@ -61,6 +61,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(webhooks_router)
     app.state.settings = settings
     app.state.rate_limit = settings.rate_limit
+    app.state.trust_proxy_headers = settings.trust_proxy_headers
 
     # Starlette's middleware typing is stricter than the runtime API here.
     app.add_middleware(cast(Any, BaseHTTPMiddleware), dispatch=log_requests)
