@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.16.3](https://github.com/cpujades/fathom/compare/v0.16.2...v0.16.3) (2026-04-19)
+
+_Automated release from [#102](https://github.com/cpujades/fathom/pull/102) chore(deps): bump pillow from 12.1.1 to 12.2.0 in the uv group across 1 directory_
+
+### Chores
+
+- chore(deps): bump pillow in the uv group across 1 directory (bdd3db4)
+
 ## [0.16.2](https://github.com/cpujades/fathom/compare/v0.16.1...v0.16.2) (2026-04-19)
 
 _Automated release from [#104](https://github.com/cpujades/fathom/pull/104) refactor(backend): split application modules into packages_
