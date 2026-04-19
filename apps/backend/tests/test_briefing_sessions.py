@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 from uuid import UUID
 
 from fathom.api.deps.auth import AuthContext
-from fathom.application.briefing_sessions import delete_briefing_session
+from fathom.application.briefings.sessions import delete_briefing_session
 from fathom.core.config import Settings
 from fathom.core.errors import NotFoundError
 
@@ -22,15 +22,15 @@ class DeleteBriefingSessionTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch(
-                "fathom.application.briefing_sessions.create_supabase_user_client",
+                "fathom.application.briefings.sessions.create_supabase_user_client",
                 AsyncMock(return_value=user_client),
             ) as create_user_client,
             patch(
-                "fathom.application.briefing_sessions.create_supabase_admin_client",
+                "fathom.application.briefings.sessions.create_supabase_admin_client",
                 AsyncMock(return_value=admin_client),
             ) as create_admin_client,
             patch(
-                "fathom.application.briefing_sessions.fetch_job",
+                "fathom.application.briefings.sessions.fetch_job",
                 AsyncMock(
                     return_value={
                         "id": str(session_id),
@@ -39,7 +39,7 @@ class DeleteBriefingSessionTests(unittest.IsolatedAsyncioTestCase):
                     }
                 ),
             ) as fetch_job_mock,
-            patch("fathom.application.briefing_sessions.archive_job", AsyncMock()) as archive_job_mock,
+            patch("fathom.application.briefings.sessions.archive_job", AsyncMock()) as archive_job_mock,
         ):
             await delete_briefing_session(session_id, auth, settings)
 
@@ -56,11 +56,11 @@ class DeleteBriefingSessionTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch(
-                "fathom.application.briefing_sessions.create_supabase_user_client",
+                "fathom.application.briefings.sessions.create_supabase_user_client",
                 AsyncMock(return_value=user_client),
             ),
             patch(
-                "fathom.application.briefing_sessions.fetch_job",
+                "fathom.application.briefings.sessions.fetch_job",
                 AsyncMock(
                     return_value={
                         "id": str(session_id),
@@ -70,10 +70,10 @@ class DeleteBriefingSessionTests(unittest.IsolatedAsyncioTestCase):
                 ),
             ),
             patch(
-                "fathom.application.briefing_sessions.create_supabase_admin_client",
+                "fathom.application.briefings.sessions.create_supabase_admin_client",
                 AsyncMock(),
             ) as create_admin_client,
-            patch("fathom.application.briefing_sessions.archive_job", AsyncMock()) as archive_job_mock,
+            patch("fathom.application.briefings.sessions.archive_job", AsyncMock()) as archive_job_mock,
         ):
             with self.assertRaises(NotFoundError):
                 await delete_briefing_session(session_id, auth, settings)

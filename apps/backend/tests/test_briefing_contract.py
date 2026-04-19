@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import unittest
 
-from fathom.application.briefing_contract import (
+from fathom.application.briefings.contract import (
     build_briefing_session_snapshot,
     encode_sse_event,
     normalize_source,

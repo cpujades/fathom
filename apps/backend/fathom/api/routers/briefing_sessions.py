@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Request
 from starlette.responses import Response, StreamingResponse
 
 from fathom.api.deps.auth import AuthContext, get_auth_context
-from fathom.application.briefing_sessions import (
+from fathom.application.briefings.sessions import (
     create_briefing_session,
     delete_briefing_session,
     get_briefing_session,
