@@ -9,7 +9,7 @@ requires-python = ">=3.11,<3.14"
 dependencies = [
   "fastapi==0.125.0",
   "uvicorn==0.39.0",
-  "python-dotenv==1.2.1",
+  "python-dotenv==1.2.2",
   "openai==2.14.0",
   "markdown==3.10",
   "weasyprint==68.0",
