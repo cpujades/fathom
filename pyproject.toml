@@ -1,6 +1,6 @@
 [project]
 name = "fathom"
-version = "0.16.5"
+version = "0.16.6"
 description = "Podcast-to-PDF MVP service"
 readme = "README.md"
 # Why: some compiled dependencies (e.g. pydantic-core via PyO3) may not support Python 3.14 yet.
@@ -9,7 +9,7 @@ requires-python = ">=3.11,<3.14"
 dependencies = [
   "fastapi==0.125.0",
   "uvicorn==0.39.0",
-  "python-dotenv==1.2.1",
+  "python-dotenv==1.2.2",
   "openai==2.14.0",
   "markdown==3.10",
   "weasyprint==68.0",
