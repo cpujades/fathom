@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.16.7](https://github.com/cpujades/fathom/compare/v0.16.6...v0.16.7) (2026-05-02)
+
+_Automated release from [#112](https://github.com/cpujades/fathom/pull/112) fix: trigger release_
+
+### Bug Fixes
+
+- fix: trigger release (d957660)
+
 ## [0.16.6](https://github.com/cpujades/fathom/compare/v0.16.5...v0.16.6) (2026-05-02)
 
 _Automated release from [#108](https://github.com/cpujades/fathom/pull/108) chore(deps): bump python-dotenv from 1.2.1 to 1.2.2 in the uv group across 1 directory_
