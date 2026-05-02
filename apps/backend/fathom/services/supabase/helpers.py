@@ -53,7 +53,7 @@ POSTGREST_UNIQUE_VIOLATION_CODES = frozenset({"23505"})
 
 def is_unique_violation(exc: APIError) -> bool:
     """Return True when the error is a PostgreSQL unique-constraint violation."""
-    return (getattr(exc, "code", None) or "") == POSTGREST_UNIQUE_VIOLATION_CODES
+    return (getattr(exc, "code", None) or "") in POSTGREST_UNIQUE_VIOLATION_CODES
 
 
 def raise_for_auth_error(exc: AuthApiError, fallback_message: str) -> NoReturn:

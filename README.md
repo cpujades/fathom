@@ -185,7 +185,8 @@ pnpm --filter @fathom/web build
 - The API and worker should run as separate processes in every environment.
 - The worker should be configured to restart automatically on failure.
 - The frontend must set `NEXT_PUBLIC_API_BASE_URL`. It no longer falls back to localhost.
-- Rate limiting uses `request.client.host` by default. Only enable `TRUST_PROXY_HEADERS=true` when the app is behind a trusted ingress/proxy that normalizes forwarded headers.
+- Rate limiting uses shared Postgres buckets keyed by client IP. Only enable `TRUST_PROXY_HEADERS=true` when the app is behind a trusted ingress/proxy that normalizes forwarded headers.
+- SSE session events, Polar webhooks, and `/meta/*` routes are exempt from rate limiting so live updates and provider callbacks do not get throttled accidentally.
 - Polar webhooks should target your public backend URL at `/webhooks/polar`.
 - Supabase migrations are managed from `supabase/` and deployed through GitHub Actions.
 - Incident notes live in [docs/runbooks/worker-and-billing-incidents.md](./docs/runbooks/worker-and-billing-incidents.md).
