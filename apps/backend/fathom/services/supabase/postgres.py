@@ -77,6 +77,25 @@ async def create_postgres_connection(settings: Settings) -> AsyncIterator[asyncp
         raise ConfigurationError(f"Failed to connect to Postgres: {exc}") from exc
 
 
+async def create_postgres_pool(settings: Settings) -> asyncpg.Pool:
+    postgres_url = _build_postgres_url(settings)
+    if not postgres_url:
+        raise ConfigurationError("SUPABASE_DB connection details are not configured.")
+
+    try:
+        pool = await asyncpg.create_pool(
+            postgres_url,
+            timeout=10,
+            min_size=1,
+            max_size=10,
+        )
+        logger.debug("postgres pool established")
+        return pool
+    except Exception as exc:
+        logger.error("failed to create postgres pool", exc_info=exc)
+        raise ConfigurationError(f"Failed to create Postgres pool: {exc}") from exc
+
+
 @asynccontextmanager
 async def listen_for_notifications(
     settings: Settings,

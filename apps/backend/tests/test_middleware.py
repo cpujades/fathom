@@ -6,7 +6,7 @@ from typing import cast
 
 from fastapi import Request
 
-from fathom.core.middleware import _get_rate_limit_ip
+from fathom.core.rate_limits import _get_rate_limit_ip
 
 
 def _request(*, client_host: str | None, forwarded_for: str | None = None) -> Request:
