@@ -190,7 +190,3 @@ pnpm --filter @fathom/web build
 - Polar webhooks should target your public backend URL at `/webhooks/polar`.
 - Supabase migrations are managed from `supabase/` and deployed through GitHub Actions.
 - Incident notes live in [docs/runbooks/worker-and-billing-incidents.md](./docs/runbooks/worker-and-billing-incidents.md).
-
-## Release Flow
-
-This repository uses Release Please on `main` to manage version bumps and changelog updates.
