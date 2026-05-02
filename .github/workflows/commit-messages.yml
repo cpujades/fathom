@@ -28,7 +28,7 @@ jobs:
               per_page: 100,
             });
 
-            const invalid = commits
+            const releaseCommits = commits
               .map((commit) => ({
                 sha: commit.sha.slice(0, 7),
                 subject: commit.commit.message.trim().split("\n")[0],
@@ -36,15 +36,14 @@ jobs:
               }))
               .filter(
                 (commit) =>
-                  !commit.isMergeCommit && !conventional.test(commit.subject)
+                  !commit.isMergeCommit && conventional.test(commit.subject)
               );
 
-            if (invalid.length > 0) {
+            if (releaseCommits.length === 0) {
               core.setFailed(
                 [
-                  "Every commit in the PR must use Conventional Commits.",
-                  "Invalid commits:",
-                  ...invalid.map((commit) => `- ${commit.sha}: ${commit.subject}`),
+                  "At least one non-merge commit in the PR must use Conventional Commits.",
+                  "Only conventional commits are included in release notes.",
                 ].join("\n")
               );
             }

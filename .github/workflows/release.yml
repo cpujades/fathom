@@ -65,6 +65,7 @@ jobs:
                   }
                 : null,
               commits: [],
+              changed_files: [],
             };
 
             if (mergedPull) {
@@ -78,17 +79,45 @@ jobs:
               payload.commits = commits.map((commit) => ({
                 sha: commit.sha,
                 message: commit.commit.message,
+                is_merge_commit: commit.parents.length > 1,
               }));
+
+              const files = await github.paginate(github.rest.pulls.listFiles, {
+                owner,
+                repo,
+                pull_number: mergedPull.number,
+                per_page: 100,
+              });
+              payload.changed_files = files.map((file) => file.filename);
             } else {
               const pushCommits = context.payload.commits ?? [];
               payload.commits = pushCommits.map((commit) => ({
                 sha: commit.id,
                 message: commit.message,
+                is_merge_commit: false,
               }));
+              payload.changed_files = [
+                ...new Set(
+                  pushCommits.flatMap((commit) => [
+                    ...(commit.added ?? []),
+                    ...(commit.modified ?? []),
+                    ...(commit.removed ?? []),
+                  ])
+                ),
+              ];
             }
 
             if (payload.commits.length === 0) {
-              payload.commits = [{ sha: commitSha, message: context.payload.head_commit?.message ?? "chore: release" }];
+              const headCommit = context.payload.head_commit;
+              if (headCommit?.message) {
+                payload.commits = [
+                  {
+                    sha: headCommit.id ?? commitSha,
+                    message: headCommit.message,
+                    is_merge_commit: false,
+                  },
+                ];
+              }
             }
 
             fs.mkdirSync(".github/tmp", { recursive: true });
@@ -99,9 +128,11 @@ jobs:
         run: python .github/scripts/release.py --commits-file .github/tmp/release-commits.json
 
       - name: Update lockfile
+        if: steps.release.outputs.released == 'true'
         run: uv lock
 
       - name: Commit release
+        if: steps.release.outputs.released == 'true'
         env:
           VERSION: ${{ steps.release.outputs.version }}
           RELEASE_AUTOMATION_TOKEN: ${{ env.RELEASE_AUTOMATION_TOKEN }}
@@ -129,6 +160,7 @@ jobs:
           git push origin HEAD:main --follow-tags
 
       - name: Publish GitHub release
+        if: steps.release.outputs.released == 'true'
         uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ steps.release.outputs.version }}

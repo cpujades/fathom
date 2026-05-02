@@ -16,8 +16,13 @@ CHANGELOG_PATH = ROOT / "CHANGELOG.md"
 RELEASE_NOTES_PATH = ROOT / ".github" / "tmp" / "release-notes.md"
 
 VERSION_PATTERN = re.compile(r'^(version\s*=\s*")(?P<version>\d+\.\d+\.\d+)(")$', re.MULTILINE)
-CONVENTIONAL_PATTERN = re.compile(r"^(?P<type>[a-z]+)(?:\([^)]+\))?(?P<breaking>!)?: (?P<description>.+)$")
+CONVENTIONAL_PATTERN = re.compile(
+    r"^(?P<type>feat|fix|perf|refactor|docs|test|build|ci|style|chore|revert)"
+    r"(?:\((?P<scope>[^)]+)\))?(?P<breaking>!)?: (?P<description>.+)$"
+)
 BREAKING_PATTERN = re.compile(r"(^|[\r\n])BREAKING CHANGE:", re.MULTILINE)
+NON_PRODUCT_PATH_PREFIXES = (".github/", ".vscode/", ".cursor/")
+DEV_ONLY_SCOPES = {"deps-dev", "dev-deps"}
 
 SECTION_TITLES = OrderedDict(
     [
@@ -44,8 +49,10 @@ class ReleaseCommit:
     subject: str
     message: str
     type: str
+    scope: str | None
     breaking: bool
     valid: bool
+    is_merge_commit: bool
 
 
 def main() -> None:
@@ -54,14 +61,25 @@ def main() -> None:
     args = parser.parse_args()
 
     payload = json.loads(Path(args.commits_file).read_text(encoding="utf-8"))
-    commits = [parse_commit(item["sha"], item["message"]) for item in payload["commits"]]
-    invalid_commits = [commit for commit in commits if not commit.valid]
-    if invalid_commits:
-        formatted = "\n".join(f"- {commit.sha[:7]}: {commit.subject}" for commit in invalid_commits)
-        raise RuntimeError(f"Release aborted: non-conventional commit messages detected.\n{formatted}")
+    commits = [
+        parse_commit(
+            item["sha"],
+            item["message"],
+            is_merge_commit=bool(item.get("is_merge_commit", False)),
+        )
+        for item in payload["commits"]
+    ]
+    conventional_commits = [commit for commit in commits if not commit.is_merge_commit and commit.valid]
+    if not conventional_commits:
+        raise RuntimeError("Release aborted: no conventional commit messages detected.")
+
+    release_commits = select_release_commits(commits, changed_files=payload.get("changed_files", []))
+    if not release_commits:
+        write_github_output(released=False)
+        return
 
     current_version = read_current_version()
-    next_version = bump_version(current_version, commits)
+    next_version = bump_version(current_version, release_commits)
     previous_tag = read_previous_tag()
     pull_request = payload.get("pull_request")
 
@@ -69,7 +87,7 @@ def main() -> None:
     release_section = build_release_section(
         version=next_version,
         previous_tag=previous_tag,
-        commits=commits,
+        commits=release_commits,
         pull_request=pull_request,
     )
     prepend_changelog(release_section)
@@ -77,25 +95,50 @@ def main() -> None:
     RELEASE_NOTES_PATH.parent.mkdir(parents=True, exist_ok=True)
     RELEASE_NOTES_PATH.write_text(release_section, encoding="utf-8")
 
-    github_output = os.environ.get("GITHUB_OUTPUT")
-    if github_output:
-        with Path(github_output).open("a", encoding="utf-8") as handle:
-            handle.write(f"version={next_version}\n")
+    write_github_output(released=True, version=next_version)
 
 
-def parse_commit(sha: str, message: str) -> ReleaseCommit:
+def parse_commit(sha: str, message: str, *, is_merge_commit: bool = False) -> ReleaseCommit:
     subject = message.strip().splitlines()[0]
     match = CONVENTIONAL_PATTERN.match(subject)
     commit_type = match.group("type") if match else "chore"
+    scope = match.group("scope") if match else None
     breaking = bool(match and match.group("breaking")) or bool(BREAKING_PATTERN.search(message))
     return ReleaseCommit(
         sha=sha,
         subject=subject,
         message=message,
         type=commit_type,
+        scope=scope,
         breaking=breaking,
         valid=match is not None,
+        is_merge_commit=is_merge_commit,
     )
+
+
+def select_release_commits(commits: list[ReleaseCommit], *, changed_files: list[str]) -> list[ReleaseCommit]:
+    release_commits = [commit for commit in commits if not commit.is_merge_commit and commit.valid]
+    if not release_commits:
+        return []
+    if all(commit.scope in DEV_ONLY_SCOPES for commit in release_commits):
+        return []
+    if changed_files and all(is_non_product_path(path) for path in changed_files):
+        return []
+    return release_commits
+
+
+def is_non_product_path(path: str) -> bool:
+    return path.startswith(NON_PRODUCT_PATH_PREFIXES)
+
+
+def write_github_output(*, released: bool, version: str | None = None) -> None:
+    github_output = os.environ.get("GITHUB_OUTPUT")
+    if not github_output:
+        return
+    with Path(github_output).open("a", encoding="utf-8") as handle:
+        handle.write(f"released={str(released).lower()}\n")
+        if version is not None:
+            handle.write(f"version={version}\n")
 
 
 def read_current_version() -> str:
