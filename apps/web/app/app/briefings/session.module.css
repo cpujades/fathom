@@ -103,7 +103,7 @@
     linear-gradient(180deg, rgba(237, 232, 222, 0.96), rgba(227, 220, 207, 0.92));
   color: #667267;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0;
   font-size: 0.72rem;
   font-weight: 700;
 }
@@ -123,9 +123,10 @@
   margin: 0;
   font-size: 0.94rem;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
   line-height: 1.35;
   color: #18211d;
+  overflow-wrap: anywhere;
 }
 
 .sourceMeta {
@@ -196,7 +197,7 @@
   color: #667267;
   font-size: 0.76rem;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
@@ -237,7 +238,8 @@
   color: #972f2b;
   font-size: 0.88rem;
   font-weight: 700;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
+  text-align: center;
   cursor: pointer;
   transition:
     transform 180ms ease,
@@ -346,6 +348,7 @@
   line-height: 1.74;
   font-size: 0.98rem;
   max-width: 72ch;
+  overflow-wrap: anywhere;
 }
 
 .markdown h1,
@@ -353,7 +356,8 @@
 .markdown h3 {
   color: #18211d;
   margin-top: 1.7rem;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
 }
 
 .markdown h1 {
@@ -533,6 +537,10 @@
   .markdown {
     font-size: 0.94rem;
     line-height: 1.68;
+  }
+
+  .markdown pre {
+    padding: 0.8rem;
   }
 
   .markdown table {

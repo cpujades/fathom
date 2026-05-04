@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
 import { formatDuration } from "../lib/format";
@@ -51,13 +51,6 @@ function getInitials(accountLabel: string | null): string {
 export function AppShellHeader({ active = null, remainingSeconds, accountLabel, onSignOut }: AppShellHeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
-  const activeLabel = useMemo(() => {
-    if (active === "account") {
-      return "Account";
-    }
-
-    return NAV_ITEMS.find((item) => item.id === active)?.label ?? "Workspace";
-  }, [active]);
 
   useEffect(() => {
     if (!menuOpen) {
@@ -92,7 +85,6 @@ export function AppShellHeader({ active = null, remainingSeconds, accountLabel, 
           <span className={styles.brandMark} aria-hidden="true" />
           <span className={styles.brandText}>
             <span className={styles.brandWord}>Talven</span>
-            <span className={styles.brandMeta}>{activeLabel}</span>
           </span>
         </Link>
 
@@ -112,7 +104,10 @@ export function AppShellHeader({ active = null, remainingSeconds, accountLabel, 
           <div className={styles.utilityCluster}>
             {remainingSeconds !== null ? (
               <div className={styles.balanceReadout}>
-                <span className={styles.balanceValue}>{formatDuration(remainingSeconds)} available</span>
+                <span className={styles.balanceValue}>
+                  <span className={styles.balanceAmount}>{formatDuration(remainingSeconds)}</span>
+                  <span className={styles.balanceSuffix}> available</span>
+                </span>
               </div>
             ) : null}
             {accountLabel || onSignOut ? (
@@ -128,9 +123,6 @@ export function AppShellHeader({ active = null, remainingSeconds, accountLabel, 
                     {getInitials(accountLabel)}
                   </span>
                   <span className={styles.profileText}>Account</span>
-                  <span className={styles.profileChevron} aria-hidden="true">
-                    ▾
-                  </span>
                 </button>
 
                 {menuOpen ? (

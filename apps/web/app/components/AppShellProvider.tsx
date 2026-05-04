@@ -98,7 +98,11 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
           setRemainingSecondsState(usageCache?.remainingSeconds ?? null);
           setLoading(false);
         } else {
-          await refreshUsage(session.access_token);
+          try {
+            await refreshUsage(session.access_token);
+          } catch {
+            setRemainingSeconds(null);
+          }
           if (!active) {
             return;
           }
@@ -145,7 +149,11 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
       const tokenChanged = hydratedTokenRef.current !== session.access_token;
       const cacheIsFresh = usageCache && Date.now() - usageCache.fetchedAt < USAGE_CACHE_TTL_MS;
       if (tokenChanged || !cacheIsFresh) {
-        await refreshUsage(session.access_token);
+        try {
+          await refreshUsage(session.access_token);
+        } catch {
+          setRemainingSeconds(null);
+        }
       } else {
         setRemainingSecondsState(usageCache?.remainingSeconds ?? null);
       }
