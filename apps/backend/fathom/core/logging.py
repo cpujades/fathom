@@ -8,6 +8,7 @@ from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 # Standard log record attributes that should not be treated as "extra" context.
@@ -182,7 +183,7 @@ class SmartContextFormatter(logging.Formatter):
     """Formatter that appends all extra fields as key=value context."""
 
     def format(self, record: logging.LogRecord) -> str:
-        record.module_path = _module_path(record.name)  # type: ignore[attr-defined]
+        record.module_path = _module_path(record)  # type: ignore[attr-defined]
         return super().format(record)
 
 
@@ -211,7 +212,7 @@ class JsonFormatter(logging.Formatter):
             "ts": datetime.fromtimestamp(record.created, UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
             "level": record.levelname.lower(),
             "logger": record.name,
-            "module": _module_path(record.name),
+            "module": _module_path(record),
             "event": record.getMessage(),
         }
         if record.exc_info:
@@ -286,13 +287,27 @@ def _resolve_log_format() -> str:
     return "console"
 
 
-def _module_path(logger_name: str) -> str:
-    if logger_name == APP_LOGGER_PREFIX:
+def _module_path(record: logging.LogRecord) -> str:
+    if record.name == "__main__":
+        source_path = Path(record.pathname)
+        try:
+            backend_index = len(source_path.parts) - 1 - source_path.parts[::-1].index("fathom")
+        except ValueError:
+            return "__main__"
+
+        module_parts = source_path.parts[backend_index + 1 :]
+        if module_parts:
+            filename = module_parts[-1]
+            module_parts = (*module_parts[:-1], filename.removesuffix(".py"))
+            return ".".join(module_parts)
+        return "__main__"
+
+    if record.name == APP_LOGGER_PREFIX:
         return APP_LOGGER_PREFIX
     prefix = f"{APP_LOGGER_PREFIX}."
-    if logger_name.startswith(prefix):
-        return logger_name.removeprefix(prefix)
-    return logger_name
+    if record.name.startswith(prefix):
+        return record.name.removeprefix(prefix)
+    return record.name
 
 
 def _level_from_name(level_name: str, fallback: int) -> int:
