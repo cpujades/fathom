@@ -1,24 +1,21 @@
 import createClient from "openapi-fetch";
 
 import type { paths } from "./schema";
+import { getRequiredPublicUrlEnv } from "./publicEnv";
 
-type EnvVars = Record<string, string | undefined>;
-
-declare const process: { env?: EnvVars } | undefined;
-
-const getRequiredPublicEnv = (name: string): string => {
-  const value = typeof process !== "undefined" ? process.env?.[name]?.trim() : undefined;
-  if (!value) {
-    throw new Error(
-      `Missing ${name}. Set it in apps/web/.env.local for local development and in your deployment environment for production.`
-    );
-  }
-
-  return value.replace(/\/+$/, "");
-};
+declare const process:
+  | {
+      env?: {
+        NEXT_PUBLIC_API_BASE_URL?: string;
+      };
+    }
+  | undefined;
 
 const getApiBaseUrl = (): string => {
-  return getRequiredPublicEnv("NEXT_PUBLIC_API_BASE_URL");
+  return getRequiredPublicUrlEnv(
+    "NEXT_PUBLIC_API_BASE_URL",
+    typeof process !== "undefined" ? process.env?.NEXT_PUBLIC_API_BASE_URL : undefined
+  );
 };
 
 const createApiClient = (accessToken?: string) => {

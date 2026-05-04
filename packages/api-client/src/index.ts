@@ -1,4 +1,5 @@
 export { createApiClient, getApiBaseUrl } from "./client";
+export { getOptionalPublicUrlEnv, getRequiredPublicEnv, getRequiredPublicUrlEnv } from "./publicEnv";
 export type { paths } from "./schema";
 export type {
   ApiErrorBody,

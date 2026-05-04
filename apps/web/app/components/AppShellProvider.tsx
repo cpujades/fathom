@@ -29,6 +29,8 @@ let usageCache: {
   remainingSeconds: number | null;
 } | null = null;
 
+type UsageRefreshResult = "ok" | "unauthorized" | "error";
+
 export function AppShellProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const hydratedTokenRef = useRef<string | null>(null);
@@ -51,10 +53,23 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
   }, [router]);
 
   const refreshUsage = useCallback(
-    async (token: string) => {
-      const api = createApiClient(token);
-      const { data } = await api.GET("/billing/usage");
-      setRemainingSeconds(data?.total_remaining_seconds ?? null);
+    async (token: string): Promise<UsageRefreshResult> => {
+      try {
+        const api = createApiClient(token);
+        const { data, error, response } = await api.GET("/billing/usage");
+
+        if (error) {
+          if (response?.status === 401 || response?.status === 403) {
+            return "unauthorized";
+          }
+          return "error";
+        }
+
+        setRemainingSeconds(data?.total_remaining_seconds ?? null);
+        return "ok";
+      } catch {
+        return "error";
+      }
     },
     [setRemainingSeconds]
   );
@@ -98,9 +113,17 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
           setRemainingSecondsState(usageCache?.remainingSeconds ?? null);
           setLoading(false);
         } else {
-          try {
-            await refreshUsage(session.access_token);
-          } catch {
+          const refreshResult = await refreshUsage(session.access_token);
+          if (refreshResult === "unauthorized") {
+            setAuthenticated(false);
+            setUser(null);
+            setAccessToken(null);
+            setRemainingSecondsState(null);
+            setLoading(false);
+            redirectToSignIn();
+            return;
+          }
+          if (refreshResult === "error") {
             setRemainingSeconds(null);
           }
           if (!active) {
@@ -149,9 +172,17 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
       const tokenChanged = hydratedTokenRef.current !== session.access_token;
       const cacheIsFresh = usageCache && Date.now() - usageCache.fetchedAt < USAGE_CACHE_TTL_MS;
       if (tokenChanged || !cacheIsFresh) {
-        try {
-          await refreshUsage(session.access_token);
-        } catch {
+        const refreshResult = await refreshUsage(session.access_token);
+        if (refreshResult === "unauthorized") {
+          hydratedTokenRef.current = null;
+          setAuthenticated(false);
+          setUser(null);
+          setAccessToken(null);
+          setRemainingSecondsState(null);
+          redirectToSignIn();
+          return;
+        }
+        if (refreshResult === "error") {
           setRemainingSeconds(null);
         }
       } else {

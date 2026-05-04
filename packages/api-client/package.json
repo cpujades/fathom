@@ -9,6 +9,10 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./publicEnv": {
+      "types": "./src/publicEnv.ts",
+      "default": "./src/publicEnv.ts"
     }
   },
   "scripts": {
