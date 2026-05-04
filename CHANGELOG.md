@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.19.0](https://github.com/cpujades/fathom/compare/v0.18.0...v0.19.0) (2026-05-04)
+
+_Automated release from [#117](https://github.com/cpujades/fathom/pull/117) feat(web): run Supabase auth callback as a Route Handler_
+
+### Features
+
+- feat(web): run Supabase auth callback as a Route Handler (f6b6a80)
+
+### Bug Fixes
+
+- fix(web): harden auth callback and public env handling (e11892e)
+
 ## [0.18.0](https://github.com/cpujades/fathom/compare/v0.17.0...v0.18.0) (2026-05-04)
 
 _Automated release from [#116](https://github.com/cpujades/fathom/pull/116) feat(web): polish mobile layouts and sync briefing session types_
