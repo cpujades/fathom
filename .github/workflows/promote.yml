@@ -4,8 +4,8 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "Release tag to promote. Leave empty to promote the latest v*.*.* tag."
-        required: false
+        description: "Release tag to promote, for example v0.17.2."
+        required: true
         type: string
 
 permissions:
@@ -22,6 +22,7 @@ jobs:
     outputs:
       ref: ${{ steps.resolve.outputs.ref }}
       tag: ${{ steps.resolve.outputs.tag }}
+      sha: ${{ steps.resolve.outputs.sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -37,11 +38,7 @@ jobs:
 
           tag="${INPUT_TAG}"
           if [[ -z "$tag" ]]; then
-            tag="$(git tag --list 'v*.*.*' --sort=-version:refname | head -n 1)"
-          fi
-
-          if [[ -z "$tag" ]]; then
-            echo "No release tag available to promote."
+            echo "release_tag is required. Choose the exact release tag to promote."
             exit 1
           fi
 
@@ -52,10 +49,63 @@ jobs:
 
           echo "ref=${tag}" >> "$GITHUB_OUTPUT"
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-list -n 1 "${tag}")" >> "$GITHUB_OUTPUT"
+
+  summary:
+    name: 📋 Promotion summary
+    needs: resolve
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout promoted release
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.resolve.outputs.ref }}
+          fetch-depth: 0
+
+      - name: Summarize production promotion
+        env:
+          RELEASE_TAG: ${{ needs.resolve.outputs.tag }}
+          RELEASE_SHA: ${{ needs.resolve.outputs.sha }}
+          REPOSITORY: ${{ github.repository }}
+          SERVER_URL: ${{ github.server_url }}
+        run: |
+          set -euo pipefail
+
+          short_sha="$(git rev-parse --short "$RELEASE_SHA")"
+          subject="$(git log -1 --pretty=%s "$RELEASE_SHA")"
+          release_url="${SERVER_URL}/${REPOSITORY}/releases/tag/${RELEASE_TAG}"
+          compare_url="${SERVER_URL}/${REPOSITORY}/tree/${RELEASE_TAG}"
+
+          {
+            echo "## Production promotion"
+            echo
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Release tag | \`${RELEASE_TAG}\` |"
+            echo "| Commit | [\`${short_sha}\`](${SERVER_URL}/${REPOSITORY}/commit/${RELEASE_SHA}) |"
+            echo "| Commit subject | ${subject} |"
+            echo "| Release notes | [${RELEASE_TAG}](${release_url}) |"
+            echo "| Promoted tree | [${RELEASE_TAG}](${compare_url}) |"
+            echo
+            echo "### Operator checklist"
+            echo
+            echo "- [x] Exact release tag selected."
+            echo "- [ ] If billing plans changed, run \`POLAR_SERVER=production python scripts/polar/generate_polar_plans.py\` with production Supabase and Polar credentials after schema promotion."
+            echo
+            echo "### Supabase migrations in this release"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          migration_files="$(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | sort)"
+          if [[ -z "$migration_files" ]]; then
+            echo "No Supabase migration files found at \`${RELEASE_TAG}\`." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "$migration_files" | sed 's#^#- `#; s#$#`#' >> "$GITHUB_STEP_SUMMARY"
+          fi
 
   supabase:
     name: 🗄️ Deploy Supabase migrations to prod
-    needs: resolve
+    needs: [resolve, summary]
     runs-on: ubuntu-latest
     environment: prod
 
@@ -78,7 +128,8 @@ jobs:
       - name: Link Supabase project (prod)
         run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
 
-      - name: Deploy migrations (prod)
-        run: |
-          supabase db push --dry-run
-          supabase --yes db push
+      - name: Preview migrations (prod dry-run)
+        run: supabase db push --dry-run
+
+      - name: Apply migrations (prod)
+        run: supabase --yes db push
