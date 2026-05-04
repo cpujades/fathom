@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.17.0](https://github.com/cpujades/fathom/compare/v0.16.7...v0.17.0) (2026-05-04)
+
+_Automated release from [#114](https://github.com/cpujades/fathom/pull/114) feat(logging): add structured runtime logging_
+
+### Features
+
+- feat(logging): add structured runtime logging (f57edcd)
+
+### Bug Fixes
+
+- fix(logging): resolve worker module names in logs (9768698)
+
 ## [0.16.7](https://github.com/cpujades/fathom/compare/v0.16.6...v0.16.7) (2026-05-02)
 
 _Automated release from [#112](https://github.com/cpujades/fathom/pull/112) fix: trigger release_
