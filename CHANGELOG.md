@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.18.0](https://github.com/cpujades/fathom/compare/v0.17.0...v0.18.0) (2026-05-04)
+
+_Automated release from [#116](https://github.com/cpujades/fathom/pull/116) feat(web): polish mobile layouts and sync briefing session types_
+
+### Features
+
+- feat(web): polish mobile layouts and sync briefing session types (8b5d42f)
+
+### Bug Fixes
+
+- fix: update json (2d05190)
+- fix: use package manager as source of truth for frontend (c44da72)
+
+### Style
+
+- style(web): polish app shell and briefing presentation (fb09bfa)
+
 ## [0.17.0](https://github.com/cpujades/fathom/compare/v0.16.7...v0.17.0) (2026-05-04)
 
 _Automated release from [#114](https://github.com/cpujades/fathom/pull/114) feat(logging): add structured runtime logging_
