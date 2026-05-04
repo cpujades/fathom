@@ -22,6 +22,7 @@ export default function SignUpPage() {
     setNextPath(getSafeNextPath(params.get("next")));
     setIntent(params.get("intent"));
     setPlan(params.get("plan"));
+    setError(params.get("auth_error"));
   }, []);
 
   const callbackUrl = useMemo(() => {

@@ -2,7 +2,7 @@
 const nextConfig = {
   reactStrictMode: true,
   transpilePackages: ["@fathom/api-client"],
-  allowedDevOrigins: ["127.0.0.1", "localhost"],
+  allowedDevOrigins: ["127.0.0.1", "localhost", "carloss-macbook-pro.tailcd69ae.ts.net"],
   images: {
     remotePatterns: [
       {
