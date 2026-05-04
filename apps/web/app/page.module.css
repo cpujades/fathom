@@ -184,6 +184,7 @@
 .nav a {
   padding: 0.48rem 0.78rem;
   border-radius: 999px;
+  white-space: nowrap;
   transition:
     color 180ms ease,
     background-color 180ms ease,
@@ -299,6 +300,7 @@
   font-weight: 700;
   line-height: 1;
   letter-spacing: 0.01em;
+  white-space: nowrap;
   transition:
     background-color 180ms ease,
     border-color 220ms ease,
@@ -1039,6 +1041,20 @@
   }
 }
 
+@media (max-width: 1120px) {
+  .navShell {
+    gap: 0.72rem;
+  }
+
+  .nav a {
+    padding-inline: 0.62rem;
+  }
+
+  .navActions .button {
+    padding-inline: 0.82rem;
+  }
+}
+
 @media (max-width: 1060px) {
   .editorialShell,
   .heroGrid,
@@ -1055,13 +1071,11 @@
 @media (max-width: 860px) {
   .navShell {
     grid-template-columns: auto 1fr;
-    row-gap: 0.56rem;
-    border-radius: 24px;
+    border-radius: 999px;
   }
 
   .navFrame {
-    grid-column: 1 / -1;
-    justify-self: stretch;
+    display: none;
   }
 
   .navActions {
@@ -1073,10 +1087,6 @@
 @media (max-width: 640px) {
   .container {
     width: min(1120px, 94vw);
-  }
-
-  .navFrame {
-    display: none;
   }
 
   .navActions {
@@ -1149,11 +1159,56 @@
     gap: 0.6rem;
   }
 
+  .methodStep {
+    grid-template-columns: 44px minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .methodMarker {
+    justify-content: flex-start;
+  }
+
   .coverRow {
     grid-template-columns: 1fr;
     gap: 0.28rem;
   }
 
+}
+
+@media (max-width: 420px) {
+  .navShell {
+    min-height: 58px;
+    gap: 0.48rem;
+    padding: 0.48rem;
+  }
+
+  .brand {
+    gap: 0.54rem;
+  }
+
+  .brandMeta {
+    display: none;
+  }
+
+  .brandWord {
+    font-size: 0.98rem;
+  }
+
+  .mobileControls {
+    gap: 0.34rem;
+  }
+
+  .mobileControls .button {
+    min-height: 36px;
+    padding-inline: 0.64rem;
+    font-size: 0.76rem;
+  }
+}
+
+@media (max-width: 350px) {
+  .mobileControls .buttonGhost {
+    display: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

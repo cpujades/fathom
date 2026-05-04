@@ -1,6 +1,10 @@
 .workspaceShell {
   width: min(980px, 100%);
-  margin: 9rem auto 0;
+  min-height: calc(100svh - 180px);
+  margin: 0 auto;
+  padding: 5rem 0 7rem;
+  display: grid;
+  align-items: center;
 }
 
 .workspacePanel {
@@ -12,11 +16,12 @@
 .workspaceTitle {
   margin: 0;
   color: #18211d;
-  font-size: clamp(1.35rem, 2vw, 1.85rem);
+  font-size: 1.85rem;
   line-height: 1.08;
-  letter-spacing: -0.04em;
+  letter-spacing: 0;
   font-weight: 700;
   max-width: none;
+  overflow-wrap: anywhere;
 }
 
 .commandBlock {
@@ -58,7 +63,8 @@
 
 @media (max-width: 720px) {
   .workspaceShell {
-    margin-top: 5rem;
+    min-height: auto;
+    padding: 1.25rem 0 4rem;
   }
 
   .workspacePanel {
@@ -67,5 +73,35 @@
 
   .commandRow {
     grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+
+  .commandActions,
+  .commandButton {
+    width: 100%;
+  }
+}
+
+@media (max-width: 420px) {
+  .workspaceShell {
+    padding: 0.9rem 0 3rem;
+  }
+
+  .workspacePanel {
+    padding: 1rem;
+  }
+
+  .workspaceTitle {
+    font-size: 1.45rem;
+    line-height: 1.14;
+  }
+
+  .commandInput {
+    min-height: 54px;
+    border-radius: 16px;
+  }
+
+  .commandButton {
+    min-height: 50px;
   }
 }

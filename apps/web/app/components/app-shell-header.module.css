@@ -4,13 +4,13 @@
   z-index: 40;
   border-bottom: 1px solid rgba(36, 58, 47, 0.1);
   backdrop-filter: blur(18px) saturate(1.04);
-  background: rgba(247, 242, 233, 0.82);
+  background: rgba(248, 247, 241, 0.86);
 }
 
 .inner {
-  width: min(980px, 94vw);
+  width: min(1180px, calc(100% - 2rem));
   margin: 0 auto;
-  min-height: 68px;
+  min-height: 64px;
   display: grid;
   grid-template-columns: auto 1fr auto;
   grid-template-areas: "brand nav utilities";
@@ -62,7 +62,6 @@
 
 .brandText {
   display: grid;
-  gap: 0.02rem;
   min-width: 0;
 }
 
@@ -71,15 +70,7 @@
   font-family: var(--font-display), serif;
   font-size: 1rem;
   font-weight: 700;
-  letter-spacing: -0.01em;
-}
-
-.brandMeta {
-  color: #667267;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  font-size: 0.58rem;
-  font-weight: 700;
+  letter-spacing: 0;
 }
 
 .nav {
@@ -89,6 +80,7 @@
   justify-content: center;
   gap: 0.3rem;
   min-width: 0;
+  scrollbar-width: none;
 }
 
 .navLink {
@@ -98,7 +90,8 @@
   color: #556558;
   font-size: 0.84rem;
   font-weight: 700;
-  letter-spacing: 0.01em;
+  letter-spacing: 0;
+  text-align: center;
   transition: color 180ms ease;
 }
 
@@ -153,8 +146,14 @@
   white-space: nowrap;
 }
 
+.balanceAmount,
+.balanceSuffix {
+  display: inline;
+}
+
 .profileMenu {
   position: relative;
+  min-width: 0;
 }
 
 .profileTrigger {
@@ -162,7 +161,7 @@
   align-items: center;
   gap: 0.5rem;
   min-width: 0;
-  padding: 0.28rem 0.36rem 0.28rem 0.3rem;
+  padding: 0.28rem 0.5rem 0.28rem 0.3rem;
   border: 1px solid rgba(36, 58, 47, 0.12);
   border-radius: 999px;
   background: rgba(248, 244, 236, 0.82);
@@ -192,19 +191,14 @@
   color: #17382b;
   font-size: 0.72rem;
   font-weight: 800;
-  letter-spacing: 0.04em;
+  letter-spacing: 0;
+  flex: 0 0 auto;
 }
 
 .profileText {
   color: #24332c;
   font-size: 0.76rem;
   font-weight: 700;
-}
-
-.profileChevron {
-  color: #667267;
-  font-size: 0.76rem;
-  line-height: 1;
 }
 
 .profilePopover {
@@ -235,7 +229,7 @@
   color: #667267;
   font-size: 0.62rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
@@ -287,7 +281,7 @@
   }
 
   .nav {
-    justify-content: flex-start;
+    justify-content: center;
     overflow-x: auto;
     padding-bottom: 0.08rem;
   }
@@ -299,7 +293,10 @@
 
 @media (max-width: 640px) {
   .inner {
-    width: min(1160px, 94vw);
+    width: min(1180px, calc(100% - 0.9rem));
+    min-height: 58px;
+    gap: 0.5rem;
+    padding: 0.5rem 0 0.58rem;
   }
 
   .utilityCluster {
@@ -307,6 +304,19 @@
   }
 
   .balanceReadout {
+    min-height: 34px;
+    padding: 0 0.56rem;
+    border: 1px solid rgba(36, 58, 47, 0.1);
+    border-radius: 999px;
+    background: rgba(248, 244, 236, 0.72);
+  }
+
+  .balanceValue {
+    color: #24332c;
+    font-size: 0.72rem;
+  }
+
+  .balanceSuffix {
     display: none;
   }
 
@@ -314,7 +324,67 @@
     display: none;
   }
 
+  .profileTrigger {
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    border-radius: 999px;
+    justify-content: center;
+  }
+
   .profilePopover {
-    min-width: 200px;
+    min-width: min(220px, calc(100vw - 1.5rem));
+  }
+
+  .nav {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+    gap: 0.2rem;
+    padding: 0;
+  }
+
+  .navLink {
+    min-width: 0;
+    margin: 0;
+    padding: 0.52rem 0.25rem 0.58rem;
+    border-radius: 0;
+    background: transparent;
+    border: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .navLink::after {
+    display: block;
+    bottom: 0.1rem;
+    left: 18%;
+    right: 18%;
+    height: 2px;
+  }
+
+  .navLinkActive {
+    background: transparent;
+  }
+}
+
+@media (max-width: 420px) {
+  .brand {
+    gap: 0.52rem;
+  }
+
+  .brandMark {
+    width: 26px;
+    height: 26px;
+  }
+
+  .nav {
+    gap: 0.18rem;
+  }
+
+  .navLink {
+    padding: 0.46rem 0.22rem;
+    font-size: 0.8rem;
   }
 }

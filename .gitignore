@@ -9,6 +9,7 @@ __pycache__/
 .cursor/
 .claude/
 .vscode/
+.playwright-mcp/
 node_modules/
 .next/
 dist/

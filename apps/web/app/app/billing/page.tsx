@@ -103,6 +103,32 @@ const getOrderLabel = (
   return "Pack";
 };
 
+const getPlanBadge = (plan: PlanResponse, groupKey: PlanGroup["key"]): string | null => {
+  const normalizedName = plan.name.toLowerCase();
+
+  if (groupKey === "subscription") {
+    if (normalizedName.includes("starter")) {
+      return "Most popular";
+    }
+    if (normalizedName.includes("pro")) {
+      return "Best value";
+    }
+    if (normalizedName.includes("agency")) {
+      return "High volume";
+    }
+    return null;
+  }
+
+  if (normalizedName.includes("creator")) {
+    return "Flexible";
+  }
+  if (normalizedName.includes("studio")) {
+    return "Best value";
+  }
+
+  return null;
+};
+
 const findRecentOrder = (
   orders: BillingOrderHistoryEntry[],
   checkoutStartedAt: number | null
@@ -253,7 +279,7 @@ function BillingPageContent() {
     return [
       {
         key: "subscription",
-        label: "Monthly access",
+        label: "Monthly subscriptions",
         description: "Best for steady listening and recurring briefing volume.",
         plans: subscriptions
       },
@@ -269,6 +295,39 @@ function BillingPageContent() {
   const activePackCount = useMemo(() => {
     return (account?.packs ?? []).filter((pack) => pack.remaining_seconds > 0 && pack.status !== "refunded").length;
   }, [account?.packs]);
+
+  const currentSubscriptionPlan = useMemo(() => {
+    const planName = account?.subscription.plan_name ?? usage?.subscription_plan_name ?? null;
+    if (!planName) {
+      return null;
+    }
+
+    return (
+      plans.find((plan) => plan.plan_type === "subscription" && plan.name.toLowerCase() === planName.toLowerCase()) ??
+      null
+    );
+  }, [account?.subscription.plan_name, plans, usage?.subscription_plan_name]);
+
+  const quotaCapacitySeconds = useMemo(() => {
+    if (!usage) {
+      return 0;
+    }
+
+    const subscriptionQuotaSeconds = currentSubscriptionPlan?.quota_seconds ?? usage.subscription_remaining_seconds;
+    const activePackAllowanceSeconds = (account?.packs ?? [])
+      .filter((pack) => pack.status !== "refunded" && pack.remaining_seconds > 0)
+      .reduce((total, pack) => total + pack.granted_seconds, 0);
+
+    return Math.max(subscriptionQuotaSeconds + activePackAllowanceSeconds, usage.total_remaining_seconds);
+  }, [account?.packs, currentSubscriptionPlan?.quota_seconds, usage]);
+
+  const quotaAvailablePercent = useMemo(() => {
+    if (!usage || quotaCapacitySeconds <= 0) {
+      return null;
+    }
+
+    return Math.max(0, Math.min(100, Math.round((usage.total_remaining_seconds / quotaCapacitySeconds) * 100)));
+  }, [quotaCapacitySeconds, usage]);
 
   const canManageBilling = useMemo(() => {
     return (account?.orders ?? []).some((order) => order.paid_amount_cents > 0);
@@ -664,6 +723,29 @@ function BillingPageContent() {
             <span className={getStatusTone(account?.subscription.status ?? null)}>{subscriptionStatusText}</span>
           </div>
 
+          {usage && quotaAvailablePercent !== null ? (
+            <div className={styles.accessMeter}>
+              <div className={styles.accessMeterHeader}>
+                <span>Listening balance</span>
+                <span>{quotaAvailablePercent}% available</span>
+              </div>
+              <div
+                className={styles.accessMeterTrack}
+                role="progressbar"
+                aria-label="Available listening time"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={quotaAvailablePercent}
+              >
+                <span className={styles.accessMeterFill} style={{ width: `${quotaAvailablePercent}%` }} />
+              </div>
+              <p className={styles.accessMeterText}>
+                <span className={styles.accessMeterValue}>{formatDuration(usage.total_remaining_seconds)}</span> left of{" "}
+                <span className={styles.accessMeterValue}>{formatDuration(quotaCapacitySeconds)}</span> current allowance.
+              </p>
+            </div>
+          ) : null}
+
           <div className={styles.accessSummary}>
             <article className={styles.accessStat}>
               <p className={styles.accessLabel}>Available time</p>
@@ -690,7 +772,7 @@ function BillingPageContent() {
           <div className={chrome.surfaceHeader}>
             <div>
               <h2 className={chrome.surfaceTitle}>Get more listening time</h2>
-              <p className={chrome.surfaceText}>Choose monthly access or add a one-time reserve when your listening expands.</p>
+              <p className={chrome.surfaceText}>Choose a monthly subscription or add a one-time reserve when your listening expands.</p>
             </div>
           </div>
 
@@ -700,32 +782,36 @@ function BillingPageContent() {
               type="button"
               onClick={() => setOfferMode("subscription")}
             >
-              Monthly access
+              <span className={styles.offerSwitchLabel}>Monthly subscriptions</span>
             </button>
             <button
               className={`${styles.offerSwitchButton} ${offerMode === "pack" ? styles.offerSwitchButtonActive : ""}`}
               type="button"
               onClick={() => setOfferMode("pack")}
             >
-              One-time packs
+              <span className={styles.offerSwitchLabel}>One-time packs</span>
             </button>
           </div>
 
           {visiblePlanGroup ? <p className={styles.offerIntro}>{visiblePlanGroup.description}</p> : null}
 
           {visiblePlanGroup ? (
-            <div className={styles.planGrid}>
+            <div className={styles.planGrid} data-plan-count={visiblePlanGroup.plans.length}>
               {visiblePlanGroup.plans.map((plan) => {
                 const isCurrentSubscription =
                   visiblePlanGroup.key === "subscription" &&
                   account?.subscription.status === "active" &&
                   account.subscription.plan_name === plan.name;
+                const planBadge = getPlanBadge(plan, visiblePlanGroup.key);
 
                 return (
                   <article className={styles.planCard} key={plan.plan_id}>
                     <div className={styles.planCardBody}>
                       <div>
-                        <p className={styles.planName}>{plan.name}</p>
+                        <div className={styles.planHeading}>
+                          <p className={styles.planName}>{plan.name}</p>
+                          {planBadge ? <span className={styles.planBadge}>{planBadge}</span> : null}
+                        </div>
                         <p className={styles.planPrice}>{formatPrice(plan.amount_cents, plan.currency, plan.billing_interval)}</p>
                       </div>
                       <div className={styles.planMeta}>
@@ -793,7 +879,7 @@ function BillingPageContent() {
               )}
             </details>
 
-            <details className={styles.detailDisclosure}>
+            <details className={styles.detailDisclosure} open={(account?.orders.length ?? 0) > 0}>
               <summary className={styles.detailSummary}>
                 <span>Billing history</span>
                 <span className={styles.detailCount}>{account?.orders.length ?? 0}</span>
@@ -804,12 +890,12 @@ function BillingPageContent() {
               ) : (
                 <div className={chrome.list}>
                   {account.orders.slice(0, 12).map((entry: BillingOrderHistoryEntry) => (
-                    <article className={chrome.listRow} key={entry.polar_order_id}>
+                    <article className={`${chrome.listRow} ${styles.historyRow}`} key={entry.polar_order_id}>
                       <div className={chrome.listPrimary}>
                         <p className={chrome.listTitle}>{entry.plan_name ?? entry.plan_type}</p>
                         <p className={chrome.listMeta}>{formatDate(entry.created_at)}</p>
                       </div>
-                      <div className={chrome.listAside}>
+                      <div className={`${chrome.listAside} ${styles.historyAside}`}>
                         <span className={getStatusTone(entry.status)}>{entry.status.replaceAll("_", " ")}</span>
                         <span>
                           Paid {formatPrice(entry.paid_amount_cents, entry.currency, null)}

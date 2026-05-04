@@ -307,98 +307,100 @@ export default function BriefingsPage() {
                   <article className={styles.libraryRow} key={entry.session_id}>
                     <div className={styles.libraryRowBody}>
                       <div className={styles.libraryRowMain}>
-                        <div className={styles.libraryMedia}>
-                          <div className={styles.libraryThumbnailFrame}>
-                            {entry.source_thumbnail_url ? (
-                              <Image
-                                className={styles.libraryThumbnail}
-                                src={entry.source_thumbnail_url}
-                                alt=""
-                                fill
-                                sizes="72px"
-                              />
-                            ) : (
-                              <div className={styles.libraryThumbnailFallback}>
-                                <span>{getSourceTypeLabel(entry.source_type)}</span>
-                              </div>
-                            )}
+                        <div className={styles.libraryTopRow}>
+                          <div className={styles.libraryMedia}>
+                            <div className={styles.libraryThumbnailFrame}>
+                              {entry.source_thumbnail_url ? (
+                                <Image
+                                  className={styles.libraryThumbnail}
+                                  src={entry.source_thumbnail_url}
+                                  alt=""
+                                  fill
+                                  sizes="(max-width: 420px) 84px, (max-width: 720px) 96px, 96px"
+                                />
+                              ) : (
+                                <div className={styles.libraryThumbnailFallback}>
+                                  <span>{getSourceTypeLabel(entry.source_type)}</span>
+                                </div>
+                              )}
+                            </div>
                           </div>
+
                         </div>
 
                         <div className={styles.libraryRowContent}>
-                          <div className={styles.libraryRowHeader}>
-                            <div className={styles.libraryTitleBlock}>
-                              <div className={styles.titleRow}>
-                                <Link
-                                  className={styles.libraryTitleLink}
-                                  href={entry.session_path}
-                                  onMouseEnter={() => prefetchBriefing(entry)}
-                                  onFocus={() => prefetchBriefing(entry)}
-                                >
-                                  {entry.title}
-                                </Link>
-                                <span className={chrome.statusPillMuted}>{getSourceTypeLabel(entry.source_type)}</span>
-                              </div>
-
-                              <div className={styles.metaRow}>
-                                <span>{formatDateTime(entry.created_at)}</span>
-                                {entry.author ? <span>By {entry.author}</span> : null}
-                                {entry.source_duration_seconds ? <span>{formatExactDuration(entry.source_duration_seconds)}</span> : null}
-                              </div>
+                          <div className={styles.libraryTitleBlock}>
+                            <div className={styles.titleRow}>
+                              <Link
+                                className={styles.libraryTitleLink}
+                                href={entry.session_path}
+                                onMouseEnter={() => prefetchBriefing(entry)}
+                                onFocus={() => prefetchBriefing(entry)}
+                              >
+                                {entry.title}
+                              </Link>
                             </div>
 
-                            <div className={styles.rowActions}>
-                              <div className={styles.actionSet}>
-                                <Link
-                                  className={chrome.secondaryButton}
-                                  href={entry.session_path}
-                                  onMouseEnter={() => prefetchBriefing(entry)}
-                                  onFocus={() => prefetchBriefing(entry)}
-                                >
-                                  Open briefing
-                                </Link>
-                                <a
-                                  className={chrome.ghostButton}
-                                  href={entry.source_url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                >
-                                  Open source
-                                </a>
-                                {!confirmingDelete ? (
-                                  <button
-                                    className={styles.menuDangerAction}
-                                    type="button"
-                                    onClick={() => setConfirmDeleteSessionId(entry.session_id)}
-                                  >
-                                    Remove
-                                  </button>
-                                ) : null}
-                              </div>
-
-                              {confirmingDelete ? (
-                                <div className={styles.confirmBlock}>
-                                  <p className={styles.confirmText}>Remove this briefing from history?</p>
-                                  <div className={styles.confirmActions}>
-                                    <button
-                                      className={chrome.ghostButton}
-                                      type="button"
-                                      onClick={() => setConfirmDeleteSessionId(null)}
-                                    >
-                                      Keep briefing
-                                    </button>
-                                    <button
-                                      className={styles.dangerButton}
-                                      type="button"
-                                      onClick={() => void handleDeleteBriefing(entry)}
-                                      disabled={deletingThisEntry}
-                                    >
-                                      {deletingThisEntry ? "Removing…" : "Remove from history"}
-                                    </button>
-                                  </div>
-                                </div>
+                            <div className={styles.metaRow}>
+                              <span className={styles.metaDate}>{formatDateTime(entry.created_at)}</span>
+                              {entry.author ? <span className={styles.metaAuthor}>By {entry.author}</span> : null}
+                              {entry.source_duration_seconds ? (
+                                <span className={styles.metaDuration}>{formatExactDuration(entry.source_duration_seconds)}</span>
                               ) : null}
                             </div>
+                          </div>
+
+                          <div className={styles.rowActions}>
+                            <div className={styles.actionSet}>
+                              <Link
+                                className={`${chrome.primaryButton} ${styles.libraryPrimaryAction}`}
+                                href={entry.session_path}
+                                onMouseEnter={() => prefetchBriefing(entry)}
+                                onFocus={() => prefetchBriefing(entry)}
+                              >
+                                Open briefing
+                              </Link>
+                              <a
+                                className={`${chrome.ghostButton} ${styles.librarySecondaryAction}`}
+                                href={entry.source_url}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                Original video
+                              </a>
+                              {!confirmingDelete ? (
+                                <button
+                                  className={styles.menuDangerAction}
+                                  type="button"
+                                  onClick={() => setConfirmDeleteSessionId(entry.session_id)}
+                                >
+                                  Remove
+                                </button>
+                              ) : null}
+                            </div>
+
+                            {confirmingDelete ? (
+                              <div className={styles.confirmBlock}>
+                                <p className={styles.confirmText}>Remove this briefing from history?</p>
+                                <div className={styles.confirmActions}>
+                                  <button
+                                    className={chrome.ghostButton}
+                                    type="button"
+                                    onClick={() => setConfirmDeleteSessionId(null)}
+                                  >
+                                    Keep briefing
+                                  </button>
+                                  <button
+                                    className={styles.dangerButton}
+                                    type="button"
+                                    onClick={() => void handleDeleteBriefing(entry)}
+                                    disabled={deletingThisEntry}
+                                  >
+                                    {deletingThisEntry ? "Removing…" : "Remove from history"}
+                                  </button>
+                                </div>
+                              </div>
+                            ) : null}
                           </div>
                         </div>
                       </div>

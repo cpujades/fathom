@@ -49,7 +49,6 @@ jobs:
       - name: Set up pnpm
         uses: pnpm/action-setup@v6
         with:
-          version: 10
           cache: true
           cache_dependency_path: pnpm-lock.yaml
 
