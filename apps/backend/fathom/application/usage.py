@@ -423,7 +423,10 @@ async def record_usage_for_job(
     settings: Settings,
 ) -> None:
     if not duration_seconds or duration_seconds <= 0:
-        logger.info("usage skip: missing duration", extra={"user_id": user_id, "job_id": job_id})
+        logger.info(
+            "usage.recording.skipped",
+            extra={"user_id": user_id, "job_id": job_id, "reason": "missing_duration"},
+        )
         return
 
     admin_client = await create_supabase_admin_client(settings)

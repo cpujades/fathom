@@ -65,7 +65,7 @@ async def create_briefing_session(
 ) -> BriefingSessionResponse:
     submitted_url = str(request.url)
     with log_context(user_id=auth.user_id):
-        logger.info("briefing session request start")
+        logger.info("briefing_session.create.started")
         validate_youtube_url(submitted_url)
         source = normalize_source(submitted_url)
         user_client = await create_supabase_user_client(settings, auth.access_token)
@@ -77,7 +77,7 @@ async def create_briefing_session(
             url=source.canonical_url,
         )
         if active_job:
-            logger.info("briefing session joined existing work", extra={"session_id": active_job["id"]})
+            logger.info("briefing_session.reused_active", extra={"session_id": active_job["id"]})
             return await _build_session_snapshot(
                 user_client=user_client,
                 admin_client=admin_client,
@@ -95,7 +95,7 @@ async def create_briefing_session(
             if str(completed_job.get("status") or "") == "deleted":
                 await restore_job(user_client, job_id=str(completed_job["id"]))
                 restored_job = await fetch_job(user_client, str(completed_job["id"]))
-                logger.info("briefing session restored archived briefing", extra={"session_id": restored_job["id"]})
+                logger.info("briefing_session.restored_archived", extra={"session_id": restored_job["id"]})
                 return await _build_session_snapshot(
                     user_client=user_client,
                     admin_client=admin_client,
@@ -103,7 +103,7 @@ async def create_briefing_session(
                     source=source,
                     resolution_type="reused_ready",
                 )
-            logger.info("briefing session reused user's existing briefing", extra={"session_id": completed_job["id"]})
+            logger.info("briefing_session.reused_ready", extra={"session_id": completed_job["id"]})
             return await _build_session_snapshot(
                 user_client=user_client,
                 admin_client=admin_client,
@@ -115,7 +115,7 @@ async def create_briefing_session(
         metadata = await asyncio.to_thread(fetch_video_metadata, source.canonical_url)
         validate_video_duration(metadata.duration_seconds)
         logger.info(
-            "source metadata validated",
+            "briefing_session.source.validated",
             extra={"video_id": metadata.video_id, "duration_seconds": metadata.duration_seconds},
         )
 
@@ -136,7 +136,7 @@ async def create_briefing_session(
                 admin_client=admin_client,
                 settings=settings,
             )
-            logger.info("briefing session reused cached briefing", extra={"session_id": ready_job["id"]})
+            logger.info("briefing_session.reused_cached", extra={"session_id": ready_job["id"]})
             return await _build_session_snapshot(
                 user_client=user_client,
                 admin_client=admin_client,
@@ -152,7 +152,7 @@ async def create_briefing_session(
             duration_seconds=metadata.duration_seconds,
         )
         job = await fetch_job(user_client, str(created_job["id"]))
-        logger.info("briefing session created", extra={"session_id": job["id"]})
+        logger.info("briefing_session.created", extra={"session_id": job["id"]})
         return await _build_session_snapshot(
             user_client=user_client,
             admin_client=admin_client,
@@ -171,7 +171,7 @@ async def get_briefing_session(session_id: UUID, auth: AuthContext, settings: Se
         if str(job.get("status") or "") == "deleted":
             raise NotFoundError("Briefing session not found.")
         source = normalize_source(job["url"])
-        logger.info("briefing session fetched", extra={"state": job.get("stage"), "status": job.get("status")})
+        logger.info("briefing_session.fetched", extra={"state": job.get("stage"), "status": job.get("status")})
         return await _build_session_snapshot(user_client=user_client, admin_client=admin_client, job=job, source=source)
 
 
@@ -185,6 +185,8 @@ async def stream_briefing_session_events(
         user_client = await create_supabase_user_client(settings, auth.access_token)
         admin_client = await create_supabase_admin_client(settings)
         session_id_str = str(session_id)
+        with log_context(user_id=auth.user_id, session_id=session_id_str):
+            logger.info("briefing_session.stream.opened")
         job = await fetch_job(user_client, session_id_str)
         if str(job.get("status") or "") == "deleted":
             raise NotFoundError("Briefing session not found.")
@@ -203,6 +205,8 @@ async def stream_briefing_session_events(
         )
 
         if snapshot.state in {"ready", "failed"}:
+            with log_context(user_id=auth.user_id, session_id=session_id_str):
+                logger.info("briefing_session.stream.closed", extra={"state": snapshot.state})
             return
 
         current_signature = _snapshot_signature(snapshot)
@@ -212,6 +216,8 @@ async def stream_briefing_session_events(
         async with listen_for_notifications(settings, "job_updates") as queue:
             while True:
                 if await request.is_disconnected():
+                    with log_context(user_id=auth.user_id, session_id=session_id_str):
+                        logger.info("briefing_session.stream.disconnected")
                     return
 
                 try:
@@ -278,6 +284,8 @@ async def stream_briefing_session_events(
                         event_id=str(event_counter),
                         data=refreshed_snapshot.model_dump(mode="json"),
                     )
+                    with log_context(user_id=auth.user_id, session_id=session_id_str):
+                        logger.info("briefing_session.stream.closed", extra={"state": refreshed_snapshot.state})
                     return
 
     return StreamingResponse(
@@ -361,7 +369,7 @@ async def _create_ready_reused_session(
             settings=settings,
         )
     except Exception:
-        logger.exception("usage recording failed for reused briefing", extra={"session_id": session_id})
+        logger.exception("briefing_session.usage_recording.failed", extra={"session_id": session_id})
     return await fetch_job(user_client, session_id)
 
 

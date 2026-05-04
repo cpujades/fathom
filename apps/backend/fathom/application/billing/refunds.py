@@ -100,7 +100,7 @@ async def request_pack_refund(
     except polar.PolarInvalidRequestError as exc:
         if exc.http_status == 409 or is_definitive_duplicate_refund_error(exc.detail):
             logger.warning(
-                "polar refund rejected as duplicate/conflict; keeping refund_pending",
+                "billing.refund.duplicate_or_conflict",
                 extra={"polar_order_id": polar_order_id, "http_status": exc.http_status},
             )
             raise InvalidRequestError(
@@ -121,7 +121,7 @@ async def request_pack_refund(
         )
         raise
     except Exception:
-        logger.exception("polar refund request outcome unknown; keeping order in refund_pending")
+        logger.exception("billing.refund.outcome_unknown", extra={"polar_order_id": polar_order_id})
         raise
 
     refund_id = as_str(refund.get("id"))

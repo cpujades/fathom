@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { logger } from "@/lib/logger";
+
 const ALLOWED_EVENTS = new Set([
   "hero_primary_cta_clicked",
   "hero_secondary_cta_clicked",
@@ -50,18 +52,15 @@ export async function POST(request: Request) {
   }
 
   if (shouldLogMarketingEvents) {
-    console.info(
-      "[marketing-event]",
-      JSON.stringify({
-        event,
-        section,
-        cta,
-        mode: mode ?? null,
-        plan: plan ?? null,
-        path,
-        ts
-      })
-    );
+    logger.info("web.marketing_event.received", {
+      event,
+      section,
+      cta,
+      mode: mode ?? null,
+      plan: plan ?? null,
+      path,
+      ts
+    });
   }
 
   return new NextResponse(null, { status: 204 });

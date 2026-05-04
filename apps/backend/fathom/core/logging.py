@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
 import sys
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
+from datetime import UTC, datetime
 from typing import Any
 
 # Standard log record attributes that should not be treated as "extra" context.
@@ -38,7 +40,7 @@ _STANDARD_LOG_RECORD_ATTRS = {
     "source_color",
     "reset",
     "color_message",
-    "log_level",
+    "module_path",
 }
 
 # Context is propagated correctly across async tasks and awaits.
@@ -48,7 +50,7 @@ DEFAULT_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 APP_LOGGER_PREFIX = "fathom"
 
-# Pragmatic defaults to reduce third-party noise when LOG_LEVEL is DEBUG.
+# Pragmatic defaults to reduce third-party noise.
 _DEFAULT_THIRD_PARTY_LEVELS: dict[str, str] = {
     "uvicorn": "WARNING",
     "uvicorn.error": "INFO",
@@ -74,8 +76,7 @@ def _build_log_format(include_source: bool) -> str:
     if include_source:
         return (
             "%(level_color)s%(asctime)s | %(levelname)s%(reset)s | "
-            "%(name_color)s%(name)s%(reset)s | "
-            "%(source_color)s%(filename)s:%(lineno)d%(reset)s | "
+            "%(name_color)s%(module_path)s%(reset)s | "
             "%(level_color)s%(message)s%(reset)s"
         )
 
@@ -96,6 +97,21 @@ class ContextInjectionFilter(logging.Filter):
 
         for key, value in context.items():
             if key in _STANDARD_LOG_RECORD_ATTRS:
+                continue
+            setattr(record, key, value)
+        return True
+
+
+class StaticFieldsFilter(logging.Filter):
+    """Inject process-level fields into every log record."""
+
+    def __init__(self, **fields: Any) -> None:
+        super().__init__()
+        self.fields = fields
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        for key, value in self.fields.items():
+            if key in _STANDARD_LOG_RECORD_ATTRS or hasattr(record, key):
                 continue
             setattr(record, key, value)
         return True
@@ -166,8 +182,20 @@ class SmartContextFormatter(logging.Formatter):
     """Formatter that appends all extra fields as key=value context."""
 
     def format(self, record: logging.LogRecord) -> str:
+        record.module_path = _module_path(record.name)  # type: ignore[attr-defined]
+        return super().format(record)
+
+
+class ConsoleFormatter(SmartContextFormatter):
+    """Human-readable formatter for local development."""
+
+    def format(self, record: logging.LogRecord) -> str:
         base_message = super().format(record)
-        extra_fields = {key: value for key, value in record.__dict__.items() if key not in _STANDARD_LOG_RECORD_ATTRS}
+        extra_fields = {
+            key: value
+            for key, value in record.__dict__.items()
+            if key not in _STANDARD_LOG_RECORD_ATTRS and value is not None
+        }
         if not extra_fields:
             return base_message
 
@@ -175,7 +203,31 @@ class SmartContextFormatter(logging.Formatter):
         return f"{base_message} [{context_str}]"
 
 
-class ColorFormatter(SmartContextFormatter):
+class JsonFormatter(logging.Formatter):
+    """Structured JSON lines formatter for production log ingestion."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        payload: dict[str, Any] = {
+            "ts": datetime.fromtimestamp(record.created, UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+            "level": record.levelname.lower(),
+            "logger": record.name,
+            "module": _module_path(record.name),
+            "event": record.getMessage(),
+        }
+        if record.exc_info:
+            payload["exception"] = self.formatException(record.exc_info)
+        if record.stack_info:
+            payload["stack"] = self.formatStack(record.stack_info)
+
+        for key, value in record.__dict__.items():
+            if key in _STANDARD_LOG_RECORD_ATTRS or value is None:
+                continue
+            payload[key] = value
+
+        return json.dumps(payload, default=str, separators=(",", ":"))
+
+
+class ColorFormatter(ConsoleFormatter):
     """Colorize timestamp+level+message by level, name/source by fixed blues."""
 
     _RESET = "\x1b[0m"
@@ -219,20 +271,28 @@ def get_log_context() -> Mapping[str, Any]:
 
 
 def _resolve_log_level(default: str = "INFO") -> int:
-    raw_level = os.getenv("LOG_LEVEL", default).upper().strip()
+    raw_level = default.upper().strip()
     return getattr(logging, raw_level, logging.INFO)
 
 
-def _env_flag(name: str, default: bool) -> bool:
-    raw = os.getenv(name)
-    if raw is None:
-        return default
-    return raw.strip().lower() in {"1", "true", "yes", "on"}
-
-
 def _use_color() -> bool:
-    # Color by default in interactive terminals, but easy to override.
-    return _env_flag("LOG_COLOR", sys.stdout.isatty())
+    return sys.stdout.isatty()
+
+
+def _resolve_log_format() -> str:
+    raw_format = os.getenv("LOG_FORMAT", "console").strip().lower()
+    if raw_format in {"json", "console"}:
+        return raw_format
+    return "console"
+
+
+def _module_path(logger_name: str) -> str:
+    if logger_name == APP_LOGGER_PREFIX:
+        return APP_LOGGER_PREFIX
+    prefix = f"{APP_LOGGER_PREFIX}."
+    if logger_name.startswith(prefix):
+        return logger_name.removeprefix(prefix)
+    return logger_name
 
 
 def _level_from_name(level_name: str, fallback: int) -> int:
@@ -320,31 +380,36 @@ def _apply_logger_levels(
 def setup_logging(
     *,
     log_level: str | None = None,
+    service: str | None = None,
     third_party_levels: Mapping[str, str] | None = None,
 ) -> None:
     """
     Configure global, context-aware logging for the application.
 
     Environment variables:
-    - LOG_LEVEL: DEBUG, INFO, WARNING, ERROR, CRITICAL (default: INFO)
-    - LOG_COLOR: enable ANSI colors (default: auto when TTY)
+    - LOG_FORMAT: console or json (default: console)
     """
     root_level = _resolve_log_level(log_level or "INFO")
     include_source = True
     log_format = _build_log_format(include_source)
+    output_format = _resolve_log_format()
 
     root_logger = _reset_logging_state()
 
     handler = logging.StreamHandler(sys.stdout)
     formatter: logging.Formatter
-    if _use_color():
+    if output_format == "json":
+        formatter = JsonFormatter()
+    elif _use_color():
         formatter = ColorFormatter(log_format, datefmt=DEFAULT_DATE_FORMAT)
     else:
         # Strip color fields from the format when ANSI colors are disabled.
-        plain_format = "%(asctime)s | %(levelname)s | %(name)s | %(filename)s:%(lineno)d | %(message)s"
-        formatter = SmartContextFormatter(plain_format, datefmt=DEFAULT_DATE_FORMAT)
+        plain_format = "%(asctime)s | %(levelname)s | %(module_path)s | %(message)s"
+        formatter = ConsoleFormatter(plain_format, datefmt=DEFAULT_DATE_FORMAT)
 
     handler.setFormatter(formatter)
+    if service:
+        handler.addFilter(StaticFieldsFilter(service=service))
     handler.addFilter(ContextInjectionFilter())
     root_logger.addHandler(handler)
 
@@ -358,6 +423,6 @@ def setup_logging(
     )
 
     logging.getLogger(__name__).info(
-        "Logging configured",
-        extra={"log_level": logging.getLevelName(root_level)},
+        "logging.configured",
+        extra={"log_level": logging.getLevelName(root_level), "log_format": output_format},
     )

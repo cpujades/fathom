@@ -41,7 +41,7 @@ async def get_briefing(briefing_id: UUID, auth: AuthContext, settings: Settings)
         summary = await fetch_summary(user_client, briefing_id_str)
         object_key = summary.get("pdf_object_key")
         has_pdf = isinstance(object_key, str) and bool(object_key)
-        logger.info("briefing fetched", extra={"has_pdf": has_pdf})
+        logger.info("briefing.fetched", extra={"has_pdf": has_pdf})
         if not has_pdf:
             return BriefingResponse(
                 briefing_id=summary["id"],
@@ -56,7 +56,7 @@ async def get_briefing(briefing_id: UUID, auth: AuthContext, settings: Settings)
             object_key,
             SIGNED_URL_TTL_SECONDS,
         )
-        logger.info("briefing pdf signed url issued")
+        logger.info("briefing_pdf.signed_url.issued")
         return BriefingResponse(
             briefing_id=summary["id"],
             markdown=summary["summary_markdown"],
@@ -73,7 +73,7 @@ async def create_briefing_pdf(briefing_id: UUID, auth: AuthContext, settings: Se
         admin_client = await create_supabase_admin_client(settings)
         existing_object_key = summary.get("pdf_object_key")
         if isinstance(existing_object_key, str) and existing_object_key:
-            logger.info("briefing pdf already exists")
+            logger.info("briefing_pdf.cache_hit")
             pdf_url = await create_pdf_signed_url(
                 admin_client,
                 SUPABASE_PDF_BUCKET,
@@ -92,7 +92,7 @@ async def create_briefing_pdf(briefing_id: UUID, auth: AuthContext, settings: Se
         if not isinstance(user_id, str) or not user_id:
             raise ExternalServiceError("Briefing user id is missing; cannot generate PDF.")
 
-        logger.info("generating briefing pdf")
+        logger.info("briefing_pdf.generation.started")
         pdf_bytes = await asyncio.to_thread(markdown_to_pdf_bytes, markdown)
         transcript = await fetch_transcript_by_id(admin_client, summary["transcript_id"])
         video_id = transcript.get("video_id")
@@ -107,7 +107,7 @@ async def create_briefing_pdf(briefing_id: UUID, auth: AuthContext, settings: Se
             pdf_bytes=pdf_bytes,
         )
         await update_summary_pdf_key(admin_client, summary_id=briefing_id_str, pdf_object_key=object_key)
-        logger.info("briefing pdf uploaded", extra={"object_key": object_key})
+        logger.info("briefing_pdf.uploaded", extra={"object_key": object_key})
 
         pdf_url = await create_pdf_signed_url(
             admin_client,
@@ -118,7 +118,7 @@ async def create_briefing_pdf(briefing_id: UUID, auth: AuthContext, settings: Se
         if not pdf_url:
             raise ExternalServiceError("Signed PDF URL was not returned.")
 
-        logger.info("briefing pdf signed url issued")
+        logger.info("briefing_pdf.signed_url.issued")
         return BriefingPdfResponse(briefing_id=summary["id"], pdf_url=pdf_url)
 
 

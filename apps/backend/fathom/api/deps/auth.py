@@ -95,7 +95,7 @@ async def get_auth_context(
     }
     if credentials is None or credentials.scheme.lower() != "bearer" or not credentials.credentials:
         with log_context(**base_log_context):
-            logger.warning("Missing or invalid Authorization header.", extra={"error_code": "unauthorized"})
+            logger.warning("auth.header.invalid", extra={"error_code": "unauthorized"})
         raise AuthenticationError("Missing or invalid Authorization header.")
 
     access_token = credentials.credentials
@@ -103,14 +103,16 @@ async def get_auth_context(
 
     try:
         with log_context(**base_log_context):
-            logger.info("Auth environment resolved.", extra={"app_env": app_env})
+            logger.info("auth.environment.resolved", extra={"app_env": app_env})
         if app_env == "local":
             try:
-                return _decode_local_jwt(access_token, settings)
+                auth_context = _decode_local_jwt(access_token, settings)
+                request.state.user_id = auth_context.user_id
+                return auth_context
             except AuthenticationError:
                 with log_context(**base_log_context):
                     logger.warning(
-                        "Local JWT validation failed.",
+                        "auth.local_jwt.invalid",
                         extra={"error_code": "unauthorized"},
                     )
                 raise
@@ -121,7 +123,7 @@ async def get_auth_context(
         auth_status = getattr(exc, "status", None)
         with log_context(**base_log_context):
             logger.warning(
-                "Supabase auth.get_user failed.",
+                "auth.supabase_get_user.failed",
                 extra={
                     "error_code": "unauthorized",
                     "auth_error_code": auth_code,
@@ -136,7 +138,7 @@ async def get_auth_context(
         # Unexpected errors (network issues, timeouts, etc.)
         with log_context(**base_log_context):
             logger.exception(
-                "Unexpected error while validating auth token.",
+                "auth.validation.unexpected_error",
                 extra={"error_code": "external_service_error"},
             )
         raise ExternalServiceError("Failed to validate auth token.") from exc
@@ -145,9 +147,10 @@ async def get_auth_context(
     if not user_id:
         with log_context(**base_log_context):
             logger.warning(
-                "Supabase returned no user id for token.",
+                "auth.user_id.missing",
                 extra={"error_code": "unauthorized"},
             )
         raise AuthenticationError("Invalid auth token.")
 
+    request.state.user_id = user_id
     return AuthContext(access_token=access_token, user_id=user_id)

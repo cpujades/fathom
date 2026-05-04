@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 async def health_status() -> HealthResponse:
-    logger.info("health check ok")
+    logger.info("api.health.ok")
     return HealthResponse(status="ok")
 
 
@@ -55,8 +55,8 @@ async def _check_postgrest(settings: Settings) -> None:
         await client.table("jobs").select("id").limit(1).execute()
     except APIError as exc:
         logger.warning(
-            "readiness check failed: supabase not reachable",
-            extra={"error_type": type(exc).__name__},
+            "api.ready.failed",
+            extra={"dependency": "supabase", "error_type": type(exc).__name__},
         )
         raise NotReadyError("Supabase is not reachable.") from exc
 
@@ -66,10 +66,10 @@ async def _check_postgres(settings: Settings) -> None:
         async with _postgres_connection(settings) as conn:
             await conn.fetchval("select 1")
     except ConfigurationError as exc:
-        logger.warning("readiness check failed: postgres not configured", extra={"error_type": type(exc).__name__})
+        logger.warning("api.ready.failed", extra={"dependency": "postgres", "error_type": type(exc).__name__})
         raise NotReadyError(f"Direct Postgres is not configured: {exc.detail}") from exc
     except Exception as exc:
-        logger.warning("readiness check failed: postgres not reachable", extra={"error_type": type(exc).__name__})
+        logger.warning("api.ready.failed", extra={"dependency": "postgres", "error_type": type(exc).__name__})
         raise NotReadyError("Direct Postgres is not reachable.") from exc
 
 
@@ -82,13 +82,13 @@ async def readiness_status(settings: Settings) -> ReadyResponse:
     if _is_strict_runtime_env(settings):
         _require_billing_config(settings)
 
-    logger.info("readiness check ok")
+    logger.info("api.ready.ok")
     return ReadyResponse(status="ok")
 
 
 async def status_snapshot() -> StatusResponse:
     uptime_seconds = time.monotonic() - _START_TIME
-    logger.info("status snapshot", extra={"uptime_seconds": round(uptime_seconds, 2), "version": __version__})
+    logger.info("api.status.snapshot", extra={"uptime_seconds": round(uptime_seconds, 2), "version": __version__})
     return StatusResponse(
         status="ok",
         version=__version__,
