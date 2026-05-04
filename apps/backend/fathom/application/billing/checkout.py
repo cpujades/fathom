@@ -56,7 +56,7 @@ async def create_checkout_session(
         },
     )
 
-    logger.info("polar checkout session created", extra={"user_id": auth.user_id, "plan_id": plan_id})
+    logger.info("billing.checkout.created", extra={"user_id": auth.user_id, "plan_id": plan_id, "plan_type": plan_type})
     return CheckoutSessionResponse(checkout_url=HTTP_URL_ADAPTER.validate_python(checkout_url))
 
 

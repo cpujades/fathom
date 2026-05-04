@@ -7,6 +7,10 @@ from functools import lru_cache
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+DEFAULT_BILLING_DEBT_CAP_SECONDS = 600
+DEFAULT_SUPABASE_DB_PORT = 5432
+DEFAULT_WORKER_MAX_CONCURRENT_JOBS = 10
+
 
 class Settings(BaseSettings):
     """
@@ -34,12 +38,11 @@ class Settings(BaseSettings):
     supabase_url: str = Field(..., validation_alias="SUPABASE_URL")
     supabase_publishable_key: str = Field(..., validation_alias="SUPABASE_PUBLISHABLE_KEY")
     supabase_secret_key: str = Field(..., validation_alias="SUPABASE_SECRET_KEY")
-    supabase_jwt_secret: str | None = Field(default=None, validation_alias="SUPABASE_JWT_SECRET")
     supabase_db_password: str | None = Field(default=None, validation_alias="SUPABASE_DB_PASSWORD")
     supabase_db_user: str = Field(default="postgres", validation_alias="SUPABASE_DB_USER")
     supabase_db_name: str = Field(default="postgres", validation_alias="SUPABASE_DB_NAME")
     supabase_db_host: str | None = Field(default=None, validation_alias="SUPABASE_DB_HOST")
-    supabase_db_port: int = Field(default=5432, validation_alias="SUPABASE_DB_PORT")
+    supabase_db_port: int = DEFAULT_SUPABASE_DB_PORT
 
     # ---------------------------------------------------------------------------
     # Environment config (optional)
@@ -58,8 +61,8 @@ class Settings(BaseSettings):
     polar_checkout_return_url: str | None = Field(default=None, validation_alias="POLAR_CHECKOUT_RETURN_URL")
     polar_portal_return_url: str | None = Field(default=None, validation_alias="POLAR_PORTAL_RETURN_URL")
     polar_server: str = Field(default="sandbox", validation_alias="POLAR_SERVER")
-    billing_debt_cap_seconds: int = Field(default=600, validation_alias="BILLING_DEBT_CAP_SECONDS")
-    worker_max_concurrent_jobs: int = Field(default=10, validation_alias="WORKER_MAX_CONCURRENT_JOBS")
+    billing_debt_cap_seconds: int = DEFAULT_BILLING_DEBT_CAP_SECONDS
+    worker_max_concurrent_jobs: int = DEFAULT_WORKER_MAX_CONCURRENT_JOBS
 
     @field_validator(
         "openrouter_api_key",
@@ -67,7 +70,6 @@ class Settings(BaseSettings):
         "supabase_url",
         "supabase_publishable_key",
         "supabase_secret_key",
-        "supabase_jwt_secret",
         "supabase_db_password",
         "supabase_db_user",
         "supabase_db_name",
@@ -95,25 +97,6 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             items = [item.strip() for item in value.split(",")]
             return [item for item in items if item]
-        return value
-
-    @field_validator("worker_max_concurrent_jobs", mode="before")
-    @classmethod
-    def _clamp_worker_jobs(cls, value: object) -> object:
-        if isinstance(value, int):
-            return max(1, value)
-        return value
-
-    @field_validator("billing_debt_cap_seconds", mode="before")
-    @classmethod
-    def _clamp_billing_debt_cap(cls, value: object) -> object:
-        if isinstance(value, int):
-            return max(0, value)
-        if isinstance(value, str):
-            try:
-                return max(0, int(value))
-            except ValueError:
-                return value
         return value
 
 

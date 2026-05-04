@@ -72,7 +72,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
 
 # Initialize logging once at module load
-setup_logging()
+setup_logging(service="api")
 
 # Default app instance for uvicorn (uvicorn --app-dir apps/backend fathom.api.app:app)
 app = create_app()

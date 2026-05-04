@@ -47,7 +47,7 @@ async def handle_polar_webhook(payload: bytes, headers: Mapping[str, str], setti
         event = polar.verify_and_parse_webhook(payload, headers, settings)
     except InvalidRequestError as exc:
         logger.warning(
-            "polar webhook rejected before processing",
+            "billing.webhook.rejected",
             extra={
                 "has_webhook_id": bool(headers.get("webhook-id") or headers.get("svix-id")),
                 "has_webhook_timestamp": bool(headers.get("webhook-timestamp") or headers.get("svix-timestamp")),
@@ -68,10 +68,10 @@ async def handle_polar_webhook(payload: bytes, headers: Mapping[str, str], setti
     )
     claimed = await claim_webhook_event_for_processing(admin_client, event_id=event_id)
     if not claimed:
-        logger.info("polar webhook duplicate ignored", extra={"event_id": event_id, "event_type": event_type})
+        logger.info("billing.webhook.duplicate_ignored", extra={"event_id": event_id, "event_type": event_type})
         return
     if not inserted:
-        logger.info("polar webhook retry claimed", extra={"event_id": event_id, "event_type": event_type})
+        logger.info("billing.webhook.retry_claimed", extra={"event_id": event_id, "event_type": event_type})
 
     try:
         if event_type == "order.paid":
@@ -91,9 +91,10 @@ async def handle_polar_webhook(payload: bytes, headers: Mapping[str, str], setti
         elif event_type in {"customer.created", "customer.state_changed"}:
             await _handle_customer_event(admin_client, data)
         else:
-            logger.info("polar webhook ignored", extra={"event_type": event_type})
+            logger.info("billing.webhook.ignored", extra={"event_type": event_type})
 
         await mark_webhook_event_processed(admin_client, event_id)
+        logger.info("billing.webhook.processed", extra={"event_id": event_id, "event_type": event_type})
     except Exception as exc:
         await mark_webhook_event_failed(admin_client, event_id, str(exc))
         raise
@@ -199,7 +200,7 @@ async def _handle_order_paid(admin_client: Any, order: dict[str, Any], settings:
             settings=settings,
         )
         logger.info(
-            "preserved billing order status while applying order.paid",
+            "billing.order.status_preserved",
             extra={"preserved_status_applied": True},
         )
         return
@@ -239,7 +240,7 @@ async def _handle_order_paid(admin_client: Any, order: dict[str, Any], settings:
         user_id=user_id,
         settings=settings,
     )
-    logger.info("polar order tracked")
+    logger.info("billing.order.tracked", extra={"user_id": user_id, "plan_type": plan_type})
 
 
 def _preserve_paid_event_status(order: dict[str, Any] | None) -> str | None:

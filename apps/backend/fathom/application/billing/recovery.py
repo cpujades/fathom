@@ -49,7 +49,7 @@ async def run_billing_maintenance(
         "reconciled_refund_pending_orders": reconciled_orders,
         "reconciled_subscriptions": reconciled_subscriptions,
     }
-    logger.info("billing maintenance pass", extra=summary)
+    logger.info("billing.maintenance.completed", extra=summary)
     return summary
 
 
@@ -74,7 +74,7 @@ async def reconcile_pending_pack_refunds(
             provider_order = await polar.get_order(settings, order_id=polar_order_id)
         except Exception:
             logger.warning(
-                "failed to reconcile refund_pending order",
+                "billing.refund_pending.reconcile_failed",
                 exc_info=True,
                 extra={"polar_order_id": polar_order_id},
             )
@@ -143,7 +143,7 @@ async def reconcile_subscription_entitlements(
             provider_subscription = await polar.get_subscription(settings, subscription_id=subscription_id)
         except Exception:
             logger.warning(
-                "failed to reconcile subscription entitlement",
+                "billing.subscription.reconcile_failed",
                 exc_info=True,
                 extra={"user_id": user_id, "polar_subscription_id": subscription_id},
             )

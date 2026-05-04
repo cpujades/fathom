@@ -14,6 +14,7 @@ import chrome from "../../../../components/app-chrome.module.css";
 import { getApiErrorMessage } from "../../../../lib/apiErrors";
 import { getAccountLabel } from "../../../../lib/accountLabel";
 import { formatExactDuration } from "../../../../lib/format";
+import { logger } from "../../../../lib/logger";
 import {
   cacheSessionSnapshot,
   evictSessionSnapshot,
@@ -262,6 +263,15 @@ export default function BriefingSessionPage() {
       } else {
         handleSessionSnapshot(event.data as BriefingSessionResponse);
       }
+
+      if (event.event === "session.ready" || event.event === "session.failed") {
+        const snapshot = event.data as BriefingSessionResponse;
+        logger.info("web.session_stream.terminal", {
+          session_id: sessionId,
+          state: snapshot.state,
+          event_id: event.id
+        });
+      }
     };
 
     const refreshSessionSnapshot = async (currentSessionId: string, blocking = false) => {
@@ -343,23 +353,45 @@ export default function BriefingSessionPage() {
             });
 
             if (!response.ok || !response.body) {
+              logger.warn("web.session_stream.open_failed", {
+                session_id: sessionId,
+                status_code: response.status,
+                last_event_id: lastEventIdRef.current
+              });
               throw new Error(`Unable to open the live session stream (${response.status}).`);
             }
 
             reconnectDelay = RECONNECT_BASE_DELAY_MS;
             setStreamHealth("live");
             setConnectionNotice(null);
+            logger.info("web.session_stream.opened", {
+              session_id: sessionId,
+              last_event_id: lastEventIdRef.current
+            });
             await readSessionStream<unknown>(response.body, async (event) => {
               await handleStreamEvent(event);
             });
 
             if (terminalStateRef.current || abortController.signal.aborted) {
+              logger.info("web.session_stream.closed", {
+                session_id: sessionId,
+                reason: terminalStateRef.current ? "terminal_state" : "aborted"
+              });
               return;
             }
           } catch (streamError) {
             if (abortController.signal.aborted) {
+              logger.info("web.session_stream.closed", {
+                session_id: sessionId,
+                reason: "aborted"
+              });
               return;
             }
+            logger.warn("web.session_stream.error", {
+              session_id: sessionId,
+              error_type: streamError instanceof Error ? streamError.name : "UnknownError",
+              message: streamError instanceof Error ? streamError.message : "Unknown stream error"
+            });
             setStreamHealth("reconnecting");
             setConnectionNotice(
               streamError instanceof Error && streamError.message.includes("live session stream")
@@ -373,6 +405,10 @@ export default function BriefingSessionPage() {
           }
 
           await sleep(reconnectDelay, abortController.signal);
+          logger.info("web.session_stream.reconnecting", {
+            session_id: sessionId,
+            delay_ms: reconnectDelay
+          });
           reconnectDelay = Math.min(reconnectDelay * 2, RECONNECT_MAX_DELAY_MS);
         }
       } finally {

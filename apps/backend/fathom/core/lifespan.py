@@ -16,19 +16,24 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     logger.info(
-        "API environment resolved. app_env=%s supabase_url=%s",
-        settings.app_env,
-        settings.supabase_url,
+        "api.started",
+        extra={
+            "app_env": settings.app_env,
+            "rate_limit_enabled": settings.rate_limit > 0,
+            "trust_proxy_headers": settings.trust_proxy_headers,
+        },
     )
     postgres_pool = None
     if settings.rate_limit > 0:
         postgres_pool = await create_postgres_pool(settings)
         app.state.postgres_pool = postgres_pool
-        logger.info("shared Postgres pool initialized for API rate limiting")
+        logger.info("api.postgres_pool.initialized", extra={"purpose": "rate_limiting"})
 
     try:
+        logger.info("api.ready")
         yield
     finally:
         if postgres_pool is not None:
             await postgres_pool.close()
-            logger.info("shared Postgres pool closed")
+            logger.info("api.postgres_pool.closed", extra={"purpose": "rate_limiting"})
+        logger.info("api.stopped")

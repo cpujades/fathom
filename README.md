@@ -72,18 +72,26 @@ Required backend variables are defined in [env.example](./env.example). The main
 - `SUPABASE_PUBLISHABLE_KEY`
 - `SUPABASE_SECRET_KEY`
 - `SUPABASE_DB_PASSWORD`
+- `SUPABASE_DB_USER`
+- `SUPABASE_DB_NAME`
 - `SUPABASE_DB_HOST`
 
-Optional backend deployment variables:
+Optional backend runtime variables:
 
 - `APP_ENV`
 - `CORS_ALLOW_ORIGINS`
 - `RATE_LIMIT`
 - `TRUST_PROXY_HEADERS`
-- `WORKER_MAX_CONCURRENT_JOBS`
-- `BILLING_DEBT_CAP_SECONDS`
 - `POLAR_CHECKOUT_RETURN_URL`
 - `POLAR_SERVER`
+
+`APP_ENV` defaults to `local`. Set `APP_ENV=production` for hosted API and worker deployments so readiness checks use the stricter production path.
+
+Optional backend logging variables:
+
+- `LOG_FORMAT`
+
+Leave logging variables unset locally unless you need JSON logs. For hosted production logs, set `LOG_FORMAT=json` so platforms can index fields like `request_id`, `job_id`, `status_code`, and `duration_ms`.
 
 ### Frontend
 

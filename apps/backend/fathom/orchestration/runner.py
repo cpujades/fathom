@@ -20,7 +20,7 @@ from fathom.core.constants import (
     SUPABASE_GROQ_BUCKET,
 )
 from fathom.core.errors import AppError
-from fathom.core.logging import log_context
+from fathom.core.logging import log_context, setup_logging
 from fathom.crud.supabase.jobs import (
     claim_next_job,
     mark_job_failed,
@@ -70,11 +70,7 @@ def _compute_backoff_seconds(base: int, attempt: int) -> int:
 
 
 def _log_step(label: str, *, duration_ms: float, **fields: object) -> None:
-    field_text = " ".join(f"{key}={value}" for key, value in fields.items())
-    if field_text:
-        logger.info("%s %.2fms %s", label, duration_ms, field_text)
-    else:
-        logger.info("%s %.2fms", label, duration_ms)
+    logger.info(label, extra={"duration_ms": round(duration_ms, 2), **fields})
 
 
 async def _resolve_transcript(
@@ -110,14 +106,17 @@ async def _resolve_transcript(
         transcript_text = transcript_row["transcript_text"]
         video_id = transcript_row.get("video_id") or parsed_video_id
         transcript_id = transcript_row["id"]
-        logger.info("transcript cache_hit=true transcript_id=%s video_id=%s", transcript_id, video_id)
+        logger.info(
+            "worker.transcript.cache_hit",
+            extra={"transcript_id": transcript_id, "video_id": video_id},
+        )
         return transcript_id, transcript_text, video_id or url_hash
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         step_start = time.perf_counter()
         download_result = await asyncio.to_thread(download_audio, url, tmp_dir)
         _log_step(
-            "download_audio",
+            "worker.audio.downloaded",
             duration_ms=(time.perf_counter() - step_start) * 1000,
             video_id=parsed_video_id,
             bytes=download_result.filesize_bytes,
@@ -149,7 +148,7 @@ async def _resolve_transcript(
                 GROQ_MODEL,
             )
             _log_step(
-                "transcribe_url",
+                "worker.transcript.created",
                 duration_ms=(time.perf_counter() - step_start) * 1000,
                 provider="groq",
             )
@@ -161,7 +160,7 @@ async def _resolve_transcript(
                     object_key=object_key,
                 )
             except Exception:
-                logger.warning("failed to cleanup groq audio object", exc_info=True)
+                logger.warning("worker.audio.cleanup_failed", exc_info=True)
 
     transcript_row = await create_transcript(
         admin_client,
@@ -189,7 +188,7 @@ async def _process_job(job: dict[str, Any], settings: Settings, admin_client: As
     job_start = time.perf_counter()
 
     with log_context(job_id=job_id, user_id=user_id, summary_id=requested_summary_id):
-        logger.info("job start")
+        logger.info("worker.job.started")
         await update_job_progress(
             admin_client,
             job_id=job_id,
@@ -226,7 +225,7 @@ async def _process_job(job: dict[str, Any], settings: Settings, admin_client: As
         )
         if cached_summary:
             cached_summary_id = cached_summary["id"]
-            logger.info("summary cache_hit=true summary_id=%s", cached_summary_id)
+            logger.info("worker.summary.cache_hit", extra={"summary_id": cached_summary_id})
             with log_context(summary_id=cached_summary_id):
                 await update_job_progress(
                     admin_client,
@@ -245,10 +244,11 @@ async def _process_job(job: dict[str, Any], settings: Settings, admin_client: As
                         settings=settings,
                     )
                 except Exception:
-                    logger.exception("usage recording failed for cached summary", extra={"job_id": job_id})
+                    logger.exception("worker.usage_recording.failed", extra={"job_id": job_id, "cache_hit": True})
             _log_step(
-                "job complete (cached summary)",
+                "worker.job.completed",
                 duration_ms=(time.perf_counter() - job_start) * 1000,
+                cache_hit=True,
             )
             return
 
@@ -310,7 +310,7 @@ async def _process_job(job: dict[str, Any], settings: Settings, admin_client: As
                     last_flush_time = time.monotonic()
                     if not first_visible_logged:
                         _log_step(
-                            "draft_first_visible",
+                            "worker.summary.first_visible",
                             duration_ms=(time.perf_counter() - job_start) * 1000,
                             chars=len(summary_markdown),
                         )
@@ -345,14 +345,14 @@ async def _process_job(job: dict[str, Any], settings: Settings, admin_client: As
             )
             if not first_visible_logged:
                 _log_step(
-                    "draft_first_visible",
+                    "worker.summary.first_visible",
                     duration_ms=(time.perf_counter() - job_start) * 1000,
                     chars=len(summary_markdown),
                 )
                 first_visible_logged = True
 
         _log_step(
-            "summarize_transcript",
+            "worker.summary.completed",
             duration_ms=(time.perf_counter() - step_start) * 1000,
             model=OPENROUTER_MODEL,
             streamed_chars=len(summary_markdown),
@@ -387,10 +387,11 @@ async def _process_job(job: dict[str, Any], settings: Settings, admin_client: As
                 settings=settings,
             )
         except Exception:
-            logger.exception("usage recording failed", extra={"job_id": job_id})
+            logger.exception("worker.usage_recording.failed", extra={"job_id": job_id, "cache_hit": False})
         _log_step(
-            "job complete",
+            "worker.job.completed",
             duration_ms=(time.perf_counter() - job_start) * 1000,
+            cache_hit=False,
         )
 
 
@@ -408,12 +409,12 @@ async def _handle_claimed_job(
     attempt_count = int(job.get("attempt_count") or 0)
     job_id = job.get("id")
     if not job_id:
-        logger.debug("claim_next_job returned an empty row; treating as no job available")
+        logger.debug("worker.job.claim_empty")
         return
 
-    logger.info("job claimed job_id=%s attempt=%s", job_id, attempt_count)
+    logger.info("worker.job.claimed", extra={"job_id": job_id, "attempt": attempt_count})
     if not job.get("url") or not job.get("user_id"):
-        logger.error("job missing required fields job_id=%s", job_id)
+        logger.error("worker.job.invalid_payload", extra={"job_id": job_id})
         await mark_job_failed(
             admin_client,
             job_id=job_id,
@@ -437,10 +438,8 @@ async def _handle_claimed_job(
     except Exception as exc:
         error_code, error_message = _extract_error(exc)
         logger.exception(
-            "job failed job_id=%s attempt=%s error_code=%s",
-            job_id,
-            attempt_count,
-            error_code,
+            "worker.job.failed",
+            extra={"job_id": job_id, "attempt": attempt_count, "error_code": error_code},
         )
         if attempt_count < WORKER_MAX_ATTEMPTS:
             backoff_seconds = _compute_backoff_seconds(WORKER_BACKOFF_BASE_SECONDS, attempt_count)
@@ -472,7 +471,7 @@ async def _wait_for_job_notification(
     except TimeoutError:
         return False
     except Exception as exc:
-        logger.warning("job_created listen failed, falling back to idle sleep", exc_info=exc)
+        logger.warning("worker.job_notification.listen_failed", exc_info=exc)
         return False
 
 
@@ -483,7 +482,7 @@ def _drain_completed_tasks(tasks: set[asyncio.Task[None]]) -> None:
         try:
             task.result()
         except Exception:
-            logger.exception("worker task crashed unexpectedly")
+            logger.exception("worker.task.crashed")
 
 
 async def _run_scheduled_maintenance(
@@ -497,7 +496,7 @@ async def _run_scheduled_maintenance(
     if now - last_sweep_at >= WORKER_SWEEP_INTERVAL_SECONDS:
         requeued_jobs = await requeue_stale_jobs(admin_client, stale_after_seconds=WORKER_STALE_AFTER_SECONDS)
         logger.info(
-            "worker stale-job sweep complete",
+            "worker.stale_job_sweep.completed",
             extra={
                 "stale_after_seconds": WORKER_STALE_AFTER_SECONDS,
                 "requeued_jobs": requeued_jobs,
@@ -523,6 +522,7 @@ async def _run_loop(settings: Settings) -> None:
     while True:
         try:
             async with listen_for_notifications(settings, "job_created") as queue:
+                logger.info("worker.job_listener.ready", extra={"channel": "job_created"})
                 while True:
                     _drain_completed_tasks(running_tasks)
                     last_sweep_at, last_billing_maintenance_at = await _run_scheduled_maintenance(
@@ -548,13 +548,17 @@ async def _run_loop(settings: Settings) -> None:
 
                     await asyncio.sleep(WORKER_IDLE_SLEEP_SECONDS)
         except Exception:
-            logger.warning("job_created listener failed, reconnecting", exc_info=True)
+            logger.warning("worker.job_listener.reconnecting", extra={"channel": "job_created"}, exc_info=True)
             await asyncio.sleep(WORKER_IDLE_SLEEP_SECONDS)
 
 
 def main() -> None:
+    setup_logging(service="worker")
     settings = get_settings()
-    logger.info("Starting worker loop")
+    logger.info(
+        "worker.started",
+        extra={"max_concurrent_jobs": settings.worker_max_concurrent_jobs},
+    )
     asyncio.run(_run_loop(settings))
 
 
