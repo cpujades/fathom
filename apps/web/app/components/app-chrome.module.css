@@ -17,7 +17,7 @@
   --app-shadow: 0 26px 72px rgba(18, 28, 23, 0.14);
   min-height: 100vh;
   position: relative;
-  overflow: hidden;
+  overflow-x: clip;
   background:
     radial-gradient(1200px 640px at 10% -10%, rgba(40, 92, 70, 0.14), transparent 60%),
     radial-gradient(900px 520px at 100% 100%, rgba(142, 123, 73, 0.1), transparent 58%),
@@ -41,7 +41,7 @@
 .mainFrame {
   position: relative;
   z-index: 1;
-  width: min(1160px, 96vw);
+  width: min(1160px, calc(100% - 2rem));
   margin: 0 auto;
   padding: 1.2rem 0 3rem;
   display: grid;
@@ -143,6 +143,7 @@
   justify-content: space-between;
   align-items: flex-start;
   gap: 0.9rem;
+  min-width: 0;
 }
 
 .surfaceTitle {
@@ -561,8 +562,20 @@
 
 @media (max-width: 720px) {
   .mainFrame {
-    width: min(1160px, 94vw);
+    width: min(1160px, calc(100% - 1rem));
     padding-top: 1rem;
+  }
+
+  .surface,
+  .surfaceStrong,
+  .surfaceMuted,
+  .notice {
+    padding: 1rem;
+    border-radius: 18px;
+  }
+
+  .surfaceHeader {
+    flex-direction: column;
   }
 
   .inputRow {
@@ -585,6 +598,25 @@
   .heroActions > *,
   .actionRow > * {
     width: 100%;
+  }
+}
+
+@media (max-width: 420px) {
+  .mainFrame {
+    width: min(1160px, calc(100% - 0.7rem));
+  }
+
+  .heroTitle {
+    max-width: none;
+  }
+
+  .statusPill,
+  .statusPillMuted,
+  .statusPillWarning,
+  .statusPillSuccess,
+  .statusPillDanger {
+    white-space: normal;
+    text-align: center;
   }
 }
 

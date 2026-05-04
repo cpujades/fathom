@@ -126,6 +126,7 @@
   font-size: 0.84rem;
   font-weight: 700;
   letter-spacing: 0.01em;
+  white-space: nowrap;
   transition:
     background-color 180ms ease,
     border-color 220ms ease,
@@ -453,6 +454,43 @@
 }
 
 @media (max-width: 560px) {
+  .container,
+  .main {
+    width: min(1020px, calc(100% - 1.25rem));
+  }
+
+  .headerInner {
+    min-height: 64px;
+    gap: 0.65rem;
+    border-radius: 28px;
+  }
+
+  .brand {
+    gap: 0.55rem;
+  }
+
+  .brandMark {
+    width: 26px;
+    height: 26px;
+  }
+
+  .brandMeta {
+    max-width: 7.4rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .actions {
+    padding: 0.14rem;
+  }
+
+  .button {
+    min-height: 40px;
+    padding-inline: 0.78rem;
+    font-size: 0.8rem;
+  }
+
   .hero {
     padding: 1rem;
   }
@@ -465,5 +503,24 @@
   .table th:nth-child(3),
   .table td:nth-child(3) {
     display: none;
+  }
+}
+
+@media (max-width: 360px) {
+  .headerInner {
+    padding: 0.5rem;
+  }
+
+  .brandMeta {
+    display: none;
+  }
+
+  .button {
+    padding-inline: 0.64rem;
+    font-size: 0.76rem;
+  }
+
+  .heroIntro h1 {
+    font-size: 1.86rem;
   }
 }

@@ -278,6 +278,7 @@
   .libraryRowHeader {
     flex-direction: column;
     align-items: stretch;
+    gap: 0.8rem;
   }
 
   .rowActions {
@@ -292,5 +293,29 @@
   .actionSet > *,
   .confirmActions > * {
     width: 100%;
+  }
+}
+
+@media (max-width: 420px) {
+  .librarySurface {
+    padding: 0.9rem;
+  }
+
+  .libraryRowBody {
+    padding: 0.85rem;
+  }
+
+  .libraryRowMain {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .libraryMedia,
+  .libraryThumbnailFrame {
+    width: min(132px, 100%);
+  }
+
+  .libraryTitleLink {
+    font-size: 0.95rem;
   }
 }

@@ -507,3 +507,37 @@
     grid-template-columns: 1fr;
   }
 }
+
+@media (max-width: 520px) {
+  .readerCard {
+    padding: 1rem;
+  }
+
+  .sourceCard {
+    padding: 0.9rem;
+  }
+
+  .sourceHeader {
+    grid-template-columns: 1fr;
+  }
+
+  .sourceMedia,
+  .sourceThumbnailFrame {
+    width: min(150px, 100%);
+  }
+
+  .sourceHeaderBody {
+    width: 100%;
+  }
+
+  .markdown {
+    font-size: 0.94rem;
+    line-height: 1.68;
+  }
+
+  .markdown table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+}

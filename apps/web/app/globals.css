@@ -78,10 +78,12 @@
 html {
   scroll-behavior: smooth;
   scroll-padding-top: 6.25rem;
+  overflow-x: clip;
 }
 
 body {
   margin: 0;
+  overflow-x: clip;
   background: var(--bg-0);
   color: var(--text-1);
   line-height: 1.6;

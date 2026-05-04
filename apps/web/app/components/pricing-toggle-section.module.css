@@ -457,12 +457,33 @@
     min-height: 0;
   }
 
-  .cardGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .cardGrid,
+  .cardGrid[data-mode="subscriptions"],
+  .cardGrid[data-mode="packs"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .cardGrid[data-mode="subscriptions"] > *,
   .cardGrid[data-mode="packs"] > * {
+    grid-column: span 1;
+  }
+
+  .cardGrid[data-mode="subscriptions"] > .planCardFeatured {
+    grid-column: 1 / -1;
+    order: -1;
+  }
+}
+
+@media (max-width: 760px) {
+  .cardGrid,
+  .cardGrid[data-mode="subscriptions"],
+  .cardGrid[data-mode="packs"] {
+    grid-template-columns: 1fr;
+  }
+
+  .cardGrid[data-mode="subscriptions"] > *,
+  .cardGrid[data-mode="packs"] > *,
+  .cardGrid[data-mode="subscriptions"] > .planCardFeatured {
     grid-column: span 1;
   }
 }
@@ -475,10 +496,26 @@
   .toggleButton,
   .toggleActive {
     flex: 1;
+    min-width: 0;
+    padding-inline: 0.55rem;
   }
 
   .cardGrid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 380px) {
+  .toggleButton,
+  .toggleActive {
+    font-size: 0.76rem;
+  }
+
+  .planCard,
+  .planCardFeatured,
+  .notesPanel {
+    border-radius: 18px;
+    padding: 0.9rem;
   }
 }
 

@@ -224,4 +224,32 @@
   .planGrid {
     gap: 0.95rem;
   }
+
+  .packActions,
+  .packActions > * {
+    width: 100%;
+  }
+}
+
+@media (max-width: 420px) {
+  .accessSection,
+  .offerSection,
+  .detailsSection {
+    padding: 0.95rem;
+  }
+
+  .offerSwitch {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: end;
+  }
+
+  .offerSwitchButton {
+    text-align: left;
+  }
+
+  .planCard {
+    padding: 1rem;
+    border-radius: 18px;
+  }
 }

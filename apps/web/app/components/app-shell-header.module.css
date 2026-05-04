@@ -8,7 +8,7 @@
 }
 
 .inner {
-  width: min(980px, 94vw);
+  width: min(980px, calc(100% - 1.5rem));
   margin: 0 auto;
   min-height: 68px;
   display: grid;
@@ -89,6 +89,7 @@
   justify-content: center;
   gap: 0.3rem;
   min-width: 0;
+  scrollbar-width: none;
 }
 
 .navLink {
@@ -299,7 +300,9 @@
 
 @media (max-width: 640px) {
   .inner {
-    width: min(1160px, 94vw);
+    width: min(1160px, calc(100% - 1rem));
+    min-height: 62px;
+    gap: 0.5rem;
   }
 
   .utilityCluster {
@@ -315,6 +318,35 @@
   }
 
   .profilePopover {
-    min-width: 200px;
+    min-width: min(220px, calc(100vw - 1.5rem));
+  }
+}
+
+@media (max-width: 420px) {
+  .brand {
+    gap: 0.52rem;
+  }
+
+  .brandMark {
+    width: 26px;
+    height: 26px;
+  }
+
+  .brandMeta {
+    max-width: 7.5rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .nav {
+    gap: 0.18rem;
+    padding-bottom: 0.16rem;
+  }
+
+  .navLink {
+    margin: 0 0.18rem;
+    padding: 0.34rem 0.08rem;
+    font-size: 0.8rem;
   }
 }

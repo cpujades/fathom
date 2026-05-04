@@ -358,8 +358,10 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
-            /** Duration Seconds */
-            duration_seconds?: number | null;
+            /** Source Duration Seconds */
+            source_duration_seconds?: number | null;
+            /** Source Thumbnail Url */
+            source_thumbnail_url?: string | null;
             /** Session Path */
             session_path: string;
         };
