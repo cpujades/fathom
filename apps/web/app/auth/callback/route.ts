@@ -6,12 +6,16 @@ import { createMiddlewareSupabaseClient } from "../../lib/supabaseServer";
 import { buildSignInPath, getSafeNextPath, getSiteUrl } from "../../lib/url";
 
 const buildRedirectUrl = (request: NextRequest, path: string): URL => {
-  return new URL(path, getSiteUrl() || request.url);
+  try {
+    return new URL(path, getSiteUrl());
+  } catch {
+    return new URL(path, request.url);
+  }
 };
 
-const buildAuthErrorRedirect = (request: NextRequest, nextPath: string, message: string): NextResponse => {
+const buildAuthErrorRedirect = (request: NextRequest, nextPath: string, authErrorCode: string): NextResponse => {
   const redirectUrl = buildRedirectUrl(request, buildSignInPath(nextPath));
-  redirectUrl.searchParams.set("auth_error", message);
+  redirectUrl.searchParams.set("auth_error", authErrorCode);
   return NextResponse.redirect(redirectUrl);
 };
 
@@ -32,11 +36,10 @@ export async function GET(request: NextRequest) {
   const tokenHash = requestUrl.searchParams.get("token_hash");
   const type = requestUrl.searchParams.get("type");
   const error = requestUrl.searchParams.get("error");
-  const errorDescription = requestUrl.searchParams.get("error_description");
   const nextPath = getSafeNextPath(requestUrl.searchParams.get("next"));
 
   if (error) {
-    return buildAuthErrorRedirect(request, nextPath, errorDescription || "Authentication failed.");
+    return buildAuthErrorRedirect(request, nextPath, "authentication_failed");
   }
 
   const redirectUrl = buildRedirectUrl(request, nextPath);
@@ -45,7 +48,7 @@ export async function GET(request: NextRequest) {
 
   if (tokenHash || type) {
     if (!tokenHash || !isEmailOtpType(type)) {
-      return buildAuthErrorRedirect(request, nextPath, "The email sign-in link is invalid. Please request a new one.");
+      return buildAuthErrorRedirect(request, nextPath, "invalid_email_link");
     }
 
     const { error: verifyError } = await supabase.auth.verifyOtp({
@@ -54,20 +57,20 @@ export async function GET(request: NextRequest) {
     });
 
     if (verifyError) {
-      return buildAuthErrorRedirect(request, nextPath, verifyError.message);
+      return buildAuthErrorRedirect(request, nextPath, "verify_link_failed");
     }
 
     return response;
   }
 
   if (!code) {
-    return buildAuthErrorRedirect(request, nextPath, "No authentication code was returned. Please sign in again.");
+    return buildAuthErrorRedirect(request, nextPath, "missing_auth_code");
   }
 
   const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
 
   if (exchangeError) {
-    return buildAuthErrorRedirect(request, nextPath, exchangeError.message);
+    return buildAuthErrorRedirect(request, nextPath, "session_exchange_failed");
   }
 
   return response;

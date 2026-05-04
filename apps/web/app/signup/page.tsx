@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import styles from "../auth/auth.module.css";
-import { mapAuthError } from "../lib/authErrors";
+import { mapAuthCallbackErrorCode, mapAuthError } from "../lib/authErrors";
 import { getSupabaseClient } from "../lib/supabaseClient";
 import { buildAuthCallbackUrl, buildSignInPath, getSafeNextPath } from "../lib/url";
 
@@ -22,7 +22,7 @@ export default function SignUpPage() {
     setNextPath(getSafeNextPath(params.get("next")));
     setIntent(params.get("intent"));
     setPlan(params.get("plan"));
-    setError(params.get("auth_error"));
+    setError(mapAuthCallbackErrorCode(params.get("auth_error")));
   }, []);
 
   const callbackUrl = useMemo(() => {

@@ -25,6 +25,14 @@ const AUTH_ERROR_MESSAGES: Record<string, string> = {
   user_banned: "This account has been disabled. Contact support."
 };
 
+const AUTH_CALLBACK_ERROR_MESSAGES: Record<string, string> = {
+  authentication_failed: "Authentication failed. Please try again.",
+  invalid_email_link: "The email sign-in link is invalid or expired. Please request a new one.",
+  missing_auth_code: "No authentication code was returned. Please sign in again.",
+  verify_link_failed: "We could not verify your sign-in link. Please request a new one.",
+  session_exchange_failed: "We could not complete sign-in. Please try again."
+};
+
 const mapAuthError = (error: AuthErrorShape | null, fallback: string): string => {
   if (!error) {
     return fallback;
@@ -46,5 +54,13 @@ const mapAuthError = (error: AuthErrorShape | null, fallback: string): string =>
   return fallback;
 };
 
-export { mapAuthError };
+const mapAuthCallbackErrorCode = (code: string | null | undefined): string | null => {
+  if (!code) {
+    return null;
+  }
+
+  return AUTH_CALLBACK_ERROR_MESSAGES[code] ?? AUTH_CALLBACK_ERROR_MESSAGES.authentication_failed;
+};
+
+export { mapAuthCallbackErrorCode, mapAuthError };
 export type { AuthErrorShape };

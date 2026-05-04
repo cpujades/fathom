@@ -1,19 +1,23 @@
+import { getOptionalPublicUrlEnv } from "@fathom/api-client/publicEnv";
+
 const DEFAULT_NEXT_PATH = "/app";
+const DEFAULT_SITE_URL = "http://localhost:3000";
 
 const isAllowedNextPathname = (pathname: string): boolean => {
   return pathname === DEFAULT_NEXT_PATH || pathname.startsWith(`${DEFAULT_NEXT_PATH}/`);
 };
 
 export const getSiteUrl = (): string => {
-  if (process.env.NEXT_PUBLIC_SITE_URL) {
-    return process.env.NEXT_PUBLIC_SITE_URL;
+  const configuredSiteUrl = getOptionalPublicUrlEnv("NEXT_PUBLIC_SITE_URL", process.env.NEXT_PUBLIC_SITE_URL);
+  if (configuredSiteUrl) {
+    return configuredSiteUrl;
   }
 
   if (typeof window !== "undefined") {
     return window.location.origin;
   }
 
-  return "http://localhost:3000";
+  return DEFAULT_SITE_URL;
 };
 
 export const getSafeNextPath = (candidate: string | null | undefined, fallback = DEFAULT_NEXT_PATH): string => {
