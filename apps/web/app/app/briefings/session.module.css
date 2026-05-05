@@ -50,6 +50,370 @@
   padding: 1.3rem;
 }
 
+.sessionHero {
+  border-bottom: 1px solid rgba(36, 58, 47, 0.1);
+  padding-bottom: 1rem;
+}
+
+.sessionHeroGrid {
+  display: grid;
+  grid-template-columns: 148px minmax(0, 1fr);
+  gap: 1rem;
+  align-items: center;
+}
+
+.heroSourceMedia {
+  width: 148px;
+}
+
+.heroThumbnailFrame {
+  position: relative;
+  width: 148px;
+  aspect-ratio: 16 / 9;
+}
+
+.heroThumbnail {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 16px;
+  background: rgba(233, 227, 216, 0.9);
+  box-shadow: 0 16px 34px rgba(18, 28, 23, 0.12);
+}
+
+.heroCopy {
+  min-width: 0;
+}
+
+.heroTopline {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.sessionTitle {
+  margin: 0.32rem 0 0;
+  max-width: 26ch;
+  color: #18211d;
+  font-family: var(--font-body), sans-serif;
+  font-size: clamp(1.7rem, 3.3vw, 3rem);
+  font-weight: 680;
+  letter-spacing: 0;
+  line-height: 1.04;
+  overflow-wrap: anywhere;
+}
+
+.sessionDeck {
+  max-width: 66ch;
+  margin: 0.45rem 0 0;
+  color: #435247;
+  font-size: 0.98rem;
+  line-height: 1.58;
+}
+
+.sourceMetaLine {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  margin-top: 0.6rem;
+  color: #435247;
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.sourceMetaLine span {
+  position: relative;
+}
+
+.sourceMetaLine span:not(:first-child)::before {
+  content: "";
+  position: absolute;
+  left: -0.44rem;
+  top: 0.54rem;
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(67, 82, 71, 0.35);
+}
+
+.heroActionBar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.58rem;
+  margin-top: 0.9rem;
+}
+
+.heroActionBar > * {
+  min-width: 150px;
+}
+
+.heroPdfAction {
+  min-width: 150px;
+}
+
+.heroUtilityLinks {
+  width: auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.textActionLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  min-height: 42px;
+  margin: -0.38rem -0.34rem;
+  padding: 0.38rem 0.34rem;
+  background: transparent;
+  color: #435247;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 750;
+  line-height: 1.25;
+  text-decoration: underline;
+  text-underline-offset: 0.18rem;
+  cursor: pointer;
+}
+
+.textActionLink:hover {
+  color: #17382b;
+}
+
+.removeTextButton {
+  color: #9b3a36;
+}
+
+.removeTextButton:hover {
+  color: #7b2c2a;
+}
+
+.newBriefingLink {
+  margin-left: auto;
+}
+
+.desktopActionCard {
+  display: grid;
+  gap: 0.28rem;
+  justify-items: start;
+  padding: 0.1rem 0.95rem;
+}
+
+.sidebarDeleteConfirm {
+  display: grid;
+  gap: 0.45rem;
+  color: #7a3835;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.sidebarDeleteConfirm p {
+  margin: 0;
+}
+
+.sidebarDeleteActions {
+  display: flex;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.briefingLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(250px, 320px);
+  gap: 1rem;
+  align-items: start;
+}
+
+.briefingReader {
+  min-width: 0;
+  display: grid;
+  gap: 0.9rem;
+}
+
+.briefingSide {
+  position: sticky;
+  top: 5.4rem;
+  min-width: 0;
+  display: grid;
+  gap: 0.8rem;
+}
+
+.briefingFooter {
+  grid-column: 1 / -1;
+  display: grid;
+  justify-items: center;
+  gap: 1rem;
+  padding: 0.85rem 0 0.15rem;
+}
+
+.footerPrimaryRow,
+.footerNavigationRow,
+.footerDangerRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.footerNavigationRow {
+  gap: 1.25rem;
+}
+
+.footerDangerRow {
+  margin-top: -0.05rem;
+}
+
+.footerPdfAction {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  border: 1px solid rgba(36, 58, 47, 0.16);
+  border-radius: 999px;
+  padding: 0.62rem 1.25rem;
+  background: rgba(248, 244, 236, 0.76);
+  color: #17382b;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 760;
+  line-height: 1.2;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.footerPdfAction:disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
+}
+
+.footerDeleteConfirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  color: #7a3835;
+  font-size: 0.86rem;
+}
+
+@media (min-width: 721px) {
+  .sessionTitle {
+    font-size: clamp(1.85rem, 3vw, 2.55rem);
+    line-height: 1.08;
+  }
+
+  .heroPdfAction {
+    min-width: 170px;
+    min-height: 46px;
+    padding-inline: 1.2rem;
+  }
+
+  .newBriefingLink {
+    display: none;
+  }
+
+  .briefingFooter {
+    display: none;
+  }
+}
+
+.summaryPanel,
+.takeawayPanel,
+.articleSection,
+.referenceSection {
+  scroll-margin-top: 1rem;
+}
+
+.summaryPanel {
+  padding: 1.35rem;
+}
+
+.takeawayPanel,
+.articleSection {
+  padding: 1.2rem 1.25rem;
+}
+
+.sectionHeader {
+  display: grid;
+  gap: 0.22rem;
+  margin-bottom: 0.6rem;
+}
+
+.sectionKicker {
+  margin: 0;
+  color: #667267;
+  text-transform: uppercase;
+  letter-spacing: 0;
+  font-size: 0.72rem;
+  font-weight: 750;
+}
+
+.sectionTitle,
+.articleSectionTitle {
+  margin: 0;
+  color: #18211d;
+  letter-spacing: 0;
+  line-height: 1.14;
+}
+
+.sectionTitle {
+  font-size: 1.22rem;
+  font-weight: 680;
+}
+
+.articleSectionTitle {
+  padding-bottom: 0.62rem;
+  border-bottom: 1px solid rgba(36, 58, 47, 0.1);
+  font-size: 1.26rem;
+  font-weight: 680;
+}
+
+.articleStack {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.deepReadSection {
+  background: rgba(250, 248, 242, 0.68);
+  box-shadow: none;
+}
+
+.contentsCard {
+  display: grid;
+  gap: 0.72rem;
+}
+
+.contentsList {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.contentsList a {
+  display: block;
+  border-radius: 12px;
+  padding: 0.45rem 0.55rem;
+  color: #435247;
+  font-size: 0.84rem;
+  font-weight: 650;
+  line-height: 1.35;
+  text-decoration: none;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+.contentsList a:hover {
+  background: rgba(40, 92, 70, 0.08);
+  color: #17382b;
+}
+
 .sourceCard {
   padding: 1rem;
   display: grid;
@@ -163,6 +527,76 @@
 }
 
 @media (max-width: 720px) {
+  .sessionHeroGrid {
+    grid-template-columns: 112px minmax(0, 1fr);
+    gap: 0.85rem;
+    align-items: start;
+  }
+
+  .heroSourceMedia,
+  .heroThumbnailFrame {
+    width: 112px;
+  }
+
+  .sessionTitle {
+    font-size: 1.42rem;
+    line-height: 1.16;
+  }
+
+  .heroPdfAction {
+    min-width: 0;
+  }
+
+  .sessionDeck {
+    font-size: 0.92rem;
+    line-height: 1.55;
+  }
+
+  .heroActionBar {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: center;
+  }
+
+  .heroActionBar > * {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .heroUtilityLinks {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .newBriefingLink {
+    display: inline-flex;
+  }
+
+  .briefingLayout {
+    grid-template-columns: 1fr;
+  }
+
+  .contentsCard {
+    display: none;
+  }
+
+  .briefingSide {
+    position: static;
+  }
+
+  .desktopActionCard {
+    display: none;
+  }
+
+  .summaryPanel {
+    padding: 1.12rem;
+  }
+
+  .takeawayPanel,
+  .articleSection {
+    padding: 1rem;
+  }
+
   .sourceHeader {
     grid-template-columns: 96px minmax(0, 1fr);
     gap: 0.75rem;
@@ -179,26 +613,29 @@
 }
 
 .liveReaderBanner {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.8rem;
-  align-items: flex-start;
-  margin-bottom: 1rem;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid rgba(36, 58, 47, 0.1);
+  width: min(560px, 100%);
+  display: grid;
+  justify-items: center;
+  gap: 0.58rem;
+  margin: 0 auto 0.1rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid rgba(36, 58, 47, 0.1);
+  border-radius: 20px;
+  background: rgba(250, 248, 242, 0.66);
+  text-align: center;
 }
 
 .liveReaderMeta {
   display: grid;
-  gap: 0.55rem;
+  justify-items: center;
+  gap: 0.42rem;
 }
 
 .liveProgressLabel {
   color: #667267;
-  font-size: 0.76rem;
+  font-size: 0.78rem;
   font-weight: 700;
   letter-spacing: 0;
-  text-transform: uppercase;
 }
 
 .actionStack {
@@ -345,7 +782,7 @@
 
 .markdown {
   color: #2a3731;
-  line-height: 1.74;
+  line-height: 1.68;
   font-size: 0.98rem;
   max-width: 72ch;
   overflow-wrap: anywhere;
@@ -355,17 +792,17 @@
 .markdown h2,
 .markdown h3 {
   color: #18211d;
-  margin-top: 1.7rem;
+  margin-top: 1.35rem;
   letter-spacing: 0;
   overflow-wrap: anywhere;
 }
 
 .markdown h1 {
-  font-size: 1.6rem;
+  font-size: 1.42rem;
 }
 
 .markdown h2 {
-  font-size: 1.26rem;
+  font-size: 1.16rem;
   padding-bottom: 0.38rem;
   border-bottom: 1px solid rgba(36, 58, 47, 0.12);
 }
@@ -376,8 +813,78 @@
 }
 
 .markdown p {
-  margin: 0.84rem 0;
+  margin: 0.72rem 0;
 }
+
+.summaryMarkdown {
+  color: #21342b;
+  font-size: 1.05rem;
+  line-height: 1.64;
+}
+
+.summaryMarkdown p {
+  margin: 0.45rem 0 0;
+}
+
+.summaryMarkdown strong:first-child {
+  font-size: 1.12em;
+  color: #17382b;
+}
+
+.takeawayMarkdown ul,
+.takeawayMarkdown ol {
+  display: grid;
+  gap: 0;
+  padding-left: 0;
+  list-style: none;
+  counter-reset: takeaway;
+}
+
+.takeawayMarkdown li {
+  position: relative;
+  counter-increment: takeaway;
+  margin: 0;
+  padding: 0.82rem 0 0.82rem 2.55rem;
+  border-top: 1px solid rgba(36, 58, 47, 0.1);
+  background: transparent;
+}
+
+.takeawayMarkdown li:first-child {
+  border-top: 0;
+}
+
+.takeawayMarkdown li::before {
+  content: counter(takeaway, decimal-leading-zero);
+  position: absolute;
+  left: 0;
+  top: 0.9rem;
+  color: #8e7b49;
+  font-size: 0.74rem;
+  font-weight: 850;
+  line-height: 1.4;
+}
+
+.takeawayMarkdown strong {
+  display: block;
+  margin-bottom: 0.16rem;
+  font-weight: 800;
+}
+
+.deepReadMarkdown {
+  max-width: 66ch;
+}
+
+.deepReadMarkdown p {
+  margin: 0.82rem 0;
+}
+
+.deepReadMarkdown h3 {
+  margin-top: 1.15rem;
+  padding-top: 0.95rem;
+  border-top: 1px solid rgba(36, 58, 47, 0.08);
+  color: #17382b;
+}
+
 
 .markdown strong,
 .markdown em {
@@ -455,6 +962,17 @@
   text-underline-offset: 0.18em;
 }
 
+.referenceSection {
+  padding: 0.9rem 1.05rem;
+}
+
+.referenceSection summary {
+  cursor: pointer;
+  color: #18211d;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
 .streamingCursor {
   display: inline-block;
   width: 0.5rem;
@@ -502,8 +1020,7 @@
 }
 
 @media (max-width: 720px) {
-  .loadingTop,
-  .liveReaderBanner {
+  .loadingTop {
     flex-direction: column;
   }
 
@@ -513,6 +1030,46 @@
 }
 
 @media (max-width: 520px) {
+  .sessionHero {
+    padding-bottom: 0.8rem;
+  }
+
+  .sessionHeroGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .heroActionBar {
+    grid-template-columns: 1fr;
+  }
+
+  .heroUtilityLinks {
+    justify-content: space-between;
+  }
+
+  .heroSourceMedia,
+  .heroThumbnailFrame {
+    width: min(168px, 56vw);
+  }
+
+  .heroTopline {
+    align-items: flex-start;
+  }
+
+  .sessionTitle {
+    font-size: 1.28rem;
+    line-height: 1.18;
+    max-width: none;
+  }
+
+  .sourceMetaLine {
+    display: grid;
+    gap: 0.2rem;
+  }
+
+  .sourceMetaLine span::before {
+    display: none;
+  }
+
   .readerCard {
     padding: 1rem;
   }
@@ -537,6 +1094,28 @@
   .markdown {
     font-size: 0.94rem;
     line-height: 1.68;
+  }
+
+  .summaryMarkdown {
+    font-size: 0.98rem;
+  }
+
+  .articleSectionTitle {
+    font-size: 1.12rem;
+  }
+
+  .takeawayMarkdown li {
+    padding-left: 2.25rem;
+  }
+
+  .briefingFooter {
+    gap: 1.05rem;
+  }
+
+  .footerPdfAction {
+    display: inline-flex;
+    width: 100%;
+    max-width: 260px;
   }
 
   .markdown pre {

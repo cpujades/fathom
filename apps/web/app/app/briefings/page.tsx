@@ -384,7 +384,7 @@ export default function BriefingsPage() {
                                 <p className={styles.confirmText}>Remove this briefing from history?</p>
                                 <div className={styles.confirmActions}>
                                   <button
-                                    className={chrome.ghostButton}
+                                    className={styles.confirmCancelButton}
                                     type="button"
                                     onClick={() => setConfirmDeleteSessionId(null)}
                                   >
