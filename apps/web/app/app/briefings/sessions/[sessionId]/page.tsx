@@ -91,6 +91,23 @@ type SessionStatusPayload = {
 
 type StreamHealth = "live" | "reconnecting";
 
+type ParsedBriefingSection = {
+  id: string;
+  level: number;
+  title: string;
+  content: string;
+};
+
+type ParsedBriefing = {
+  title: string;
+  summary: string;
+  takeaways: string;
+  articleSections: ParsedBriefingSection[];
+  references: ParsedBriefingSection | null;
+};
+
+type BriefingSectionKind = "deepRead" | "standard";
+
 export default function BriefingSessionPage() {
   const router = useRouter();
   const params = useParams();
@@ -530,22 +547,26 @@ export default function BriefingSessionPage() {
   const isStreaming = Boolean(session && !isReady && !isFailed);
   const rawMarkdown = streamedMarkdown || session?.briefing_markdown || "";
   const markdownToRender = removeGenericBriefingHeading(rawMarkdown);
+  const parsedBriefing = useMemo(
+    () => parseBriefingMarkdown(markdownToRender, session?.source_title),
+    [markdownToRender, session?.source_title]
+  );
   const hasMarkdown = Boolean(markdownToRender);
   const clampedProgress = Math.max(0, Math.min(progress, 100));
   const stageLabel = session ? STATE_LABELS[session.state] : "Preparing your briefing";
   const phaseHint = session ? STATE_HINTS[session.state] : "Connecting you to live updates and checking the current session.";
   const headline = isReady
-    ? "Your briefing"
+    ? parsedBriefing.title
     : isFailed
       ? "This briefing failed"
       : hasMarkdown
-        ? "Drafting your briefing"
+        ? parsedBriefing.title
         : "Building your briefing";
-  const subhead = isReady
-    ? "Read it now, export the PDF, or start another one."
-    : isFailed
+  const subhead = isFailed
       ? "The run stopped before the final briefing was delivered."
-      : "Talven is working through the source and shaping the briefing.";
+      : !isReady
+        ? "Talven is working through the source and shaping the briefing."
+        : "";
   const showProgressPanel = initialSnapshotLoaded && !hasMarkdown && !isReady && !isFailed;
   const creditCtaMessage = session?.error_message ?? sessionLoadError;
   const showCreditCta = Boolean(creditCtaMessage && isCreditError(creditCtaMessage));
@@ -559,28 +580,95 @@ export default function BriefingSessionPage() {
       ? "Download PDF"
       : "Generate PDF";
   const liveReaderMessage = session ? STATE_HINTS[session.state] : null;
-  const sourceActionLabel = session?.source_type === "youtube" ? "Open video" : "Open source";
+  const sourceUrl = session?.canonical_source_url ?? session?.submitted_url ?? "";
+  const sourceActionLabel = session?.source_type === "youtube" ? "Original video" : "Original source";
+  const sourceLabel = session?.source_type === "youtube" ? "YouTube" : "Source";
+  const sourceDurationLabel = session?.source_duration_seconds ? formatExactDuration(session.source_duration_seconds) : null;
+  const hasTopActions = canShowReader && !isFailed;
+  const heroEyebrow = isFailed ? "Briefing failed" : !isReady ? stageLabel : "";
+  const showHeroTopline = Boolean(heroEyebrow || isFailed || showHeroLivePill);
+  const navigationSections = [
+    parsedBriefing.summary ? { id: "briefing-summary", label: "Summary" } : null,
+    parsedBriefing.takeaways ? { id: "briefing-takeaways", label: "Takeaways" } : null,
+    ...parsedBriefing.articleSections.map((section) => ({ id: section.id, label: section.title })),
+    parsedBriefing.references ? { id: parsedBriefing.references.id, label: "References" } : null
+  ].filter((item): item is { id: string; label: string } => Boolean(item));
 
   return (
     <div className={chrome.pageFrame}>
       <AppShellHeader
-        active={null}
+        active="briefings"
         remainingSeconds={remainingSeconds}
         accountLabel={getAccountLabel(user)}
         onSignOut={signOut}
       />
 
       <main className={chrome.mainFrame}>
-        <section className={chrome.heroBlock}>
-          <div>
-            <p className={chrome.heroEyebrow}>Briefing</p>
-            <h1 className={chrome.heroTitle}>{headline}</h1>
-            <p className={chrome.heroText}>{subhead}</p>
+        <section className={`${chrome.heroBlock} ${styles.sessionHero}`}>
+          <div className={styles.sessionHeroGrid}>
+            <div className={styles.heroSourceMedia}>
+              {session?.source_thumbnail_url ? (
+                <div className={styles.heroThumbnailFrame}>
+                  <Image className={styles.heroThumbnail} src={session.source_thumbnail_url} alt="" fill sizes="160px" priority />
+                </div>
+              ) : (
+                <div className={styles.heroThumbnailFrame}>
+                  <div className={styles.sourceThumbnailFallback}>
+                    <span>{sourceLabel}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className={styles.heroCopy}>
+              {showHeroTopline ? (
+                <div className={styles.heroTopline}>
+                  {heroEyebrow ? <p className={chrome.heroEyebrow}>{heroEyebrow}</p> : null}
+                  <div className={chrome.heroMeta}>
+                    {isFailed ? <span className={chrome.statusPillDanger}>Failed</span> : null}
+                    {showHeroLivePill ? <span className={`${chrome.statusPillMuted} ${styles.liveStatus}`}>Live</span> : null}
+                  </div>
+                </div>
+              ) : null}
+              <h1 className={styles.sessionTitle}>{headline}</h1>
+              <div className={styles.sourceMetaLine}>
+                {session?.source_author ? <span>By {session.source_author}</span> : null}
+                {sourceDurationLabel ? <span>{sourceDurationLabel}</span> : null}
+                {session?.source_title && parsedBriefing.title !== session.source_title ? <span>{session.source_title}</span> : null}
+              </div>
+              {subhead ? <p className={styles.sessionDeck}>{subhead}</p> : null}
+            </div>
           </div>
-          <div className={chrome.heroMeta}>
-            {isFailed ? <span className={chrome.statusPillDanger}>Failed</span> : null}
-            {showHeroLivePill ? <span className={`${chrome.statusPillMuted} ${styles.liveStatus}`}>Live</span> : null}
-          </div>
+
+          {hasTopActions ? (
+            <div className={styles.heroActionBar}>
+              {pdfUrl ? (
+                <a className={`${chrome.primaryButton} ${styles.heroPdfAction}`} href={pdfUrl} target="_blank" rel="noreferrer">
+                  Download PDF
+                </a>
+              ) : (
+                <button
+                  className={`${chrome.primaryButton} ${styles.heroPdfAction}`}
+                  type="button"
+                  onClick={handlePdfAction}
+                  disabled={pdfLoading || !session?.briefing_id}
+                >
+                  {primaryPdfActionLabel}
+                </button>
+              )}
+              <div className={styles.heroUtilityLinks}>
+                {sourceUrl ? (
+                  <a className={styles.textActionLink} href={sourceUrl} target="_blank" rel="noreferrer">
+                    {sourceActionLabel}
+                  </a>
+                ) : null}
+                <Link className={`${styles.textActionLink} ${styles.newBriefingLink}`} href="/app">
+                  New briefing
+                </Link>
+              </div>
+            </div>
+          ) : null}
+          {pdfError ? <p className={`${chrome.inlineStatus} ${chrome.inlineStatusError}`}>{pdfError}</p> : null}
         </section>
 
         {!initialSnapshotLoaded ? (
@@ -636,8 +724,8 @@ export default function BriefingSessionPage() {
             ) : null}
           </section>
         ) : canShowReader ? (
-          <section className={chrome.readerLayout}>
-            <article className={`${chrome.surfaceStrong} ${chrome.readerMain} ${styles.readerCard}`}>
+          <section className={styles.briefingLayout}>
+            <article className={styles.briefingReader}>
               {isStreaming && liveReaderMessage ? (
                 <div className={styles.liveReaderBanner}>
                   <div className={styles.liveReaderMeta}>
@@ -646,7 +734,7 @@ export default function BriefingSessionPage() {
                     </span>
                     <p className={chrome.surfaceText}>{liveReaderMessage}</p>
                   </div>
-                  <span className={styles.liveProgressLabel}>{clampedProgress}%</span>
+                  <span className={styles.liveProgressLabel}>{clampedProgress}% complete</span>
                 </div>
               ) : null}
 
@@ -656,13 +744,41 @@ export default function BriefingSessionPage() {
                 </div>
               ) : null}
 
-              {markdownToRender ? (
-                <StreamingMarkdown
-                  markdown={markdownToRender}
-                  isStreaming={isStreaming}
-                  className={styles.markdown}
-                  cursorClassName={styles.streamingCursor}
-                />
+              {parsedBriefing.summary ? (
+                <section className={`${chrome.surfaceStrong} ${styles.summaryPanel}`} id="briefing-summary">
+                  <p className={styles.sectionKicker}>Brief in 30 seconds</p>
+                  <StreamingMarkdown
+                    markdown={emphasizeFirstSentence(parsedBriefing.summary)}
+                    className={`${styles.markdown} ${styles.summaryMarkdown}`}
+                  />
+                </section>
+              ) : null}
+
+              {parsedBriefing.takeaways ? (
+                <section className={`${chrome.surface} ${styles.takeawayPanel}`} id="briefing-takeaways">
+                  <div className={styles.sectionHeader}>
+                    <p className={styles.sectionKicker}>What matters</p>
+                    <h2 className={styles.sectionTitle}>Key takeaways</h2>
+                  </div>
+                  <StreamingMarkdown markdown={parsedBriefing.takeaways} className={`${styles.markdown} ${styles.takeawayMarkdown}`} />
+                </section>
+              ) : null}
+
+              {parsedBriefing.articleSections.length ? (
+                <div className={styles.articleStack}>
+                  {parsedBriefing.articleSections.map((section) => (
+                    <BriefingContentSection section={section} key={section.id} />
+                  ))}
+                </div>
+              ) : markdownToRender ? (
+                <section className={`${chrome.surface} ${styles.articleSection}`}>
+                  <StreamingMarkdown
+                    markdown={markdownToRender}
+                    isStreaming={isStreaming}
+                    className={styles.markdown}
+                    cursorClassName={styles.streamingCursor}
+                  />
+                </section>
               ) : (
                 <p className={chrome.emptyState}>
                   {isFailed
@@ -670,146 +786,79 @@ export default function BriefingSessionPage() {
                     : "Your briefing will appear here as soon as Talven has content ready."}
                 </p>
               )}
+
+              {parsedBriefing.references ? (
+                <section className={`${chrome.surfaceMuted} ${styles.referenceSection}`} id={parsedBriefing.references.id}>
+                  <details>
+                    <summary>Sources and references</summary>
+                    <StreamingMarkdown markdown={parsedBriefing.references.content} className={styles.markdown} />
+                  </details>
+                </section>
+              ) : null}
             </article>
 
-            <aside className={chrome.readerSide}>
-              <div className={`${chrome.readerSideCard} ${styles.sourceCard}`}>
-                <div className={styles.sourceHeader}>
-                  <div className={styles.sourceMedia}>
-                    {session?.source_thumbnail_url ? (
-                      <div className={styles.sourceThumbnailFrame}>
-                        <Image
-                          className={styles.sourceThumbnail}
-                          src={session.source_thumbnail_url}
-                          alt=""
-                          fill
-                          sizes="112px"
-                        />
-                      </div>
-                    ) : (
-                      <div className={styles.sourceThumbnailFrame}>
-                        <div className={styles.sourceThumbnailFallback}>
-                          <span>{session?.source_type === "youtube" ? "YouTube" : "Source"}</span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className={styles.sourceHeaderBody}>
-                    <div>
-                      <h2 className={chrome.surfaceTitle}>Source</h2>
-                    </div>
-                    <span className={chrome.statusPillMuted}>{session?.source_type === "youtube" ? "YouTube" : "Link"}</span>
-                  </div>
-                </div>
-
-                <div className={styles.sourceBody}>
-                  <div className={styles.sourceSummary}>
-                    <h3 className={styles.sourceTitle}>{session?.source_title ?? "Untitled briefing source"}</h3>
-                    <div className={styles.sourceMeta}>
-                      {session?.source_author ? <span>By {session.source_author}</span> : null}
-                      {session?.source_duration_seconds ? <span>{formatExactDuration(session.source_duration_seconds)}</span> : null}
-                    </div>
-                  </div>
-
-                  <a
-                    className={chrome.secondaryButton}
-                    href={session?.canonical_source_url ?? session?.submitted_url ?? "#"}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {sourceActionLabel}
-                  </a>
-
-                  <p className={styles.sourceUrl}>{session?.canonical_source_url ?? session?.submitted_url}</p>
-                </div>
-              </div>
-
-              <div className={chrome.readerSideCard}>
-                <div className={chrome.surfaceHeader}>
-                  <div>
-                    <h2 className={chrome.surfaceTitle}>Actions</h2>
-                    <p className={chrome.surfaceText}>
-                      {isReady ? "Export the finished briefing or move on." : "You can leave this page. The live session will keep syncing."}
-                    </p>
-                  </div>
-                </div>
-                <div className={styles.actionStack}>
-                  <div className={styles.primaryAction}>
-                    {pdfUrl ? (
-                      <a className={chrome.primaryButton} href={pdfUrl} target="_blank" rel="noreferrer">
-                        Download PDF
+            <aside className={styles.briefingSide}>
+              {navigationSections.length > 2 ? (
+                <nav className={`${chrome.readerSideCard} ${styles.contentsCard}`} aria-label="Briefing sections">
+                  <h2 className={chrome.surfaceTitle}>Contents</h2>
+                  <div className={styles.contentsList}>
+                    {navigationSections.map((section) => (
+                      <a href={`#${section.id}`} key={section.id}>
+                        {section.label}
                       </a>
-                    ) : (
-                      <button
-                        className={chrome.primaryButton}
-                        type="button"
-                        onClick={handlePdfAction}
-                        disabled={pdfLoading || !session?.briefing_id}
-                      >
-                        {primaryPdfActionLabel}
-                      </button>
-                    )}
+                    ))}
                   </div>
-                  <div className={styles.secondaryActionRow}>
-                    <Link className={chrome.secondaryButton} href="/app">
-                      New briefing
-                    </Link>
-                    <Link className={chrome.secondaryButton} href="/app/briefings">
-                      Back to briefings
-                    </Link>
-                  </div>
-                </div>
-                {pdfError ? <p className={`${chrome.inlineStatus} ${chrome.inlineStatusError}`}>{pdfError}</p> : null}
-              </div>
-
-              {isReady ? (
-                <div className={`${chrome.readerSideCard} ${styles.dangerCard}`}>
-                  <div className={chrome.surfaceHeader}>
-                    <div>
-                      <h2 className={chrome.surfaceTitle}>Remove from history</h2>
-                      <p className={chrome.surfaceText}>
-                        This hides the briefing from your library. You can always generate it again from the source.
-                      </p>
-                    </div>
-                  </div>
-
-                  {!deleteConfirming ? (
-                    <button
-                      className={styles.deleteButton}
-                      type="button"
-                      onClick={() => {
-                        setDeleteConfirming(true);
-                        setActionError(null);
-                      }}
-                      disabled={deleteLoading}
-                    >
-                      Delete briefing
-                    </button>
-                  ) : (
-                    <div className={styles.deleteConfirm}>
-                      <p className={styles.deletePrompt}>Remove this briefing from your history?</p>
-                      <div className={styles.secondaryActionRow}>
-                        <button
-                          className={chrome.secondaryButton}
-                          type="button"
-                          onClick={() => {
-                            if (!deleteLoading) {
-                              setDeleteConfirming(false);
-                            }
-                          }}
-                          disabled={deleteLoading}
-                        >
-                          Cancel
-                        </button>
-                        <button className={styles.deleteButton} type="button" onClick={handleDeleteSession} disabled={deleteLoading}>
-                          {deleteLoading ? "Removing briefing..." : "Delete briefing"}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                </nav>
               ) : null}
+
+              <div className={styles.desktopActionCard}>
+                <Link className={styles.textActionLink} href="/app/briefings">
+                  Back to briefings
+                </Link>
+                <Link className={styles.textActionLink} href="/app">
+                  New briefing
+                </Link>
+                {isReady && !deleteConfirming ? (
+                  <button
+                    className={`${styles.textActionLink} ${styles.removeTextButton}`}
+                    type="button"
+                    onClick={() => {
+                      setDeleteConfirming(true);
+                      setActionError(null);
+                    }}
+                    disabled={deleteLoading}
+                  >
+                    Remove briefing
+                  </button>
+                ) : null}
+                {isReady && deleteConfirming ? (
+                  <div className={styles.sidebarDeleteConfirm}>
+                    <p>Remove this briefing?</p>
+                    <div className={styles.sidebarDeleteActions}>
+                      <button
+                        className={styles.textActionLink}
+                        type="button"
+                        onClick={() => {
+                          if (!deleteLoading) {
+                            setDeleteConfirming(false);
+                          }
+                        }}
+                        disabled={deleteLoading}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        className={`${styles.textActionLink} ${styles.removeTextButton}`}
+                        type="button"
+                        onClick={handleDeleteSession}
+                        disabled={deleteLoading}
+                      >
+                        {deleteLoading ? "Removing..." : "Remove"}
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
 
               {isFailed ? (
                 <div className={styles.errorCard}>
@@ -829,6 +878,70 @@ export default function BriefingSessionPage() {
                 </div>
               ) : null}
             </aside>
+
+            <footer className={styles.briefingFooter}>
+              <div className={styles.footerPrimaryRow}>
+                {isReady ? (
+                  pdfUrl ? (
+                    <a className={styles.footerPdfAction} href={pdfUrl} target="_blank" rel="noreferrer">
+                      Download PDF
+                    </a>
+                  ) : (
+                    <button
+                      className={styles.footerPdfAction}
+                      type="button"
+                      onClick={handlePdfAction}
+                      disabled={pdfLoading || !session?.briefing_id}
+                    >
+                      {primaryPdfActionLabel}
+                    </button>
+                  )
+                ) : null}
+              </div>
+              <div className={styles.footerNavigationRow}>
+                <Link className={styles.textActionLink} href="/app/briefings">
+                  Back to briefings
+                </Link>
+                <Link className={styles.textActionLink} href="/app">
+                  New briefing
+                </Link>
+              </div>
+              {isReady && !deleteConfirming ? (
+                <div className={styles.footerDangerRow}>
+                  <button
+                    className={`${styles.textActionLink} ${styles.removeTextButton}`}
+                    type="button"
+                    onClick={() => {
+                      setDeleteConfirming(true);
+                      setActionError(null);
+                    }}
+                    disabled={deleteLoading}
+                  >
+                    Remove briefing
+                  </button>
+                </div>
+              ) : null}
+              {isReady && deleteConfirming ? (
+                <div className={styles.footerDeleteConfirm}>
+                  <span>Remove this briefing from your library?</span>
+                  <button
+                    className={styles.textActionLink}
+                    type="button"
+                    onClick={() => {
+                      if (!deleteLoading) {
+                        setDeleteConfirming(false);
+                      }
+                    }}
+                    disabled={deleteLoading}
+                  >
+                    Cancel
+                  </button>
+                  <button className={`${styles.textActionLink} ${styles.removeTextButton}`} type="button" onClick={handleDeleteSession} disabled={deleteLoading}>
+                    {deleteLoading ? "Removing..." : "Remove"}
+                  </button>
+                </div>
+              ) : null}
+            </footer>
           </section>
         ) : (
           <section className={`${chrome.surfaceStrong} ${styles.loadingCard}`}>
@@ -847,6 +960,30 @@ export default function BriefingSessionPage() {
         )}
       </main>
     </div>
+  );
+}
+
+function BriefingContentSection({ section }: { section: ParsedBriefingSection }) {
+  const sectionKind = getSectionKind(section.title);
+  const sectionClassName = [
+    chrome.surface,
+    styles.articleSection,
+    sectionKind === "deepRead" ? styles.deepReadSection : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const markdownClassName = [
+    styles.markdown,
+    sectionKind === "deepRead" ? styles.deepReadMarkdown : ""
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return (
+    <section className={sectionClassName} id={section.id}>
+      <h2 className={styles.articleSectionTitle}>{getSectionDisplayTitle(section.title, sectionKind)}</h2>
+      <StreamingMarkdown markdown={section.content} className={markdownClassName} />
+    </section>
   );
 }
 
@@ -873,4 +1010,182 @@ function isCreditError(message: string): boolean {
 
 function removeGenericBriefingHeading(markdown: string): string {
   return markdown.replace(/^#\s+(briefing|podcast briefing|summary)\s*\n+/i, "");
+}
+
+function parseBriefingMarkdown(markdown: string, fallbackTitle?: string | null): ParsedBriefing {
+  const cleanedMarkdown = normalizeBriefingMarkdown(markdown).trim();
+  const sections = splitMarkdownSections(cleanedMarkdown);
+  const titleSection = sections.find((section) => section.level === 1 && !isGenericTitle(section.title));
+  const title = titleSection?.title || fallbackTitle || "Untitled briefing";
+  const summarySection = sections.find((section) => isSummaryHeading(section.title));
+  const takeawaysSection = sections.find((section) => isTakeawaysHeading(section.title));
+  const referencesSection = sections.find((section) => isReferencesHeading(section.title)) ?? null;
+  const bodySections = sections.filter(
+    (section) =>
+      section !== titleSection &&
+      section !== summarySection &&
+      section !== takeawaysSection &&
+      section !== referencesSection &&
+      section.content.trim()
+  );
+
+  const articleSections = bodySections.length
+    ? bodySections.map((section) => ({
+        ...section,
+        title: humanizeSectionTitle(section.title)
+      }))
+    : cleanedMarkdown
+      ? [
+          {
+            id: "briefing-notes",
+            level: 2,
+            title: "Briefing notes",
+            content: cleanedMarkdown
+          }
+        ]
+      : [];
+
+  return {
+    title,
+    summary: summarySection?.content.trim() ?? "",
+    takeaways: takeawaysSection?.content.trim() ?? "",
+    articleSections,
+    references: referencesSection
+      ? {
+          ...referencesSection,
+          title: humanizeSectionTitle(referencesSection.title)
+        }
+      : null
+  };
+}
+
+function splitMarkdownSections(markdown: string): ParsedBriefingSection[] {
+  if (!markdown.trim()) {
+    return [];
+  }
+
+  const lines = markdown.split(/\r?\n/);
+  const sections: Array<ParsedBriefingSection & { contentLines: string[] }> = [];
+  let current: (ParsedBriefingSection & { contentLines: string[] }) | null = null;
+  const prefaceLines: string[] = [];
+
+  for (const line of lines) {
+    const headingMatch = /^(#{1,2})\s+(.+?)\s*#*\s*$/.exec(line);
+    if (!headingMatch) {
+      if (current) {
+        current.contentLines.push(line);
+      } else {
+        prefaceLines.push(line);
+      }
+      continue;
+    }
+
+    if (current) {
+      current.content = current.contentLines.join("\n").trim();
+      sections.push(current);
+    }
+
+    const title = cleanInlineMarkdown(headingMatch[2]);
+    current = {
+      id: getSectionId(title, sections.length),
+      level: headingMatch[1].length,
+      title,
+      content: "",
+      contentLines: []
+    };
+  }
+
+  if (current) {
+    current.content = current.contentLines.join("\n").trim();
+    sections.push(current);
+  }
+
+  const preface = prefaceLines.join("\n").trim();
+  if (preface) {
+    sections.unshift({
+      id: "briefing-overview",
+      level: 2,
+      title: "Overview",
+      content: preface,
+      contentLines: []
+    });
+  }
+
+  return sections.map(({ contentLines: _contentLines, ...section }) => section);
+}
+
+function normalizeBriefingMarkdown(markdown: string): string {
+  return markdown
+    .replace(/^(\s*[-*+]\s*)(?:[\u2705\u26a0\ufe0f]|\u{1f4a1})\s*/gmu, "$1")
+    .replace(/^((?:[\u2705\u26a0\ufe0f]|\u{1f4a1})\s*)+/gmu, "");
+}
+
+function cleanInlineMarkdown(value: string): string {
+  return value
+    .replace(/[*_`~]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function humanizeSectionTitle(value: string): string {
+  if (/^tl;?dr$/i.test(value.trim())) {
+    return "Summary";
+  }
+  return value;
+}
+
+function getSectionKind(title: string): BriefingSectionKind {
+  if (/detailed|briefing|summary/i.test(title)) {
+    return "deepRead";
+  }
+  return "standard";
+}
+
+function getSectionDisplayTitle(title: string, kind: BriefingSectionKind): string {
+  if (kind === "deepRead" && /detailed/i.test(title)) {
+    return "Deeper read";
+  }
+  return title;
+}
+
+function emphasizeFirstSentence(markdown: string): string {
+  const trimmed = markdown.trim();
+  if (!trimmed || trimmed.startsWith("**") || trimmed.startsWith("#") || trimmed.includes("\n- ")) {
+    return markdown;
+  }
+
+  const sentenceMatch = /^(.+?[.!?])(\s+.+)$/s.exec(trimmed);
+  if (!sentenceMatch) {
+    return markdown;
+  }
+
+  return `**${sentenceMatch[1]}**${sentenceMatch[2]}`;
+}
+
+function getSectionId(title: string, index: number): string {
+  const slug = title
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .slice(0, 48);
+
+  return `briefing-${slug || "section"}-${index}`;
+}
+
+function isGenericTitle(title: string): boolean {
+  return /^(briefing|podcast briefing|summary)$/i.test(title.trim());
+}
+
+function isSummaryHeading(title: string): boolean {
+  const normalized = title.toLowerCase().replace(/[^\w]+/g, "");
+  return normalized === "tldr" || normalized === "summary" || normalized === "briefin30seconds";
+}
+
+function isTakeawaysHeading(title: string): boolean {
+  return /takeaways?/i.test(title);
+}
+
+function isReferencesHeading(title: string): boolean {
+  return /references?|sources?/i.test(title);
 }
