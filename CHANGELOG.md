@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.19.1](https://github.com/cpujades/fathom/compare/v0.19.0...v0.19.1) (2026-05-05)
+
+_Automated release from [#118](https://github.com/cpujades/fathom/pull/118) style(web): polish briefing library and reader UI_
+
+### Style
+
+- style(web): polish briefing library and reader UI (5998be2)
+
 ## [0.19.0](https://github.com/cpujades/fathom/compare/v0.18.0...v0.19.0) (2026-05-04)
 
 _Automated release from [#117](https://github.com/cpujades/fathom/pull/117) feat(web): run Supabase auth callback as a Route Handler_
