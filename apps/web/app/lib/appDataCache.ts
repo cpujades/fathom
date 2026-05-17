@@ -16,9 +16,11 @@ export type BillingSnapshot = {
 };
 
 const CACHE_TTL_MS = 30_000;
+const BRIEFINGS_CACHE_INVALIDATED_AT_KEY = "talven:briefings-cache-invalidated-at";
 
 let briefingsCache: { response: BriefingListResponse; fetchedAt: number } | null = null;
 let briefingsRequest: Promise<BriefingListResponse> | null = null;
+let observedBriefingsInvalidatedAt = 0;
 
 let billingCache: (BillingSnapshot & { fetchedAt: number }) | null = null;
 let billingRequest: Promise<BillingSnapshot> | null = null;
@@ -32,10 +34,41 @@ export function getCachedBriefings(): BriefingListResponse | null {
 
 export function invalidateBriefingsCache(): void {
   briefingsCache = null;
+  if (typeof window !== "undefined") {
+    const invalidatedAt = Date.now();
+    observedBriefingsInvalidatedAt = invalidatedAt;
+    try {
+      window.localStorage.setItem(BRIEFINGS_CACHE_INVALIDATED_AT_KEY, String(invalidatedAt));
+    } catch {
+      // Cache invalidation is a performance hint; storage may be unavailable.
+    }
+  }
 }
 
 export function hasFreshBriefingsCache(): boolean {
+  if (hasBriefingsCacheBeenInvalidatedInAnotherTab()) {
+    briefingsCache = null;
+    return false;
+  }
   return Boolean(briefingsCache && Date.now() - briefingsCache.fetchedAt < CACHE_TTL_MS);
+}
+
+function hasBriefingsCacheBeenInvalidatedInAnotherTab(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  try {
+    const invalidatedAt = Number(window.localStorage.getItem(BRIEFINGS_CACHE_INVALIDATED_AT_KEY) ?? "0");
+    if (!Number.isFinite(invalidatedAt) || invalidatedAt <= observedBriefingsInvalidatedAt) {
+      return false;
+    }
+
+    observedBriefingsInvalidatedAt = invalidatedAt;
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function normalizeBriefingsQuery(

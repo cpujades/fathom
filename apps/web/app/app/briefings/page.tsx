@@ -2,7 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { type MouseEvent, useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createApiClient } from "@fathom/api-client";
 
 import { AppShellHeader } from "../../components/AppShellHeader";
@@ -39,8 +40,8 @@ const EMPTY_BRIEFINGS_RESPONSE: BriefingListResponse = {
 };
 
 const SORT_OPTIONS: Array<{ value: BriefingListSort; label: string }> = [
-  { value: "newest", label: "Newest first" },
-  { value: "oldest", label: "Oldest first" }
+  { value: "newest", label: "Newest" },
+  { value: "oldest", label: "Oldest" }
 ];
 
 function formatBriefingCount(count: number): string {
@@ -66,15 +67,67 @@ function getSourceTypeLabel(sourceType: BriefingListItem["source_type"]): string
   return "Source";
 }
 
-function getStatusLabel(loading: boolean, shellLoading: boolean, totalCount: number): string {
+function getSourceActionLabel(sourceType: BriefingListItem["source_type"]): string {
+  if (sourceType === "youtube") {
+    return "Video";
+  }
+  return "Source";
+}
+
+function getBriefingState(entry: BriefingListItem): BriefingListItem["state"] {
+  return entry.state ?? "ready";
+}
+
+function isBriefingProcessing(entry: BriefingListItem): boolean {
+  const state = getBriefingState(entry);
+  return state !== "ready" && state !== "failed";
+}
+
+function getBriefingStateLabel(state: BriefingListItem["state"]): string | null {
+  if (state === "ready") {
+    return null;
+  }
+  if (state === "failed") {
+    return "Needs review";
+  }
+  if (state === "accepted") {
+    return "Starting";
+  }
+  if (state === "resolving_source" || state === "reusing_existing") {
+    return "Checking";
+  }
+  if (state === "transcribing") {
+    return "Transcribing";
+  }
+  if (state === "drafting_briefing") {
+    return "Writing";
+  }
+  return "Saving";
+}
+
+function getBriefingActionLabel(entry: BriefingListItem): string {
+  if (getBriefingState(entry) === "failed") {
+    return "Review";
+  }
+  if (isBriefingProcessing(entry)) {
+    return "Progress";
+  }
+  return "Open";
+}
+
+function getStatusLabel(loading: boolean, shellLoading: boolean, totalCount: number, activeCount: number): string {
   if (loading || shellLoading) {
     return "Syncing library";
+  }
+  if (activeCount > 0) {
+    return `${activeCount} in progress`;
   }
 
   return formatBriefingCount(totalCount);
 }
 
 export default function BriefingsPage() {
+  const router = useRouter();
   const cachedBriefings = getCachedBriefings();
   const { accessToken, loading: shellLoading, remainingSeconds, signOut, user } = useAppShell();
 
@@ -86,8 +139,13 @@ export default function BriefingsPage() {
   const [sort, setSort] = useState<BriefingListSort>(cachedBriefings?.sort ?? "newest");
   const [confirmDeleteSessionId, setConfirmDeleteSessionId] = useState<string | null>(null);
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
+  const [openingSessionId, setOpeningSessionId] = useState<string | null>(null);
 
   const deferredSearch = useDeferredValue(searchInput.trim());
+  const activeBriefingCount = useMemo(
+    () => briefings.items.filter((entry) => isBriefingProcessing(entry)).length,
+    [briefings.items]
+  );
 
   useEffect(() => {
     if (!accessToken) {
@@ -140,6 +198,45 @@ export default function BriefingsPage() {
     };
   }, [accessToken, deferredSearch, sort]);
 
+  useEffect(() => {
+    if (!accessToken || activeBriefingCount === 0) {
+      return;
+    }
+
+    let active = true;
+    let refreshing = false;
+    const intervalId = window.setInterval(() => {
+      if (refreshing) {
+        return;
+      }
+
+      refreshing = true;
+      void loadBriefings(accessToken, {
+        limit: Math.max(DEFAULT_BRIEFINGS_LIMIT, briefings.items.length),
+        offset: 0,
+        query: deferredSearch,
+        sort
+      })
+        .then((response) => {
+          if (active) {
+            setBriefings(response);
+            setError(null);
+          }
+        })
+        .catch(() => {
+          // Keep the current library visible if a background refresh misses.
+        })
+        .finally(() => {
+          refreshing = false;
+        });
+    }, 8000);
+
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+    };
+  }, [accessToken, activeBriefingCount, briefings.items.length, deferredSearch, sort]);
+
   const hasFilters = deferredSearch.length > 0 || sort !== "newest";
   const helperText = useMemo(() => {
     if (briefings.total_count === 0 && hasFilters) {
@@ -153,6 +250,7 @@ export default function BriefingsPage() {
     }
     return `${formatBriefingCount(briefings.total_count)} in your library.`;
   }, [briefings.items.length, briefings.total_count, hasFilters]);
+  const showLibraryHelper = loading || briefings.items.length > 0 || hasFilters;
 
   const prefetchBriefing = (entry: BriefingListItem) => {
     const sessionId = getSessionIdFromPath(entry.session_path);
@@ -161,6 +259,27 @@ export default function BriefingsPage() {
     }
 
     void prefetchSessionSnapshot(accessToken, sessionId);
+  };
+
+  const openBriefing = async (event: MouseEvent<HTMLAnchorElement>, entry: BriefingListItem) => {
+    if (!accessToken || openingSessionId) {
+      return;
+    }
+
+    const sessionId = getSessionIdFromPath(entry.session_path);
+    if (!sessionId) {
+      return;
+    }
+
+    event.preventDefault();
+    setOpeningSessionId(entry.session_id);
+    try {
+      await prefetchSessionSnapshot(accessToken, sessionId);
+    } catch {
+      // Navigation should still work if the warm prefetch misses.
+    } finally {
+      router.push(entry.session_path);
+    }
   };
 
   const handleLoadMore = async () => {
@@ -240,36 +359,36 @@ export default function BriefingsPage() {
         onSignOut={signOut}
       />
 
-      <main className={chrome.mainFrame}>
-        <section className={`${chrome.heroBlock} ${shellStyles.pageColumn}`}>
+      <main id="main-content" className={chrome.mainFrame}>
+        <section className={`${chrome.heroBlock} ${shellStyles.pageColumn} ${styles.libraryHero}`}>
           <div>
-            <p className={chrome.heroEyebrow}>Briefings</p>
-            <h1 className={chrome.heroTitle}>Your briefing library</h1>
-            <p className={chrome.heroText}>
+            <p className={`${chrome.heroEyebrow} ${styles.libraryHeroEyebrow}`}>Briefings</p>
+            <h1 className={`${chrome.heroTitle} ${styles.libraryHeroTitle}`}>Your briefing library</h1>
+            <p className={`${chrome.heroText} ${styles.libraryHeroText}`}>
               Search, revisit, and trim past briefings without losing the thread back to the original source.
             </p>
           </div>
           <div className={chrome.heroMeta}>
             <span className={chrome.statusPillMuted}>Available {formatDuration(remainingSeconds ?? 0)}</span>
             <span className={chrome.statusPillMuted}>
-              {getStatusLabel(loading, shellLoading, briefings.total_count)}
+              {getStatusLabel(loading, shellLoading, briefings.total_count, activeBriefingCount)}
             </span>
           </div>
         </section>
 
         <section className={`${chrome.surface} ${shellStyles.pageColumn} ${styles.librarySurface}`}>
-          <div className={chrome.surfaceHeader}>
+          <div className={`${chrome.surfaceHeader} ${styles.libraryHeader}`}>
             <div>
               <h2 className={chrome.surfaceTitle}>Library</h2>
-              <p className={chrome.surfaceText}>{helperText}</p>
+              {showLibraryHelper ? <p className={chrome.surfaceText}>{helperText}</p> : null}
             </div>
           </div>
 
           <div className={styles.controlsGrid}>
-            <label className={chrome.fieldStack}>
-              <span className={chrome.fieldLabel}>Search</span>
+            <label className={`${chrome.fieldStack} ${styles.libraryField}`}>
+              <span className={`${chrome.fieldLabel} ${styles.mobileHiddenLabel}`}>Search</span>
               <input
-                className={chrome.input}
+                className={`${chrome.input} ${styles.librarySearchInput}`}
                 type="search"
                 value={searchInput}
                 onChange={(event) => setSearchInput(event.target.value)}
@@ -277,8 +396,8 @@ export default function BriefingsPage() {
               />
             </label>
 
-            <label className={chrome.fieldStack}>
-              <span className={chrome.fieldLabel}>Sort</span>
+            <label className={`${chrome.fieldStack} ${styles.libraryField}`}>
+              <span className={`${chrome.fieldLabel} ${styles.mobileHiddenLabel}`}>Sort</span>
               <select
                 className={styles.select}
                 value={sort}
@@ -302,6 +421,9 @@ export default function BriefingsPage() {
               {briefings.items.map((entry) => {
                 const confirmingDelete = confirmDeleteSessionId === entry.session_id;
                 const deletingThisEntry = deletingSessionId === entry.session_id;
+                const entryState = getBriefingState(entry);
+                const stateLabel = getBriefingStateLabel(entryState);
+                const actionLabel = openingSessionId === entry.session_id ? "Opening" : getBriefingActionLabel(entry);
 
                 return (
                   <article className={styles.libraryRow} key={entry.session_id}>
@@ -334,11 +456,22 @@ export default function BriefingsPage() {
                               <Link
                                 className={styles.libraryTitleLink}
                                 href={entry.session_path}
+                                onClick={(event) => void openBriefing(event, entry)}
                                 onMouseEnter={() => prefetchBriefing(entry)}
+                                onPointerDown={() => prefetchBriefing(entry)}
                                 onFocus={() => prefetchBriefing(entry)}
                               >
                                 {entry.title}
                               </Link>
+                              {stateLabel ? (
+                                <span
+                                  className={`${styles.libraryStatePill} ${
+                                    entryState === "failed" ? styles.libraryStatePillFailed : styles.libraryStatePillActive
+                                  }`}
+                                >
+                                  {stateLabel}
+                                </span>
+                              ) : null}
                             </div>
 
                             <div className={styles.metaRow}>
@@ -355,10 +488,12 @@ export default function BriefingsPage() {
                               <Link
                                 className={`${chrome.primaryButton} ${styles.libraryPrimaryAction}`}
                                 href={entry.session_path}
+                                onClick={(event) => void openBriefing(event, entry)}
                                 onMouseEnter={() => prefetchBriefing(entry)}
+                                onPointerDown={() => prefetchBriefing(entry)}
                                 onFocus={() => prefetchBriefing(entry)}
                               >
-                                Open briefing
+                                {actionLabel}
                               </Link>
                               <a
                                 className={`${chrome.ghostButton} ${styles.librarySecondaryAction}`}
@@ -366,7 +501,7 @@ export default function BriefingsPage() {
                                 target="_blank"
                                 rel="noreferrer"
                               >
-                                Original video
+                                {getSourceActionLabel(entry.source_type)}
                               </a>
                               {!confirmingDelete ? (
                                 <button

@@ -116,6 +116,26 @@ button {
   font: inherit;
 }
 
+.skip-link {
+  position: fixed;
+  left: 1rem;
+  top: 1rem;
+  z-index: 60;
+  border-radius: 999px;
+  background: #17382b;
+  color: #f7f3e7;
+  padding: 0.68rem 0.92rem;
+  font-size: 0.86rem;
+  font-weight: 700;
+  box-shadow: 0 16px 36px rgba(18, 28, 23, 0.24);
+  transform: translateY(calc(-100% - 1.5rem));
+  transition: transform 180ms ease;
+}
+
+.skip-link:focus-visible {
+  transform: translateY(0);
+}
+
 :focus-visible {
   outline: 2px solid var(--brand-accent);
   outline-offset: 3px;
@@ -124,5 +144,9 @@ button {
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
+  }
+
+  .skip-link {
+    transition: none;
   }
 }

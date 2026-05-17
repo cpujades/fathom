@@ -607,7 +607,7 @@ function BillingPageContent() {
     return (
       <div className={chrome.pageFrame}>
         <AppShellHeader active="billing" remainingSeconds={null} accountLabel={null} onSignOut={() => undefined} />
-        <main className={chrome.mainFrame}>
+        <main id="main-content" className={chrome.mainFrame}>
           <section className={chrome.surface}>
             <h1 className={chrome.surfaceTitle}>Loading your access...</h1>
             <p className={chrome.surfaceText}>Fetching plans, balances, and billing details.</p>
@@ -626,7 +626,7 @@ function BillingPageContent() {
         onSignOut={signOut}
       />
 
-      <main className={chrome.mainFrame}>
+      <main id="main-content" className={chrome.mainFrame}>
         <section className={`${chrome.heroBlock} ${styles.pageColumn}`}>
           <div>
             <p className={chrome.heroEyebrow}>Billing</p>
@@ -922,7 +922,7 @@ export default function BillingPage() {
       fallback={
         <div className={chrome.pageFrame}>
           <AppShellHeader active="billing" remainingSeconds={null} accountLabel={null} onSignOut={() => undefined} />
-          <main className={chrome.mainFrame}>
+          <main id="main-content" className={chrome.mainFrame}>
             <section className={chrome.surface}>
               <h1 className={chrome.surfaceTitle}>Loading your access...</h1>
               <p className={chrome.surfaceText}>Preparing your plan and billing details.</p>

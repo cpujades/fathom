@@ -252,6 +252,8 @@ const landingContent: LandingContent = {
     links: [
       { label: "Pricing", href: "#pricing" },
       { label: "Sign in", href: "/signin" },
+      { label: "Privacy", href: "/privacy" },
+      { label: "Terms", href: "/terms" },
       { label: "Contact", href: "mailto:contact@talven.ai" }
     ]
   }

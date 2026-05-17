@@ -339,7 +339,14 @@ export interface components {
              * Briefing Id
              * Format: uuid
              */
-            briefing_id: string;
+            briefing_id?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "accepted" | "resolving_source" | "reusing_existing" | "transcribing" | "drafting_briefing" | "finalizing_briefing" | "ready" | "failed";
+            /** Progress */
+            progress: number;
             /** Title */
             title: string;
             /** Author */
