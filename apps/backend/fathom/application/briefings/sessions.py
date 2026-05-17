@@ -23,6 +23,7 @@ from fathom.core.config import Settings
 from fathom.core.constants import SUMMARY_PROMPT_KEY_DEFAULT
 from fathom.core.errors import NotFoundError
 from fathom.core.logging import log_context
+from fathom.crud.supabase.job_events import record_job_event
 from fathom.crud.supabase.jobs import (
     archive_job,
     create_job,
@@ -56,6 +57,28 @@ logger = logging.getLogger(__name__)
 
 KEEPALIVE_SECONDS = 15.0
 GROQ_PROVIDER_MODEL = "groq:whisper-large-v3-turbo"
+
+
+async def _record_session_event(
+    admin_client: Any,
+    *,
+    job_id: str,
+    event_type: str,
+    stage: str,
+    message: str,
+    metadata: dict[str, Any] | None = None,
+) -> None:
+    try:
+        await record_job_event(
+            admin_client,
+            job_id=job_id,
+            event_type=event_type,
+            stage=stage,
+            message=message,
+            metadata=metadata,
+        )
+    except Exception:
+        logger.debug("briefing_session.job_event.record_failed", extra={"session_id": job_id}, exc_info=True)
 
 
 async def create_briefing_session(
@@ -137,6 +160,19 @@ async def create_briefing_session(
                 settings=settings,
             )
             logger.info("briefing_session.reused_cached", extra={"session_id": ready_job["id"]})
+            await _record_session_event(
+                admin_client,
+                job_id=str(ready_job["id"]),
+                event_type="session_created",
+                stage="cached",
+                message="Ready session created from cached summary.",
+                metadata={
+                    "resolution_type": "reused_ready",
+                    "video_id": metadata.video_id,
+                    "duration_seconds": metadata.duration_seconds,
+                    "summary_id": str(cached_summary["id"]),
+                },
+            )
             return await _build_session_snapshot(
                 user_client=user_client,
                 admin_client=admin_client,
@@ -153,6 +189,29 @@ async def create_briefing_session(
         )
         job = await fetch_job(user_client, str(created_job["id"]))
         logger.info("briefing_session.created", extra={"session_id": job["id"]})
+        await _record_session_event(
+            admin_client,
+            job_id=str(job["id"]),
+            event_type="session_created",
+            stage="queued",
+            message="Briefing session created.",
+            metadata={
+                "resolution_type": "new",
+                "video_id": metadata.video_id,
+                "duration_seconds": metadata.duration_seconds,
+            },
+        )
+        await _record_session_event(
+            admin_client,
+            job_id=str(job["id"]),
+            event_type="source_validated",
+            stage="queued",
+            message="Source metadata validated.",
+            metadata={
+                "video_id": metadata.video_id,
+                "duration_seconds": metadata.duration_seconds,
+            },
+        )
         return await _build_session_snapshot(
             user_client=user_client,
             admin_client=admin_client,
