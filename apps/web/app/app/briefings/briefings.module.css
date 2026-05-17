@@ -1,3 +1,20 @@
+.libraryHero {
+  gap: 0.8rem;
+}
+
+.libraryHeroEyebrow,
+.libraryHeroText {
+  display: block;
+}
+
+.libraryHeroTitle {
+  max-width: 18ch;
+}
+
+.libraryHeader {
+  min-width: 0;
+}
+
 .librarySurface {
   padding: 1.25rem;
 }
@@ -7,6 +24,18 @@
   grid-template-columns: minmax(0, 1.7fr) minmax(220px, 0.62fr);
   gap: 0.8rem;
   margin-top: 1rem;
+}
+
+.libraryField {
+  min-width: 0;
+}
+
+.mobileHiddenLabel {
+  display: inline;
+}
+
+.librarySearchInput {
+  min-width: 0;
 }
 
 .select {
@@ -37,14 +66,15 @@
 .libraryList {
   margin-top: 1rem;
   display: grid;
-  gap: 0.75rem;
+  gap: 0.68rem;
 }
 
 .libraryRow {
   border: 1px solid var(--app-line);
-  border-radius: 18px;
-  background: rgba(248, 244, 236, 0.72);
-  box-shadow: var(--app-shadow);
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(250, 248, 242, 0.84), rgba(244, 241, 234, 0.68));
+  box-shadow: 0 16px 42px rgba(18, 28, 23, 0.09);
   backdrop-filter: blur(24px) saturate(1.08);
   min-width: 0;
   transition:
@@ -56,15 +86,15 @@
 .libraryRow:hover {
   border-color: rgba(40, 92, 70, 0.16);
   box-shadow:
-    0 22px 58px rgba(18, 28, 23, 0.13),
+    0 20px 48px rgba(18, 28, 23, 0.11),
     inset 0 1px 0 rgba(255, 255, 255, 0.45);
   transform: translateY(-1px);
 }
 
 .libraryRowBody {
-  padding: 1rem 1.05rem;
+  padding: 0.9rem 0.95rem;
   display: grid;
-  gap: 0.72rem;
+  gap: 0.62rem;
 }
 
 .libraryRowMain {
@@ -99,14 +129,14 @@
 .libraryThumbnailFallback {
   width: 100%;
   height: 100%;
-  border-radius: 12px;
+  border-radius: 10px;
   display: block;
 }
 
 .libraryThumbnail {
   border: 1px solid rgba(36, 58, 47, 0.12);
   background: rgba(233, 227, 216, 0.9);
-  box-shadow: 0 10px 22px rgba(18, 28, 23, 0.08);
+  box-shadow: 0 8px 18px rgba(18, 28, 23, 0.08);
   object-fit: cover;
 }
 
@@ -128,13 +158,13 @@
 .libraryRowContent {
   min-width: 0;
   display: grid;
-  gap: 0.72rem;
+  gap: 0.58rem;
 }
 
 .libraryTitleBlock {
   min-width: 0;
   display: grid;
-  gap: 0.5rem;
+  gap: 0.38rem;
 }
 
 .titleRow {
@@ -147,7 +177,7 @@
 .libraryTitleLink {
   color: var(--app-text);
   text-decoration: none;
-  font-size: 1rem;
+  font-size: 0.98rem;
   font-weight: 730;
   line-height: 1.36;
   letter-spacing: 0;
@@ -157,6 +187,30 @@
 
 .libraryTitleLink:hover {
   color: var(--app-brand-strong);
+}
+
+.libraryStatePill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  border-radius: 999px;
+  border: 1px solid rgba(40, 92, 70, 0.16);
+  padding: 0.18rem 0.54rem;
+  color: #285c46;
+  font-size: 0.7rem;
+  font-weight: 760;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.libraryStatePillActive {
+  background: rgba(220, 231, 223, 0.58);
+}
+
+.libraryStatePillFailed {
+  border-color: rgba(161, 83, 77, 0.2);
+  background: rgba(182, 75, 71, 0.07);
+  color: #8f4e4a;
 }
 
 .metaRow {
@@ -193,7 +247,7 @@
 .rowActions {
   width: 100%;
   display: grid;
-  gap: 0.5rem;
+  gap: 0.48rem;
   justify-items: start;
   min-width: 0;
   margin-top: 0.05rem;
@@ -207,10 +261,10 @@
   justify-content: flex-start;
 }
 
-.libraryPrimaryAction {
-  min-height: 38px;
+.libraryPrimaryAction.libraryPrimaryAction {
+  min-height: 36px;
   border-color: rgba(40, 92, 70, 0.2);
-  padding: 0.5rem 0.82rem;
+  padding: 0.46rem 0.78rem;
   background: rgba(220, 231, 223, 0.54);
   color: #17382b;
   box-shadow:
@@ -218,14 +272,14 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 
-.libraryPrimaryAction::after {
+.libraryPrimaryAction.libraryPrimaryAction::after {
   content: "→";
   margin-left: 0.42rem;
   font-weight: 700;
   opacity: 0.72;
 }
 
-.libraryPrimaryAction:hover {
+.libraryPrimaryAction.libraryPrimaryAction:hover {
   background: rgba(211, 226, 216, 0.84);
   color: #17382b;
   border-color: rgba(40, 92, 70, 0.34);
@@ -239,7 +293,7 @@
   padding: 0.2rem 0;
   background: transparent;
   color: #435247;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   font-weight: 700;
   text-decoration: underline;
   text-underline-offset: 0.18rem;
@@ -291,10 +345,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 38px;
+  min-height: 36px;
   border: 1px solid transparent;
   border-radius: 999px;
-  padding: 0.48rem 0.72rem;
+  padding: 0.44rem 0.68rem;
   background: transparent;
   color: #9c4b45;
   font-size: 0.78rem;
@@ -411,8 +465,72 @@
 }
 
 @media (max-width: 720px) {
+  .libraryHero {
+    gap: 0.5rem;
+  }
+
+  .libraryHeroEyebrow,
+  .libraryHeroText {
+    display: none;
+  }
+
+  .libraryHeroTitle {
+    font-size: 1.55rem;
+    line-height: 1.08;
+  }
+
   .librarySurface {
-    padding: 1.05rem;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+
+  .libraryHeader {
+    display: none;
+  }
+
+  .controlsGrid {
+    grid-template-columns: minmax(0, 1fr) minmax(116px, 0.42fr);
+    margin-top: 0.12rem;
+    gap: 0.45rem;
+    padding: 0.48rem;
+    border: 1px solid rgba(36, 58, 47, 0.1);
+    border-radius: 16px;
+    background: rgba(250, 248, 242, 0.66);
+    box-shadow: 0 10px 26px rgba(18, 28, 23, 0.06);
+    backdrop-filter: blur(18px) saturate(1.04);
+  }
+
+  .mobileHiddenLabel {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .librarySearchInput {
+    min-height: 42px;
+    border-radius: 13px;
+    padding: 0.62rem 0.72rem;
+    font-size: 0.88rem;
+  }
+
+  .select {
+    min-height: 42px;
+    border-radius: 13px;
+    padding: 0.62rem 2.25rem 0.62rem 0.72rem;
+    background-position: right 0.72rem center;
+    font-size: 0.88rem;
+  }
+
+  .libraryList {
+    margin-top: 0.62rem;
+    gap: 0.58rem;
   }
 
   .confirmActions {
@@ -449,111 +567,106 @@
   }
 
   .actionSet {
-    gap: 0.48rem 1rem;
+    gap: 0.42rem 0.78rem;
   }
 }
 
 @media (max-width: 420px) {
-  .librarySurface {
-    padding: 0.9rem;
+  .libraryHero {
+    gap: 0.48rem;
   }
 
   .libraryRowBody {
-    padding: 0.9rem;
+    padding: 0.78rem;
   }
 
   .libraryRowMain {
     align-items: start;
-    grid-template-columns: 1fr;
-    gap: 0.82rem;
+    grid-template-columns: 82px minmax(0, 1fr);
+    gap: 0.58rem 0.68rem;
   }
 
   .libraryTopRow {
-    display: grid;
-    grid-template-columns: 92px minmax(0, 1fr);
-    gap: 0.75rem;
+    display: contents;
   }
 
   .libraryMedia,
   .libraryThumbnailFrame {
-    width: 92px;
+    width: 82px;
   }
 
-  .libraryTitleLink {
-    font-size: 0.95rem;
-  }
-
-  .libraryTitleBlock {
-    gap: 0.56rem;
-  }
-
-  .metaRow {
-    display: grid;
-    grid-template-columns: max-content max-content;
-    gap: 0.24rem 0.48rem;
-    align-items: baseline;
-  }
-
-  .metaDate {
+  .libraryMedia {
     grid-column: 1;
     grid-row: 1;
   }
 
-  .metaDuration {
+  .libraryRowContent {
+    display: contents;
+  }
+
+  .libraryTitleLink {
+    font-size: 0.9rem;
+    line-height: 1.3;
+  }
+
+  .libraryTitleBlock {
+    display: contents;
+  }
+
+  .titleRow {
     grid-column: 2;
     grid-row: 1;
-    justify-self: start;
+    align-self: start;
+  }
+
+  .metaRow {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    display: flex;
+    gap: 0.18rem 0.62rem;
+    flex-wrap: wrap;
+    align-items: baseline;
+    font-size: 0.8rem;
+    line-height: 1.42;
+  }
+
+  .metaDuration {
     white-space: nowrap;
   }
 
   .metaDuration::before {
-    content: "";
-    display: inline-block;
-    width: 4px;
-    height: 4px;
-    margin-right: 0.48rem;
-    border-radius: 999px;
-    background: rgba(67, 82, 71, 0.35);
-    vertical-align: 0.12em;
+    display: none;
   }
 
-  .metaAuthor {
+  .metaRow span:not(:first-child)::before {
+    display: none;
+  }
+
+  .rowActions {
     grid-column: 1 / -1;
-    grid-row: 2;
+    grid-row: 3;
+    margin-top: 0.02rem;
   }
 
   .actionSet {
-    display: grid;
-    grid-template-columns: max-content max-content;
-    gap: 0.62rem 1rem;
+    display: flex;
+    gap: 0.36rem 0.68rem;
+    flex-wrap: wrap;
     align-items: center;
   }
 
   .libraryPrimaryAction {
-    grid-column: 1 / -1;
-    width: fit-content;
+    width: auto;
     min-width: 0;
     align-self: center;
     justify-self: start;
     justify-content: center;
-    padding-inline: 0.95rem;
+    padding-inline: 0.78rem;
   }
 
   .librarySecondaryAction,
   .menuDangerAction {
     min-height: auto;
-    padding: 0.18rem 0;
-  }
-
-  .librarySecondaryAction {
-    grid-column: 1;
-    grid-row: 2;
-    justify-self: start;
-  }
-
-  .menuDangerAction {
-    grid-column: 2;
-    grid-row: 2;
-    justify-self: start;
+    padding: 0.16rem 0;
   }
 }

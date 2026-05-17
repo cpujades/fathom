@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 
@@ -23,73 +23,86 @@ import {
 } from "../../../../lib/appDataCache";
 import { buildSignInPath } from "../../../../lib/url";
 import { readSessionStream, type SessionStreamEvent } from "../../sessionStream";
+import {
+  briefingSessionReducer,
+  createInitialSessionUiState,
+  isTerminalSessionState,
+  type SessionContentDeltaPayload,
+  type SessionStatusPayload
+} from "../../sessionState";
 import styles from "../../session.module.css";
 
 const RECONNECT_BASE_DELAY_MS = 1000;
 const RECONNECT_MAX_DELAY_MS = 5000;
 const RECONCILE_INTERVAL_MS = 4000;
-const LOADING_SUPPORT_MESSAGES = [
-  "Live updates are connected.",
-  "Your draft appears here the moment the first section is ready.",
-  "You can leave this page and come back later."
-] as const;
+const READY_MARKDOWN_RECONCILE_ATTEMPTS = 12;
+const READY_MARKDOWN_RECONCILE_INTERVAL_MS = 2500;
+const STILL_NORMAL_SECONDS = 30;
+const LONG_SOURCE_SECONDS = 60;
+const LONG_WAIT_SECONDS = 120;
+const LEAVE_AND_RETURN_SECONDS = 300;
+const POSSIBLY_STUCK_SECONDS = 600;
+
+type BriefingSessionState = BriefingSessionResponse["state"];
 
 const STATE_LABELS: Record<BriefingSessionResponse["state"], string> = {
   accepted: "Starting",
   resolving_source: "Checking source",
-  reusing_existing: "Checking reuse",
-  transcribing: "Listening",
-  drafting_briefing: "Drafting",
-  finalizing_briefing: "Finalizing",
+  reusing_existing: "Checking library",
+  transcribing: "Transcribing audio",
+  drafting_briefing: "Writing briefing",
+  finalizing_briefing: "Saving briefing",
   ready: "Ready",
   failed: "Needs attention"
 };
 
 const STATE_HINTS: Record<BriefingSessionResponse["state"], string> = {
-  accepted: "Opening the session and validating the request.",
-  resolving_source: "Checking the source, metadata, and reusable assets.",
-  reusing_existing: "Looking for transcript and briefing work we can reuse safely.",
-  transcribing: "Listening through the source and building the raw transcript.",
-  drafting_briefing: "Turning the transcript into a clear, structured briefing.",
-  finalizing_briefing: "Finishing the markdown, export state, and delivery details.",
-  ready: "Everything is ready to read, export, or revisit later.",
-  failed: "Something interrupted the run before delivery completed."
+  accepted: "Source received.",
+  resolving_source: "Reading the page and looking for usable audio.",
+  reusing_existing: "Checking your library before doing new work.",
+  transcribing: "Turning audio into text.",
+  drafting_briefing: "Shaping the transcript into a reader.",
+  finalizing_briefing: "Saving the finished version.",
+  ready: "Ready to read, export, or revisit later.",
+  failed: "The run stopped before delivery completed."
 };
 
-type SessionContentDeltaPayload = {
-  session_id: string;
-  briefing_id: string | null;
-  state: BriefingSessionResponse["state"];
-  message: string;
-  detail: string | null;
-  progress: number;
-  source_title: string;
-  source_author: string | null;
-  source_duration_seconds: number | null;
-  source_thumbnail_url: string | null;
-  briefing_has_pdf: boolean;
-  markdown_length: number;
-  delta: string;
-};
-
-type SessionStatusPayload = {
-  session_id: string;
-  briefing_id: string | null;
-  state: BriefingSessionResponse["state"];
-  message: string;
-  detail: string | null;
-  progress: number;
-  resolution_type: BriefingSessionResponse["resolution_type"];
-  source_title: string;
-  source_author: string | null;
-  source_duration_seconds: number | null;
-  source_thumbnail_url: string | null;
-  briefing_has_pdf: boolean;
-  error_code: string | null;
-  error_message: string | null;
-};
-
-type StreamHealth = "live" | "reconnecting";
+const LIFECYCLE_STEPS: Array<{
+  activeText: string;
+  beforeText: string;
+  completeText: string;
+  label: string;
+  states: BriefingSessionState[];
+}> = [
+  {
+    activeText: "Reading the source.",
+    beforeText: "Waiting for source.",
+    completeText: "Source locked.",
+    label: "Check source",
+    states: ["accepted", "resolving_source", "reusing_existing"]
+  },
+  {
+    activeText: "Listening closely.",
+    beforeText: "Waiting for source.",
+    completeText: "Transcript ready.",
+    label: "Transcribe",
+    states: ["transcribing"]
+  },
+  {
+    activeText: "Writing the briefing.",
+    beforeText: "Waiting for transcript.",
+    completeText: "Briefing written.",
+    label: "Write",
+    states: ["drafting_briefing"]
+  },
+  {
+    activeText: "Saving the briefing.",
+    beforeText: "Waiting for writing.",
+    completeText: "Ready to read.",
+    label: "Ready",
+    states: ["finalizing_briefing", "ready"]
+  }
+];
 
 type ParsedBriefingSection = {
   id: string;
@@ -106,7 +119,20 @@ type ParsedBriefing = {
   references: ParsedBriefingSection | null;
 };
 
+type TakeawayItem = {
+  title: string;
+  body: string;
+};
+
 type BriefingSectionKind = "deepRead" | "standard";
+
+type FailurePresentation = {
+  actionHref: string;
+  actionLabel: string;
+  description: string;
+  detail: string;
+  title: string;
+};
 
 export default function BriefingSessionPage() {
   const router = useRouter();
@@ -122,10 +148,12 @@ export default function BriefingSessionPage() {
     () => (sessionId ? getCachedSessionSnapshot(sessionId) : null),
     [sessionId]
   );
-  const { accessToken, loading, remainingSeconds, signOut, user } = useAppShell();
-  const [session, setSession] = useState<BriefingSessionResponse | null>(cachedSnapshot);
-  const [initialSnapshotLoaded, setInitialSnapshotLoaded] = useState(Boolean(cachedSnapshot));
-  const [streamedMarkdown, setStreamedMarkdown] = useState(cachedSnapshot?.briefing_markdown ?? "");
+  const { accessToken, loading, refreshUsage, remainingSeconds, signOut, user } = useAppShell();
+  const [sessionState, dispatchSession] = useReducer(
+    briefingSessionReducer,
+    cachedSnapshot,
+    createInitialSessionUiState
+  );
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
@@ -133,13 +161,25 @@ export default function BriefingSessionPage() {
   const [deleteConfirming, setDeleteConfirming] = useState(false);
   const [sessionLoadError, setSessionLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [connectionNotice, setConnectionNotice] = useState<string | null>(null);
-  const [streamHealth, setStreamHealth] = useState<StreamHealth>("live");
-  const [progress, setProgress] = useState(cachedSnapshot?.progress ?? 5);
-  const [loadingSupportIndex, setLoadingSupportIndex] = useState(0);
+  const [readingProgress, setReadingProgress] = useState(0);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const lastEventIdRef = useRef<string | null>(null);
   const terminalStateRef = useRef(false);
   const lastStreamActivityRef = useRef<number>(Date.now());
+  const refreshedUsageSessionRef = useRef<string | null>(null);
+  const {
+    connectionNotice,
+    markdown: streamedMarkdown,
+    phase,
+    session,
+    streamHealth
+  } = sessionState;
+
+  useEffect(() => {
+    if (session) {
+      cacheSessionSnapshot(session);
+    }
+  }, [session]);
 
   useEffect(() => {
     if (loading || !sessionId) {
@@ -158,109 +198,30 @@ export default function BriefingSessionPage() {
     setDeleteConfirming(false);
     setSessionLoadError(null);
     setActionError(null);
-    setConnectionNotice(null);
-    setStreamHealth("live");
 
     const prefetchedSnapshot = getCachedSessionSnapshot(sessionId);
-    if (prefetchedSnapshot) {
-      setSession(prefetchedSnapshot);
-      setInitialSnapshotLoaded(true);
-      setStreamedMarkdown(prefetchedSnapshot.briefing_markdown ?? "");
-      setProgress(prefetchedSnapshot.progress);
-      terminalStateRef.current = prefetchedSnapshot.state === "ready" || prefetchedSnapshot.state === "failed";
-    } else {
-      terminalStateRef.current = false;
-      setInitialSnapshotLoaded(false);
-      setSession(null);
-      setStreamedMarkdown("");
-      setProgress(5);
-    }
+    dispatchSession({ type: "reset", snapshot: prefetchedSnapshot });
+    terminalStateRef.current = prefetchedSnapshot ? isTerminalSessionState(prefetchedSnapshot.state) : false;
 
     const abortController = new AbortController();
     const api = createApiClient(accessToken);
 
     const handleSessionSnapshot = (snapshot: BriefingSessionResponse) => {
-      cacheSessionSnapshot(snapshot);
-      setSession(snapshot);
-      setStreamedMarkdown(snapshot.briefing_markdown ?? "");
-      setProgress(snapshot.progress);
-      setInitialSnapshotLoaded(true);
-      terminalStateRef.current = snapshot.state === "ready" || snapshot.state === "failed";
+      dispatchSession({ type: "snapshot", snapshot });
+      terminalStateRef.current = terminalStateRef.current || isTerminalSessionState(snapshot.state);
       lastStreamActivityRef.current = Date.now();
       setSessionLoadError(null);
     };
 
     const handleStatusUpdate = (statusUpdate: SessionStatusPayload) => {
-      setSession((current) => {
-        if (!current) {
-          return current;
-        }
-
-        const nextSnapshot: BriefingSessionResponse = {
-          ...current,
-          briefing_id: statusUpdate.briefing_id ?? current.briefing_id,
-          state: statusUpdate.state,
-          message: statusUpdate.message,
-          detail: statusUpdate.detail,
-          progress: statusUpdate.progress,
-          resolution_type: statusUpdate.resolution_type,
-          source_title: statusUpdate.source_title,
-          source_author: statusUpdate.source_author,
-          source_duration_seconds: statusUpdate.source_duration_seconds,
-          source_thumbnail_url: statusUpdate.source_thumbnail_url,
-          briefing_has_pdf: statusUpdate.briefing_has_pdf,
-          error_code: statusUpdate.error_code,
-          error_message: statusUpdate.error_message,
-          briefing_markdown: current.briefing_markdown
-        };
-        cacheSessionSnapshot(nextSnapshot);
-        return nextSnapshot;
-      });
-      setProgress(statusUpdate.progress);
-      setInitialSnapshotLoaded(true);
-      terminalStateRef.current = statusUpdate.state === "ready" || statusUpdate.state === "failed";
+      dispatchSession({ type: "status", status: statusUpdate });
+      terminalStateRef.current = terminalStateRef.current || isTerminalSessionState(statusUpdate.state);
       lastStreamActivityRef.current = Date.now();
     };
 
     const handleContentDelta = (contentDelta: SessionContentDeltaPayload) => {
-      setStreamedMarkdown((current) => {
-        if (contentDelta.markdown_length <= current.length) {
-          return current;
-        }
-        const nextMarkdown = `${current}${contentDelta.delta}`;
-        if (nextMarkdown.length !== contentDelta.markdown_length) {
-          return nextMarkdown;
-        }
-        return nextMarkdown;
-      });
-
-      setSession((current) => {
-        if (!current) {
-          return current;
-        }
-
-        const currentMarkdown = current.briefing_markdown ?? "";
-        const nextMarkdown = `${currentMarkdown}${contentDelta.delta}`;
-        const nextSnapshot: BriefingSessionResponse = {
-          ...current,
-          briefing_id: contentDelta.briefing_id ?? current.briefing_id,
-          state: contentDelta.state,
-          message: contentDelta.message,
-          detail: contentDelta.detail,
-          progress: contentDelta.progress,
-          source_title: contentDelta.source_title,
-          source_author: contentDelta.source_author,
-          source_duration_seconds: contentDelta.source_duration_seconds,
-          source_thumbnail_url: contentDelta.source_thumbnail_url,
-          briefing_has_pdf: contentDelta.briefing_has_pdf,
-          briefing_markdown: nextMarkdown
-        };
-        cacheSessionSnapshot(nextSnapshot);
-        return nextSnapshot;
-      });
-      setProgress(contentDelta.progress);
-      setInitialSnapshotLoaded(true);
-      terminalStateRef.current = contentDelta.state === "ready" || contentDelta.state === "failed";
+      dispatchSession({ type: "content_delta", contentDelta });
+      terminalStateRef.current = terminalStateRef.current || isTerminalSessionState(contentDelta.state);
       lastStreamActivityRef.current = Date.now();
     };
 
@@ -271,8 +232,7 @@ export default function BriefingSessionPage() {
 
       lastEventIdRef.current = event.id;
       lastStreamActivityRef.current = Date.now();
-      setStreamHealth("live");
-      setConnectionNotice(null);
+      dispatchSession({ type: "stream_restored" });
       if (event.event === "session.content_delta") {
         handleContentDelta(event.data as SessionContentDeltaPayload);
       } else if (event.event === "session.status") {
@@ -292,32 +252,56 @@ export default function BriefingSessionPage() {
     };
 
     const refreshSessionSnapshot = async (currentSessionId: string, blocking = false) => {
-      const { data, error: apiError } = await api.GET("/briefing-sessions/{session_id}", {
-        params: {
-          path: {
-            session_id: currentSessionId
-          }
+      const handleSnapshotRefreshFailure = (error: unknown) => {
+        if (abortController.signal.aborted) {
+          return;
         }
-      });
 
-      if (apiError) {
-        setInitialSnapshotLoaded(true);
+        logger.warn("web.session_snapshot.refresh_failed", {
+          session_id: currentSessionId,
+          blocking,
+          error_type: error instanceof Error ? error.name : "UnknownError",
+          message: error instanceof Error ? error.message : "Unable to fetch briefing session."
+        });
+        dispatchSession({ type: "snapshot_load_failed" });
         if (blocking) {
-          setSessionLoadError(getApiErrorMessage(apiError, "Unable to fetch briefing session."));
+          setSessionLoadError(getApiErrorMessage(error, "Unable to fetch briefing session."));
         } else {
-          setStreamHealth("reconnecting");
-          setConnectionNotice("Live updates are reconnecting. Your latest saved progress is still shown below.");
+          dispatchSession({
+            type: "stream_lost",
+            notice: "Connection is catching up. Saved progress remains here."
+          });
         }
+      };
+
+      try {
+        const { data, error: apiError } = await api.GET("/briefing-sessions/{session_id}", {
+          params: {
+            path: {
+              session_id: currentSessionId
+            }
+          }
+        });
+
+        if (abortController.signal.aborted) {
+          return null;
+        }
+
+        if (apiError) {
+          handleSnapshotRefreshFailure(apiError);
+          return null;
+        }
+
+        if (data) {
+          handleSessionSnapshot(data);
+          dispatchSession({ type: "stream_restored" });
+        }
+
+        return data ?? null;
+      } catch (err) {
+        handleSnapshotRefreshFailure(err);
         return null;
       }
-
-      if (data) {
-        handleSessionSnapshot(data);
-        setConnectionNotice(null);
-        setStreamHealth("live");
-      }
-
-      return data ?? null;
     };
 
     const streamSession = async () => {
@@ -329,7 +313,7 @@ export default function BriefingSessionPage() {
       }
 
       if (!data) {
-        setInitialSnapshotLoaded(true);
+        dispatchSession({ type: "snapshot_load_failed" });
         return;
       }
 
@@ -379,8 +363,7 @@ export default function BriefingSessionPage() {
             }
 
             reconnectDelay = RECONNECT_BASE_DELAY_MS;
-            setStreamHealth("live");
-            setConnectionNotice(null);
+            dispatchSession({ type: "stream_restored" });
             logger.info("web.session_stream.opened", {
               session_id: sessionId,
               last_event_id: lastEventIdRef.current
@@ -409,12 +392,13 @@ export default function BriefingSessionPage() {
               error_type: streamError instanceof Error ? streamError.name : "UnknownError",
               message: streamError instanceof Error ? streamError.message : "Unknown stream error"
             });
-            setStreamHealth("reconnecting");
-            setConnectionNotice(
-              streamError instanceof Error && streamError.message.includes("live session stream")
-                ? "Live updates are reconnecting. Your latest saved progress is still shown below."
-                : "The live connection dropped for a moment. Reconnecting now."
-            );
+            dispatchSession({
+              type: "stream_lost",
+              notice:
+                streamError instanceof Error && streamError.message.includes("live session stream")
+                  ? "Connection is catching up. Saved progress remains here."
+                  : "Live updates paused for a moment. Reconnecting now."
+            });
           }
 
           if (terminalStateRef.current || abortController.signal.aborted) {
@@ -435,22 +419,26 @@ export default function BriefingSessionPage() {
       }
     };
 
-    void streamSession();
+    void streamSession().catch((err) => {
+      if (abortController.signal.aborted) {
+        return;
+      }
+
+      logger.warn("web.session_stream.unhandled_error", {
+        session_id: sessionId,
+        error_type: err instanceof Error ? err.name : "UnknownError",
+        message: err instanceof Error ? err.message : "Unexpected session stream error"
+      });
+      dispatchSession({
+        type: "stream_lost",
+        notice: "Connection is catching up. Saved progress remains here."
+      });
+    });
 
     return () => {
       abortController.abort();
     };
   }, [accessToken, loading, router, sessionId, signInPath]);
-
-  useEffect(() => {
-    const intervalId = window.setInterval(() => {
-      setLoadingSupportIndex((current) => (current + 1) % LOADING_SUPPORT_MESSAGES.length);
-    }, 2600);
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, []);
 
   const handlePdfAction = async () => {
     if (!session?.briefing_id || !accessToken) {
@@ -542,36 +530,51 @@ export default function BriefingSessionPage() {
     }
   };
 
-  const isReady = session?.state === "ready";
-  const isFailed = session?.state === "failed";
-  const isStreaming = Boolean(session && !isReady && !isFailed);
+  const isReady = phase === "ready";
+  const isFailed = phase === "failed";
+  const isStreaming = phase === "streaming";
+  const failurePresentation = getFailurePresentation(session, sessionLoadError);
   const rawMarkdown = streamedMarkdown || session?.briefing_markdown || "";
   const markdownToRender = removeGenericBriefingHeading(rawMarkdown);
   const parsedBriefing = useMemo(
     () => parseBriefingMarkdown(markdownToRender, session?.source_title),
     [markdownToRender, session?.source_title]
   );
+  const takeawayItems = useMemo(() => parseTakeawayItems(parsedBriefing.takeaways), [parsedBriefing.takeaways]);
   const hasMarkdown = Boolean(markdownToRender);
-  const clampedProgress = Math.max(0, Math.min(progress, 100));
-  const stageLabel = session ? STATE_LABELS[session.state] : "Preparing your briefing";
-  const phaseHint = session ? STATE_HINTS[session.state] : "Connecting you to live updates and checking the current session.";
+  const isWaitingForReadyMarkdown = phase === "delivering";
+  const stageLabel = isWaitingForReadyMarkdown
+    ? "Loading saved briefing"
+    : session
+      ? STATE_LABELS[session.state]
+      : "Opening briefing";
+  const phaseHint = isWaitingForReadyMarkdown
+    ? "The run is complete. Talven is fetching the saved briefing text."
+    : session
+      ? STATE_HINTS[session.state]
+      : "Opening the reader.";
+  const longRunningNotice = getLongRunningNotice(session?.state ?? null, elapsedSeconds);
   const headline = isReady
     ? parsedBriefing.title
     : isFailed
-      ? "This briefing failed"
+      ? failurePresentation.title
       : hasMarkdown
         ? parsedBriefing.title
-        : "Building your briefing";
-  const subhead = isFailed
-      ? "The run stopped before the final briefing was delivered."
-      : !isReady
-        ? "Talven is working through the source and shaping the briefing."
-        : "";
-  const showProgressPanel = initialSnapshotLoaded && !hasMarkdown && !isReady && !isFailed;
+        : session?.source_title || "Opening briefing";
+  const subhead = isFailed ? failurePresentation.description : "";
   const creditCtaMessage = session?.error_message ?? sessionLoadError;
-  const showCreditCta = Boolean(creditCtaMessage && isCreditError(creditCtaMessage));
-  const canShowReader = initialSnapshotLoaded && (hasMarkdown || isReady || isFailed);
-  const showHeroLivePill = !isReady && !isFailed && !showProgressPanel;
+  const showCreditCta = failurePresentation.actionHref === "/app/billing#billing-offers" || Boolean(creditCtaMessage && isCreditError(creditCtaMessage));
+  const canShowReader = phase === "streaming" || phase === "ready" || phase === "failed";
+  const showLifecyclePanel = phase !== "ready" && phase !== "failed";
+  const lifecycleStepIndex = getLifecycleStepIndex(session?.state ?? null, phase);
+  const lifecycleKicker = phase === "loading_session" ? "Reader" : "Briefing in progress";
+  const lifecycleTitle = phase === "loading_session" ? "Opening reader" : stageLabel;
+  const lifecycleHint =
+    phase === "loading_session"
+      ? "A live reader is being prepared."
+      : phaseHint;
+  const lifecycleStatusLabel =
+    streamHealth === "reconnecting" ? "Reconnecting" : phase === "loading_session" ? "Opening" : "Live";
   const primaryPdfActionLabel = pdfLoading
     ? session?.briefing_has_pdf
       ? "Opening PDF..."
@@ -579,20 +582,125 @@ export default function BriefingSessionPage() {
     : session?.briefing_has_pdf || pdfUrl
       ? "Download PDF"
       : "Generate PDF";
-  const liveReaderMessage = session ? STATE_HINTS[session.state] : null;
   const sourceUrl = session?.canonical_source_url ?? session?.submitted_url ?? "";
   const sourceActionLabel = session?.source_type === "youtube" ? "Original video" : "Original source";
   const sourceLabel = session?.source_type === "youtube" ? "YouTube" : "Source";
   const sourceDurationLabel = session?.source_duration_seconds ? formatExactDuration(session.source_duration_seconds) : null;
   const hasTopActions = canShowReader && !isFailed;
   const heroEyebrow = isFailed ? "Briefing failed" : !isReady ? stageLabel : "";
-  const showHeroTopline = Boolean(heroEyebrow || isFailed || showHeroLivePill);
+  const showHeroTopline = Boolean(heroEyebrow || isFailed);
   const navigationSections = [
     parsedBriefing.summary ? { id: "briefing-summary", label: "Summary" } : null,
     parsedBriefing.takeaways ? { id: "briefing-takeaways", label: "Takeaways" } : null,
     ...parsedBriefing.articleSections.map((section) => ({ id: section.id, label: section.title })),
     parsedBriefing.references ? { id: parsedBriefing.references.id, label: "References" } : null
   ].filter((item): item is { id: string; label: string } => Boolean(item));
+  const mobileNavigationSections = navigationSections.slice(0, 3);
+
+  useEffect(() => {
+    if (!accessToken || !sessionId || phase !== "delivering") {
+      return undefined;
+    }
+
+    let attempts = 0;
+    let cancelled = false;
+    const api = createApiClient(accessToken);
+
+    const reconcileReadyMarkdown = async () => {
+      attempts += 1;
+      const { data, error: apiError } = await api.GET("/briefing-sessions/{session_id}", {
+        params: {
+          path: {
+            session_id: sessionId
+          }
+        }
+      });
+
+      if (cancelled) {
+        return;
+      }
+
+      if (apiError) {
+        logger.warn("web.session.ready_markdown_reconcile_failed", {
+          session_id: sessionId,
+          attempt: attempts
+        });
+        return;
+      }
+
+      if (data) {
+        dispatchSession({ type: "snapshot", snapshot: data });
+      }
+    };
+
+    const intervalId = window.setInterval(() => {
+      if (attempts >= READY_MARKDOWN_RECONCILE_ATTEMPTS) {
+        window.clearInterval(intervalId);
+        return;
+      }
+
+      void reconcileReadyMarkdown();
+    }, READY_MARKDOWN_RECONCILE_INTERVAL_MS);
+
+    void reconcileReadyMarkdown();
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [accessToken, phase, sessionId]);
+
+  useEffect(() => {
+    if (phase !== "ready" || !session?.session_id || refreshedUsageSessionRef.current === session.session_id) {
+      return;
+    }
+
+    refreshedUsageSessionRef.current = session.session_id;
+    void refreshUsage();
+  }, [phase, refreshUsage, session?.session_id]);
+
+  useEffect(() => {
+    if (!showLifecyclePanel) {
+      setElapsedSeconds(0);
+      return undefined;
+    }
+
+    const startedAt = Date.now();
+    setElapsedSeconds(0);
+    const intervalId = window.setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000));
+    }, 1000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [sessionId, showLifecyclePanel]);
+
+  useEffect(() => {
+    if (!canShowReader) {
+      setReadingProgress(0);
+      return undefined;
+    }
+
+    const updateReadingProgress = () => {
+      const scrollableHeight = document.documentElement.scrollHeight - window.innerHeight;
+      if (scrollableHeight <= 0) {
+        setReadingProgress(100);
+        return;
+      }
+
+      setReadingProgress(Math.max(0, Math.min(100, Math.round((window.scrollY / scrollableHeight) * 100))));
+    };
+
+    updateReadingProgress();
+    window.addEventListener("scroll", updateReadingProgress, { passive: true });
+    window.addEventListener("resize", updateReadingProgress);
+
+    return () => {
+      window.removeEventListener("scroll", updateReadingProgress);
+      window.removeEventListener("resize", updateReadingProgress);
+    };
+  }, [canShowReader, sessionId]);
 
   return (
     <div className={chrome.pageFrame}>
@@ -603,7 +711,7 @@ export default function BriefingSessionPage() {
         onSignOut={signOut}
       />
 
-      <main className={chrome.mainFrame}>
+      <main id="main-content" className={chrome.mainFrame}>
         <section className={`${chrome.heroBlock} ${styles.sessionHero}`}>
           <div className={styles.sessionHeroGrid}>
             <div className={styles.heroSourceMedia}>
@@ -626,7 +734,6 @@ export default function BriefingSessionPage() {
                   {heroEyebrow ? <p className={chrome.heroEyebrow}>{heroEyebrow}</p> : null}
                   <div className={chrome.heroMeta}>
                     {isFailed ? <span className={chrome.statusPillDanger}>Failed</span> : null}
-                    {showHeroLivePill ? <span className={`${chrome.statusPillMuted} ${styles.liveStatus}`}>Live</span> : null}
                   </div>
                 </div>
               ) : null}
@@ -639,6 +746,75 @@ export default function BriefingSessionPage() {
               {subhead ? <p className={styles.sessionDeck}>{subhead}</p> : null}
             </div>
           </div>
+
+          {showLifecyclePanel ? (
+            <div className={styles.lifecyclePanel} aria-live="polite">
+              <div className={styles.lifecycleHeader}>
+                <div>
+                  <p className={styles.lifecycleKicker}>{lifecycleKicker}</p>
+                  <h2>{lifecycleTitle}</h2>
+                  <p>{lifecycleHint}</p>
+                </div>
+                <span
+                  className={`${chrome.statusPillMuted} ${
+                    streamHealth === "reconnecting" ? styles.lifecycleWarningPill : styles.liveStatus
+                  }`}
+                >
+                  {lifecycleStatusLabel}
+                </span>
+              </div>
+
+              <div className={styles.lifecycleSteps} aria-label="Briefing progress">
+                {LIFECYCLE_STEPS.map((step, index) => (
+                  <div
+                    className={getLifecycleStepClassName(index, lifecycleStepIndex)}
+                    key={step.label}
+                    aria-current={index === lifecycleStepIndex ? "step" : undefined}
+                  >
+                    <span aria-hidden="true" />
+                    <div>
+                      <p>{step.label}</p>
+                      <small>
+                        {getLifecycleStepDescription({
+                          index,
+                          phase,
+                          state: session?.state ?? null,
+                          step,
+                          activeIndex: lifecycleStepIndex
+                        })}
+                        {index === lifecycleStepIndex ? <span className={styles.lifecycleEllipsis} aria-hidden="true" /> : null}
+                      </small>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {longRunningNotice ? (
+                <div className={styles.statusNoticeCard}>
+                  <p>{longRunningNotice}</p>
+                </div>
+              ) : null}
+
+              {connectionNotice ? (
+                <div className={styles.connectionCard}>
+                  <p>{connectionNotice}</p>
+                </div>
+              ) : null}
+
+              {sessionLoadError ? (
+                <div className={styles.errorCard}>
+                  <p>{sessionLoadError}</p>
+                  {showCreditCta ? (
+                    <div className={chrome.actionRow}>
+                      <Link className={chrome.primaryButton} href="/app/billing#billing-offers">
+                        Get more listening time
+                      </Link>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
 
           {hasTopActions ? (
             <div className={styles.heroActionBar}>
@@ -671,74 +847,38 @@ export default function BriefingSessionPage() {
           {pdfError ? <p className={`${chrome.inlineStatus} ${chrome.inlineStatusError}`}>{pdfError}</p> : null}
         </section>
 
-        {!initialSnapshotLoaded ? (
-          <section className={`${chrome.surfaceStrong} ${styles.loadingCard}`}>
-            <div className={styles.loadingTop}>
-              <div>
-                <h2 className={chrome.surfaceTitle}>Opening your briefing</h2>
-                <p className={chrome.surfaceText}>Fetching the latest saved state and reconnecting live context.</p>
-              </div>
-              <span className={chrome.statusPillMuted}>Opening</span>
-            </div>
-            <div className={styles.loadingBeacon} aria-hidden="true" />
-            <p className={chrome.surfaceText}>No reload needed. This page keeps itself in sync.</p>
-
-            {sessionLoadError ? (
-              <div className={styles.errorCard}>
-                <p>{sessionLoadError}</p>
-                {showCreditCta ? (
-                  <div className={chrome.actionRow}>
-                    <Link className={chrome.primaryButton} href="/app/billing#billing-offers">
-                      Get more listening time
-                    </Link>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-          </section>
-        ) : showProgressPanel ? (
-          <section className={`${chrome.surfaceStrong} ${styles.loadingCard}`}>
-            <div className={styles.loadingTop}>
-              <div>
-                <h2 className={chrome.surfaceTitle}>{stageLabel}</h2>
-                <p className={chrome.surfaceText}>{phaseHint}</p>
-              </div>
-              <span className={chrome.statusPillMuted}>{clampedProgress}%</span>
-            </div>
-
-            <div className={`${chrome.progressTrack} ${styles.progressTrackLive}`}>
-              <div className={`${chrome.progressFill} ${styles.progressFillLive}`} style={{ width: `${clampedProgress}%` }} />
-            </div>
-
-            <div className={styles.loadingSignalRow}>
-              <span className={`${chrome.statusPillMuted} ${styles.liveStatus}`}>
-                {streamHealth === "reconnecting" ? "Reconnecting" : "Live"}
-              </span>
-              <p className={styles.loadingSignalText}>{LOADING_SUPPORT_MESSAGES[loadingSupportIndex]}</p>
-            </div>
-
-            {connectionNotice ? (
-              <div className={styles.connectionCard}>
-                <p>{connectionNotice}</p>
-              </div>
-            ) : null}
-          </section>
-        ) : canShowReader ? (
+        {canShowReader ? (
           <section className={styles.briefingLayout}>
-            <article className={styles.briefingReader}>
-              {isStreaming && liveReaderMessage ? (
-                <div className={styles.liveReaderBanner}>
-                  <div className={styles.liveReaderMeta}>
-                    <span className={`${chrome.statusPillMuted} ${styles.liveStatus}`}>
-                      {streamHealth === "reconnecting" ? "Reconnecting" : stageLabel}
-                    </span>
-                    <p className={chrome.surfaceText}>{liveReaderMessage}</p>
-                  </div>
-                  <span className={styles.liveProgressLabel}>{clampedProgress}% complete</span>
+            {mobileNavigationSections.length ? (
+              <nav className={styles.mobileReaderBar} aria-label="Reader shortcuts">
+                <div className={styles.mobileReaderLinks}>
+                  {mobileNavigationSections.map((section) => (
+                    <a href={`#${section.id}`} key={section.id}>
+                      {getMobileSectionLabel(section.label)}
+                    </a>
+                  ))}
                 </div>
-              ) : null}
+                {isReady ? (
+                  pdfUrl ? (
+                    <a className={styles.mobileReaderAction} href={pdfUrl} target="_blank" rel="noreferrer">
+                      PDF
+                    </a>
+                  ) : (
+                    <button
+                      className={styles.mobileReaderAction}
+                      type="button"
+                      onClick={handlePdfAction}
+                      disabled={pdfLoading || !session?.briefing_id}
+                    >
+                      {pdfLoading ? "PDF..." : "PDF"}
+                    </button>
+                  )
+                ) : null}
+              </nav>
+            ) : null}
 
-              {connectionNotice ? (
+            <article className={styles.briefingReader}>
+              {connectionNotice && !showLifecyclePanel ? (
                 <div className={styles.connectionCard}>
                   <p>{connectionNotice}</p>
                 </div>
@@ -760,7 +900,18 @@ export default function BriefingSessionPage() {
                     <p className={styles.sectionKicker}>What matters</p>
                     <h2 className={styles.sectionTitle}>Key takeaways</h2>
                   </div>
-                  <StreamingMarkdown markdown={parsedBriefing.takeaways} className={`${styles.markdown} ${styles.takeawayMarkdown}`} />
+                  {takeawayItems.length > 1 ? (
+                    <ol className={styles.takeawayGrid}>
+                      {takeawayItems.map((takeaway, index) => (
+                        <li className={styles.takeawayCard} key={`${takeaway.title}-${index}`}>
+                          <h3>{takeaway.title}</h3>
+                          <p>{takeaway.body}</p>
+                        </li>
+                      ))}
+                    </ol>
+                  ) : (
+                    <StreamingMarkdown markdown={parsedBriefing.takeaways} className={`${styles.markdown} ${styles.takeawayMarkdown}`} />
+                  )}
                 </section>
               ) : null}
 
@@ -770,7 +921,7 @@ export default function BriefingSessionPage() {
                     <BriefingContentSection section={section} key={section.id} />
                   ))}
                 </div>
-              ) : markdownToRender ? (
+              ) : markdownToRender && !parsedBriefing.summary && !parsedBriefing.takeaways ? (
                 <section className={`${chrome.surface} ${styles.articleSection}`}>
                   <StreamingMarkdown
                     markdown={markdownToRender}
@@ -800,7 +951,13 @@ export default function BriefingSessionPage() {
             <aside className={styles.briefingSide}>
               {navigationSections.length > 2 ? (
                 <nav className={`${chrome.readerSideCard} ${styles.contentsCard}`} aria-label="Briefing sections">
-                  <h2 className={chrome.surfaceTitle}>Contents</h2>
+                  <div className={styles.contentsHeader}>
+                    <h2 className={chrome.surfaceTitle}>Contents</h2>
+                    <span>{readingProgress}% read</span>
+                  </div>
+                  <div className={styles.contentsProgressTrack} aria-hidden="true">
+                    <div className={styles.contentsProgressFill} style={{ width: `${readingProgress}%` }} />
+                  </div>
                   <div className={styles.contentsList}>
                     {navigationSections.map((section) => (
                       <a href={`#${section.id}`} key={section.id}>
@@ -809,6 +966,45 @@ export default function BriefingSessionPage() {
                     ))}
                   </div>
                 </nav>
+              ) : null}
+
+              {session ? (
+                <section className={`${chrome.readerSideCard} ${styles.sourceCard}`} aria-label="Source">
+                  <p className={styles.sideKicker}>Source</p>
+                  <div className={styles.sourceHeader}>
+                    <div className={styles.sourceMedia}>
+                      <div className={styles.sourceThumbnailFrame}>
+                        {session.source_thumbnail_url ? (
+                          <Image
+                            className={styles.sourceThumbnail}
+                            src={session.source_thumbnail_url}
+                            alt=""
+                            fill
+                            sizes="112px"
+                          />
+                        ) : (
+                          <div className={styles.sourceThumbnailFallback}>
+                            <span>{sourceLabel}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className={styles.sourceBody}>
+                      <div className={styles.sourceSummary}>
+                        <h2 className={styles.sourceTitle}>{session.source_title || headline}</h2>
+                        <div className={styles.sourceMeta}>
+                          {session.source_author ? <span>{session.source_author}</span> : null}
+                          {sourceDurationLabel ? <span>{sourceDurationLabel}</span> : null}
+                        </div>
+                      </div>
+                      {sourceUrl ? (
+                        <a className={styles.sourceCardLink} href={sourceUrl} target="_blank" rel="noreferrer">
+                          Open original
+                        </a>
+                      ) : null}
+                    </div>
+                  </div>
+                </section>
               ) : null}
 
               <div className={styles.desktopActionCard}>
@@ -862,11 +1058,11 @@ export default function BriefingSessionPage() {
 
               {isFailed ? (
                 <div className={styles.errorCard}>
-                  <p>Error: {session?.error_message ?? "This briefing failed."}</p>
-                  {showCreditCta ? (
+                  <p>{failurePresentation.detail}</p>
+                  {failurePresentation.actionHref ? (
                     <div className={chrome.actionRow}>
-                      <Link className={chrome.primaryButton} href="/app/billing#billing-offers">
-                        Get more listening time
+                      <Link className={chrome.primaryButton} href={failurePresentation.actionHref}>
+                        {failurePresentation.actionLabel}
                       </Link>
                     </div>
                   ) : null}
@@ -943,21 +1139,7 @@ export default function BriefingSessionPage() {
               ) : null}
             </footer>
           </section>
-        ) : (
-          <section className={`${chrome.surfaceStrong} ${styles.loadingCard}`}>
-            <div className={styles.loadingTop}>
-              <div>
-                <h2 className={chrome.surfaceTitle}>Preparing your briefing</h2>
-                <p className={chrome.surfaceText}>Waiting for the first available draft content.</p>
-              </div>
-              <span className={chrome.statusPillMuted}>{clampedProgress}%</span>
-            </div>
-
-            <div className={`${chrome.progressTrack} ${styles.progressTrackLive}`}>
-              <div className={`${chrome.progressFill} ${styles.progressFillLive}`} style={{ width: `${clampedProgress}%` }} />
-            </div>
-          </section>
-        )}
+        ) : null}
       </main>
     </div>
   );
@@ -1028,13 +1210,14 @@ function parseBriefingMarkdown(markdown: string, fallbackTitle?: string | null):
       section !== referencesSection &&
       section.content.trim()
   );
+  const hasRecognizedStructure = Boolean(titleSection || summarySection || takeawaysSection || referencesSection || bodySections.length);
 
   const articleSections = bodySections.length
     ? bodySections.map((section) => ({
         ...section,
         title: humanizeSectionTitle(section.title)
       }))
-    : cleanedMarkdown
+    : cleanedMarkdown && !hasRecognizedStructure
       ? [
           {
             id: "briefing-notes",
@@ -1115,9 +1298,91 @@ function splitMarkdownSections(markdown: string): ParsedBriefingSection[] {
 }
 
 function normalizeBriefingMarkdown(markdown: string): string {
-  return markdown
+  const withoutDecorations = markdown
     .replace(/^(\s*[-*+]\s*)(?:[\u2705\u26a0\ufe0f]|\u{1f4a1})\s*/gmu, "$1")
     .replace(/^((?:[\u2705\u26a0\ufe0f]|\u{1f4a1})\s*)+/gmu, "");
+  return normalizeLooseSectionHeadings(withoutDecorations);
+}
+
+function normalizeLooseSectionHeadings(markdown: string): string {
+  const lines = markdown.split(/\r?\n/);
+  const normalizedLines: string[] = [];
+  let sawHeading = false;
+  let sawKnownSection = false;
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const trimmed = cleanInlineMarkdown(line);
+
+    if (/^#{1,6}\s+/.test(line.trim())) {
+      sawHeading = true;
+      normalizedLines.push(line);
+      continue;
+    }
+
+    const knownSectionTitle = getKnownBriefingSectionTitle(trimmed);
+    if (knownSectionTitle) {
+      sawHeading = true;
+      sawKnownSection = true;
+      normalizedLines.push(`## ${knownSectionTitle}`);
+      continue;
+    }
+
+    const isFirstMeaningfulLine = !sawHeading && trimmed && !line.trim().startsWith("-") && !line.trim().startsWith("*");
+    const nextKnownSection = getKnownBriefingSectionTitle(getNextMeaningfulLine(lines, index));
+    if (isFirstMeaningfulLine && nextKnownSection) {
+      sawHeading = true;
+      normalizedLines.push(`# ${trimmed}`);
+      continue;
+    }
+
+    normalizedLines.push(line);
+  }
+
+  if (!sawKnownSection) {
+    return markdown;
+  }
+
+  return normalizedLines.join("\n");
+}
+
+function getNextMeaningfulLine(lines: string[], currentIndex: number): string {
+  for (let index = currentIndex + 1; index < lines.length; index += 1) {
+    const nextLine = cleanInlineMarkdown(lines[index]);
+    if (nextLine) {
+      return nextLine;
+    }
+  }
+  return "";
+}
+
+function getKnownBriefingSectionTitle(value: string): string | null {
+  const normalized = value.replace(/:$/, "").toLowerCase();
+  if (/^brief in (?:30|thirty) seconds$/.test(normalized) || normalized === "brief") {
+    return "Brief in 30 seconds";
+  }
+  if (/^key takeaways?$/.test(normalized) || normalized === "what matters") {
+    return "Key Takeaways";
+  }
+  if (/^(?:detailed|deep|full) briefing$/.test(normalized) || normalized === "deeper read") {
+    return "Detailed Briefing";
+  }
+  if (/^highlights?(?: & | and )quotes?$/.test(normalized)) {
+    return "Highlights & Quotes";
+  }
+  if (/^action items?$/.test(normalized)) {
+    return "Action Items";
+  }
+  if (/^next steps?$/.test(normalized)) {
+    return "Next Steps";
+  }
+  if (/^open questions?$/.test(normalized)) {
+    return "Open Questions";
+  }
+  if (/^(?:references|sources)$/.test(normalized)) {
+    return "References";
+  }
+  return null;
 }
 
 function cleanInlineMarkdown(value: string): string {
@@ -1148,6 +1413,210 @@ function getSectionDisplayTitle(title: string, kind: BriefingSectionKind): strin
   return title;
 }
 
+function getMobileSectionLabel(label: string): string {
+  if (/references?|sources?/i.test(label)) {
+    return "Sources";
+  }
+  if (/detailed|deeper/i.test(label)) {
+    return "Details";
+  }
+  if (label.length > 14) {
+    return "Section";
+  }
+  return label;
+}
+
+function getLongRunningNotice(state: BriefingSessionResponse["state"] | null, elapsedSeconds: number): string | null {
+  if (!state || state === "ready" || state === "failed" || elapsedSeconds < STILL_NORMAL_SECONDS) {
+    return null;
+  }
+
+  if (elapsedSeconds >= POSSIBLY_STUCK_SECONDS) {
+    return "This is taking much longer than expected. You can leave and return from Briefings, or try again later if it never finishes.";
+  }
+
+  if (elapsedSeconds >= LEAVE_AND_RETURN_SECONDS) {
+    return "Still working. This is longer than normal, but longer sources can take several minutes. You can return from Briefings.";
+  }
+
+  if (elapsedSeconds >= LONG_WAIT_SECONDS) {
+    return "Still working. This is taking a little longer than usual, especially if the source is long.";
+  }
+
+  if (elapsedSeconds >= LONG_SOURCE_SECONDS) {
+    return "Still moving. Longer sources can take a minute or two before the briefing starts to appear.";
+  }
+
+  if (elapsedSeconds >= STILL_NORMAL_SECONDS) {
+    return "Still working through the source.";
+  }
+
+  return null;
+}
+
+function getFailurePresentation(
+  session: BriefingSessionResponse | null,
+  sessionLoadError: string | null
+): FailurePresentation {
+  const code = session?.error_code ?? "";
+  const rawMessage = session?.error_message ?? sessionLoadError ?? "";
+  const normalizedMessage = rawMessage.toLowerCase();
+
+  if (isCreditError(rawMessage)) {
+    return {
+      actionHref: "/app/billing#billing-offers",
+      actionLabel: "Get more listening time",
+      title: "More listening time needed",
+      description: "This source needs more minutes than are currently available.",
+      detail: "Add more listening time, then start the briefing again."
+    };
+  }
+
+  if (
+    code === "invalid_request" ||
+    code === "invalid_job_payload" ||
+    normalizedMessage.includes("unsupported") ||
+    normalizedMessage.includes("no audio streams") ||
+    normalizedMessage.includes("youtube downloader") ||
+    normalizedMessage.includes("download audio")
+  ) {
+    return {
+      actionHref: "/app",
+      actionLabel: "Try another source",
+      title: "Source not supported",
+      description: "Talven could not read usable audio from this link.",
+      detail: "Try a public YouTube or podcast URL. Private, unavailable, or audio-free sources cannot be briefed yet."
+    };
+  }
+
+  if (
+    normalizedMessage.includes("groq") ||
+    normalizedMessage.includes("transcript") ||
+    normalizedMessage.includes("transcription") ||
+    normalizedMessage.includes("empty transcript")
+  ) {
+    return {
+      actionHref: "/app",
+      actionLabel: "Start another briefing",
+      title: "Transcript failed",
+      description: "The source opened, but the audio could not be transcribed.",
+      detail: "This is usually caused by unavailable audio, provider trouble, or an empty transcript. Try again in a moment or use another source."
+    };
+  }
+
+  if (
+    normalizedMessage.includes("openrouter") ||
+    normalizedMessage.includes("summary") ||
+    normalizedMessage.includes("summar")
+  ) {
+    return {
+      actionHref: "/app",
+      actionLabel: "Start another briefing",
+      title: "Briefing failed",
+      description: "The transcript was available, but the written briefing could not be completed.",
+      detail: "The summarizer did not return a usable briefing. Try again in a moment; if it repeats, this source may need a shorter or cleaner input."
+    };
+  }
+
+  if (code === "max_attempts_exceeded") {
+    return {
+      actionHref: "/app",
+      actionLabel: "Start another briefing",
+      title: "Briefing took too long",
+      description: "Talven retried the job but could not finish it.",
+      detail: "This can happen with provider timeouts or unusually difficult sources. Try again later or use another source."
+    };
+  }
+
+  if (code === "configuration_error") {
+    return {
+      actionHref: "/app",
+      actionLabel: "Back to workspace",
+      title: "Service configuration issue",
+      description: "Talven could not complete this briefing because a required service is unavailable.",
+      detail: "This needs an operator fix. The source was not the problem."
+    };
+  }
+
+  return {
+    actionHref: "/app",
+    actionLabel: "Start another briefing",
+    title: "Briefing stopped",
+    description: "Something interrupted the run before the final briefing was delivered.",
+    detail: rawMessage || "The briefing could not be completed. Try again in a moment or use another source."
+  };
+}
+
+function getLifecycleStepIndex(
+  state: BriefingSessionResponse["state"] | null,
+  phase: string
+): number {
+  if (phase === "loading_session" || !state) {
+    return 0;
+  }
+  if (phase === "delivering") {
+    return LIFECYCLE_STEPS.length - 1;
+  }
+  const stepIndex = LIFECYCLE_STEPS.findIndex((step) => step.states.includes(state));
+  return Math.max(0, stepIndex);
+}
+
+function getLifecycleStepClassName(index: number, activeIndex: number): string {
+  return [
+    styles.lifecycleStep,
+    index < activeIndex ? styles.lifecycleStepComplete : "",
+    index === activeIndex ? styles.lifecycleStepActive : ""
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function getLifecycleStepDescription({
+  activeIndex,
+  index,
+  phase,
+  state,
+  step
+}: {
+  activeIndex: number;
+  index: number;
+  phase: string;
+  state: BriefingSessionResponse["state"] | null;
+  step: (typeof LIFECYCLE_STEPS)[number];
+}): string {
+  if (index < activeIndex) {
+    return step.completeText;
+  }
+  if (index > activeIndex) {
+    return step.beforeText;
+  }
+  if (phase === "loading_session") {
+    return "Opening the reader.";
+  }
+  if (phase === "delivering") {
+    return "Ready in a moment.";
+  }
+  if (state === "accepted") {
+    return "Warming up.";
+  }
+  if (state === "resolving_source") {
+    return "Finding the signal.";
+  }
+  if (state === "reusing_existing") {
+    return "Checking memory.";
+  }
+  if (state === "transcribing") {
+    return step.activeText;
+  }
+  if (state === "drafting_briefing") {
+    return step.activeText;
+  }
+  if (state === "finalizing_briefing") {
+    return step.activeText;
+  }
+  return step.activeText;
+}
+
 function emphasizeFirstSentence(markdown: string): string {
   const trimmed = markdown.trim();
   if (!trimmed || trimmed.startsWith("**") || trimmed.startsWith("#") || trimmed.includes("\n- ")) {
@@ -1160,6 +1629,22 @@ function emphasizeFirstSentence(markdown: string): string {
   }
 
   return `**${sentenceMatch[1]}**${sentenceMatch[2]}`;
+}
+
+function parseTakeawayItems(markdown: string): TakeawayItem[] {
+  const items: TakeawayItem[] = [];
+  const pattern = /(?:^|\n)\s*(?:[-*+]\s*)?\*\*(.+?)\*\*\s*:?\s*([\s\S]*?)(?=\n\s*(?:[-*+]\s*)?\*\*.+?\*\*\s*:|$)/g;
+
+  for (const match of markdown.matchAll(pattern)) {
+    const title = cleanInlineMarkdown(match[1]);
+    const body = cleanInlineMarkdown(match[2].replace(/^[-*+]\s*/, ""));
+
+    if (title && body) {
+      items.push({ title, body });
+    }
+  }
+
+  return items;
 }
 
 function getSectionId(title: string, index: number): string {

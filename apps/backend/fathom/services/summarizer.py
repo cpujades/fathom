@@ -9,7 +9,7 @@ from fathom.core.constants import SYSTEM_PROMPT
 from fathom.core.errors import ExternalServiceError
 
 # Default OpenRouter model for summarization
-OPENROUTER_MODEL = "x-ai/grok-4.1-fast"
+OPENROUTER_MODEL = "x-ai/grok-4.3"
 
 # OpenRouter metadata headers (optional but recommended)
 OPENROUTER_APP_NAME = "fathom"

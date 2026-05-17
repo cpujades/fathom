@@ -3,7 +3,17 @@ export type BriefingSourceFilter = "all" | "youtube" | "url";
 
 export type BriefingListItem = {
   session_id: string;
-  briefing_id: string;
+  briefing_id: string | null;
+  state:
+    | "accepted"
+    | "resolving_source"
+    | "reusing_existing"
+    | "transcribing"
+    | "drafting_briefing"
+    | "finalizing_briefing"
+    | "ready"
+    | "failed";
+  progress: number;
   title: string;
   author: string | null;
   source_url: string;

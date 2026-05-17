@@ -136,10 +136,9 @@ async def fetch_briefing_jobs_page(
     try:
         response = await (
             client.table("jobs")
-            .select("id,summary_id,status,url,created_at,duration_seconds", count=CountMethod.exact)
+            .select("id,summary_id,status,url,created_at,duration_seconds,stage,progress", count=CountMethod.exact)
             .eq("user_id", user_id)
-            .eq("status", "succeeded")
-            .not_.is_("summary_id", "null")
+            .in_("status", ["queued", "running", "succeeded", "failed"])
             .order("created_at", desc=sort_desc)
             .range(offset, max(offset + limit - 1, offset))
             .execute()

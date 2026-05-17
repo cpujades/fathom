@@ -6,7 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from fathom.schemas.briefing_sessions import BriefingSourceType
+from fathom.schemas.briefing_sessions import BriefingSessionState, BriefingSourceType
 
 BriefingListSort = Literal["newest", "oldest"]
 BriefingSourceFilter = Literal["all", "youtube", "url"]
@@ -25,7 +25,9 @@ class BriefingPdfResponse(BaseModel):
 
 class BriefingListItem(BaseModel):
     session_id: UUID
-    briefing_id: UUID
+    briefing_id: UUID | None = None
+    state: BriefingSessionState = "ready"
+    progress: int = 100
     title: str
     author: str | None = None
     source_url: str

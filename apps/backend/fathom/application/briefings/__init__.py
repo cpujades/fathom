@@ -17,6 +17,7 @@ from fathom.crud.supabase.jobs import fetch_briefing_jobs_page
 from fathom.crud.supabase.storage_objects import create_pdf_signed_url, upload_pdf
 from fathom.crud.supabase.summaries import fetch_summaries_by_ids, fetch_summary, update_summary_pdf_key
 from fathom.crud.supabase.transcripts import fetch_transcript_by_id, fetch_transcripts_by_ids
+from fathom.schemas.briefing_sessions import BriefingSessionState
 from fathom.schemas.briefings import (
     BriefingListItem,
     BriefingListResponse,
@@ -212,13 +213,14 @@ async def _build_briefing_list_items(admin_client: Any, jobs: Sequence[dict[str,
         summary_id = job.get("summary_id")
         created_at = job.get("created_at")
         url = str(job.get("url") or "").strip()
-        if not job_id or not summary_id or not created_at or not url:
+        if not job_id or not created_at or not url:
             continue
 
         normalized_source = normalize_source(url)
-        summary = summary_by_id.get(str(summary_id))
+        summary = summary_by_id.get(str(summary_id)) if summary_id else None
         transcript_id = summary.get("transcript_id") if isinstance(summary, dict) else None
         transcript = transcript_by_id.get(str(transcript_id)) if transcript_id else None
+        state = _resolve_list_state(job)
 
         source_title = transcript.get("source_title") if isinstance(transcript, dict) else None
         source_author = transcript.get("source_author") if isinstance(transcript, dict) else None
@@ -232,6 +234,8 @@ async def _build_briefing_list_items(admin_client: Any, jobs: Sequence[dict[str,
             BriefingListItem(
                 session_id=job_id,
                 briefing_id=summary_id,
+                state=state,
+                progress=_coerce_progress(job.get("progress"), state),
                 title=resolve_source_title(normalized_source, source_title),
                 author=_clean_optional_text(source_author),
                 source_url=normalized_source.canonical_url,
@@ -247,6 +251,38 @@ async def _build_briefing_list_items(admin_client: Any, jobs: Sequence[dict[str,
         )
 
     return items
+
+
+def _resolve_list_state(job: dict[str, Any]) -> BriefingSessionState:
+    status = str(job.get("status") or "queued")
+    stage = str(job.get("stage") or status)
+
+    if status == "failed" or stage == "failed":
+        return "failed"
+    if status == "succeeded" or stage in {"completed", "cached"}:
+        return "ready"
+    if stage == "checking_cache":
+        return "reusing_existing"
+    if stage in {"downloading", "transcribing"}:
+        return "transcribing"
+    if stage == "summarizing":
+        progress = _coerce_positive_int(job.get("progress")) or 0
+        return "finalizing_briefing" if progress >= 90 else "drafting_briefing"
+    if stage == "finalizing":
+        return "finalizing_briefing"
+    if stage == "queued":
+        return "accepted"
+    return "resolving_source"
+
+
+def _coerce_progress(value: Any, state: BriefingSessionState) -> int:
+    if isinstance(value, int):
+        return min(max(value, 0), 100)
+    if state == "ready":
+        return 100
+    if state == "failed":
+        return 0
+    return 5
 
 
 def _normalize_query(value: str | None) -> str | None:

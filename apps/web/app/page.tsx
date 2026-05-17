@@ -26,7 +26,7 @@ export default async function Home({ searchParams }: HomePageProps) {
     <div className={styles.page}>
       <LandingHeader navItems={landingContent.nav} primaryCta={landingContent.hero.primaryCta} />
 
-      <main>
+      <main id="main-content">
         <HeroSection content={landingContent.hero} />
         <ProblemSection content={landingContent.problem} />
         <HowItWorksSection content={landingContent.howItWorks} />

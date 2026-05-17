@@ -81,7 +81,7 @@ export default function ProfilePage() {
     <div className={chrome.pageFrame}>
       <AppShellHeader active="account" remainingSeconds={remainingSeconds} accountLabel={getAccountLabel(user)} onSignOut={signOut} />
 
-      <main className={chrome.mainFrame}>
+      <main id="main-content" className={chrome.mainFrame}>
         <section className={`${chrome.heroBlock} ${styles.pageColumn}`}>
           <div>
             <p className={chrome.heroEyebrow}>Account</p>

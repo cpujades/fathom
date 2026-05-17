@@ -13,6 +13,7 @@ type AppShellContextValue = {
   authenticated: boolean;
   loading: boolean;
   remainingSeconds: number | null;
+  refreshUsage: () => Promise<void>;
   setRemainingSeconds: (value: number | null) => void;
   signOut: () => Promise<void>;
   user: User | null;
@@ -22,14 +23,57 @@ const AppShellContext = createContext<AppShellContextValue | null>(null);
 
 const PREFETCH_ROUTES = ["/app", "/app/briefings", "/app/billing", "/app/account", "/app/briefings/new"];
 const USAGE_CACHE_TTL_MS = 30_000;
+const USAGE_BROADCAST_CHANNEL = "talven:usage";
+const USAGE_STORAGE_KEY = "talven:usage-snapshot";
 const DEFAULT_APP_PATH = "/app";
 
-let usageCache: {
+type UsageSnapshot = {
   fetchedAt: number;
   remainingSeconds: number | null;
-} | null = null;
+};
+
+let usageCache: UsageSnapshot | null = null;
 
 type UsageRefreshResult = "ok" | "unauthorized" | "error";
+
+function publishUsageSnapshot(snapshot: UsageSnapshot) {
+  if (typeof window === "undefined" || snapshot.remainingSeconds === null) {
+    return;
+  }
+
+  try {
+    const channel = new BroadcastChannel(USAGE_BROADCAST_CHANNEL);
+    channel.postMessage(snapshot);
+    channel.close();
+  } catch {
+    // BroadcastChannel is a progressive enhancement; storage events cover older browsers.
+  }
+
+  try {
+    window.localStorage.setItem(USAGE_STORAGE_KEY, JSON.stringify(snapshot));
+  } catch {
+    // Ignore private browsing or storage quota failures.
+  }
+}
+
+function parseUsageSnapshot(value: unknown): UsageSnapshot | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const snapshot = value as Partial<UsageSnapshot>;
+  if (typeof snapshot.fetchedAt !== "number") {
+    return null;
+  }
+  if (typeof snapshot.remainingSeconds !== "number" && snapshot.remainingSeconds !== null) {
+    return null;
+  }
+
+  return {
+    fetchedAt: snapshot.fetchedAt,
+    remainingSeconds: snapshot.remainingSeconds ?? null
+  };
+}
 
 export function AppShellProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
@@ -41,18 +85,20 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
   const [remainingSeconds, setRemainingSecondsState] = useState<number | null>(usageCache?.remainingSeconds ?? null);
 
   const setRemainingSeconds = useCallback((value: number | null) => {
-    usageCache = {
+    const snapshot = {
       fetchedAt: Date.now(),
       remainingSeconds: value
     };
+    usageCache = snapshot;
     setRemainingSecondsState(value);
+    publishUsageSnapshot(snapshot);
   }, []);
 
   const redirectToSignIn = useCallback(() => {
     router.replace(buildSignInPath(getCurrentAppPath(DEFAULT_APP_PATH)));
   }, [router]);
 
-  const refreshUsage = useCallback(
+  const refreshUsageForToken = useCallback(
     async (token: string): Promise<UsageRefreshResult> => {
       try {
         const api = createApiClient(token);
@@ -74,11 +120,75 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
     [setRemainingSeconds]
   );
 
+  const refreshUsage = useCallback(async () => {
+    const token = hydratedTokenRef.current ?? accessToken;
+    if (!token) {
+      return;
+    }
+
+    const refreshResult = await refreshUsageForToken(token);
+    if (refreshResult === "unauthorized") {
+      hydratedTokenRef.current = null;
+      setAuthenticated(false);
+      setUser(null);
+      setAccessToken(null);
+      setRemainingSecondsState(null);
+      redirectToSignIn();
+    } else if (refreshResult === "error") {
+      setRemainingSeconds(null);
+    }
+  }, [accessToken, redirectToSignIn, refreshUsageForToken, setRemainingSeconds]);
+
   useEffect(() => {
     for (const route of PREFETCH_ROUTES) {
       router.prefetch(route);
     }
   }, [router]);
+
+  useEffect(() => {
+    const applyUsageSnapshot = (snapshot: UsageSnapshot | null) => {
+      if (!snapshot) {
+        return;
+      }
+      if (usageCache && snapshot.fetchedAt < usageCache.fetchedAt) {
+        return;
+      }
+
+      usageCache = snapshot;
+      setRemainingSecondsState(snapshot.remainingSeconds);
+    };
+
+    let channel: BroadcastChannel | null = null;
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== USAGE_STORAGE_KEY || !event.newValue) {
+        return;
+      }
+
+      try {
+        applyUsageSnapshot(parseUsageSnapshot(JSON.parse(event.newValue)));
+      } catch {
+        // Ignore malformed cross-tab storage payloads.
+      }
+    };
+
+    if (typeof window !== "undefined") {
+      try {
+        channel = new BroadcastChannel(USAGE_BROADCAST_CHANNEL);
+        channel.onmessage = (event: MessageEvent<unknown>) => {
+          applyUsageSnapshot(parseUsageSnapshot(event.data));
+        };
+      } catch {
+        channel = null;
+      }
+
+      window.addEventListener("storage", handleStorage);
+    }
+
+    return () => {
+      channel?.close();
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -113,7 +223,7 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
           setRemainingSecondsState(usageCache?.remainingSeconds ?? null);
           setLoading(false);
         } else {
-          const refreshResult = await refreshUsage(session.access_token);
+          const refreshResult = await refreshUsageForToken(session.access_token);
           if (refreshResult === "unauthorized") {
             setAuthenticated(false);
             setUser(null);
@@ -172,7 +282,7 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
       const tokenChanged = hydratedTokenRef.current !== session.access_token;
       const cacheIsFresh = usageCache && Date.now() - usageCache.fetchedAt < USAGE_CACHE_TTL_MS;
       if (tokenChanged || !cacheIsFresh) {
-        const refreshResult = await refreshUsage(session.access_token);
+        const refreshResult = await refreshUsageForToken(session.access_token);
         if (refreshResult === "unauthorized") {
           hydratedTokenRef.current = null;
           setAuthenticated(false);
@@ -195,7 +305,7 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
       active = false;
       authListener.subscription.unsubscribe();
     };
-  }, [redirectToSignIn, refreshUsage]);
+  }, [redirectToSignIn, refreshUsageForToken, setRemainingSeconds]);
 
   const signOut = useCallback(async () => {
     const supabase = getSupabaseClient();
@@ -214,11 +324,12 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
       authenticated,
       loading,
       remainingSeconds,
+      refreshUsage,
       setRemainingSeconds,
       signOut,
       user
     }),
-    [accessToken, authenticated, loading, remainingSeconds, setRemainingSeconds, signOut, user]
+    [accessToken, authenticated, loading, refreshUsage, remainingSeconds, setRemainingSeconds, signOut, user]
   );
 
   return <AppShellContext.Provider value={value}>{children}</AppShellContext.Provider>;
