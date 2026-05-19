@@ -23,6 +23,7 @@ from fathom.core.config import Settings
 from fathom.core.constants import SUMMARY_PROMPT_KEY_DEFAULT
 from fathom.core.errors import NotFoundError
 from fathom.core.logging import log_context
+from fathom.crud.supabase.job_events import record_job_event_best_effort
 from fathom.crud.supabase.jobs import (
     archive_job,
     create_job,
@@ -137,6 +138,20 @@ async def create_briefing_session(
                 settings=settings,
             )
             logger.info("briefing_session.reused_cached", extra={"session_id": ready_job["id"]})
+            await record_job_event_best_effort(
+                admin_client,
+                logger,
+                job_id=str(ready_job["id"]),
+                event_type="session_created",
+                stage="cached",
+                message="Ready session created from cached summary.",
+                metadata={
+                    "resolution_type": "reused_ready",
+                    "video_id": metadata.video_id,
+                    "duration_seconds": metadata.duration_seconds,
+                    "summary_id": str(cached_summary["id"]),
+                },
+            )
             return await _build_session_snapshot(
                 user_client=user_client,
                 admin_client=admin_client,
@@ -153,6 +168,19 @@ async def create_briefing_session(
         )
         job = await fetch_job(user_client, str(created_job["id"]))
         logger.info("briefing_session.created", extra={"session_id": job["id"]})
+        await record_job_event_best_effort(
+            admin_client,
+            logger,
+            job_id=str(job["id"]),
+            event_type="session_created",
+            stage="queued",
+            message="Briefing session created.",
+            metadata={
+                "resolution_type": "new",
+                "video_id": metadata.video_id,
+                "duration_seconds": metadata.duration_seconds,
+            },
+        )
         return await _build_session_snapshot(
             user_client=user_client,
             admin_client=admin_client,
