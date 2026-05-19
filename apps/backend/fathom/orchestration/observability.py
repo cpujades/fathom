@@ -5,11 +5,9 @@ import time
 from typing import Any
 
 from fathom.core.errors import AppError
-from fathom.crud.supabase.job_events import record_job_event
 from fathom.services.downloader import DownloadError
 from fathom.services.summarizer import SummarizationError
 from fathom.services.transcriber import TranscriptionError
-from supabase import AsyncClient
 
 
 def elapsed_ms(started_at: float) -> float:
@@ -48,31 +46,4 @@ def extract_job_error(exc: Exception) -> tuple[str, str]:
         return "summary_failed", exc.detail
     if isinstance(exc, AppError):
         return exc.code, exc.detail
-    return "internal_error", str(exc) or "Unhandled error."
-
-
-async def record_timeline_event(
-    client: AsyncClient,
-    logger: logging.Logger,
-    *,
-    job_id: str,
-    event_type: str,
-    stage: str | None = None,
-    message: str | None = None,
-    metadata: dict[str, Any] | None = None,
-) -> None:
-    try:
-        await record_job_event(
-            client,
-            job_id=job_id,
-            event_type=event_type,
-            stage=stage,
-            message=message,
-            metadata=metadata,
-        )
-    except Exception:
-        logger.debug(
-            "worker.job_event.record_failed",
-            extra={"job_id": job_id, "event_type": event_type},
-            exc_info=True,
-        )
+    return "internal_error", "Unexpected worker error."
