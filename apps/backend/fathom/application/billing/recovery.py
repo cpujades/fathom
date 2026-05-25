@@ -49,7 +49,8 @@ async def run_billing_maintenance(
         "reconciled_refund_pending_orders": reconciled_orders,
         "reconciled_subscriptions": reconciled_subscriptions,
     }
-    logger.info("billing.maintenance.completed", extra=summary)
+    log_level = logging.INFO if any(summary.values()) else logging.DEBUG
+    logger.log(log_level, "billing.maintenance.completed", extra=summary)
     return summary
 
 

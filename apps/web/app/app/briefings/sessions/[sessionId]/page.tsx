@@ -1475,6 +1475,7 @@ function getFailurePresentation(
   if (
     code === "invalid_request" ||
     code === "invalid_job_payload" ||
+    code === "source_download_failed" ||
     normalizedMessage.includes("unsupported") ||
     normalizedMessage.includes("no audio streams") ||
     normalizedMessage.includes("youtube downloader") ||
@@ -1490,6 +1491,7 @@ function getFailurePresentation(
   }
 
   if (
+    code === "transcription_failed" ||
     normalizedMessage.includes("groq") ||
     normalizedMessage.includes("transcript") ||
     normalizedMessage.includes("transcription") ||
@@ -1505,6 +1507,7 @@ function getFailurePresentation(
   }
 
   if (
+    code === "summary_failed" ||
     normalizedMessage.includes("openrouter") ||
     normalizedMessage.includes("summary") ||
     normalizedMessage.includes("summar")

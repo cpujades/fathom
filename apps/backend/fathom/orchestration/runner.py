@@ -1,46 +1,28 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import logging
-import tempfile
 import time
-import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import urlparse
 
 from fathom.application.billing import run_billing_maintenance
-from fathom.application.usage import record_usage_for_job
 from fathom.core.config import Settings, get_settings
-from fathom.core.constants import (
-    GROQ_MODEL,
-    GROQ_SIGNED_URL_TTL_SECONDS,
-    SUMMARY_PROMPT_KEY_DEFAULT,
-    SUPABASE_GROQ_BUCKET,
-)
-from fathom.core.errors import AppError
 from fathom.core.logging import log_context, setup_logging
+from fathom.crud.supabase.job_events import record_job_event_best_effort
 from fathom.crud.supabase.jobs import (
     claim_next_job,
     mark_job_failed,
     mark_job_retry,
-    mark_job_succeeded,
     requeue_stale_jobs,
-    update_job_progress,
 )
-from fathom.crud.supabase.storage_objects import create_signed_url, delete_object, upload_object
-from fathom.crud.supabase.summaries import create_summary, fetch_summary_by_keys, update_summary_markdown
-from fathom.crud.supabase.transcripts import (
-    create_transcript,
-    fetch_transcript_by_hash,
-    fetch_transcript_by_video_id,
+from fathom.orchestration.jobs import process_job
+from fathom.orchestration.observability import (
+    elapsed_ms,
+    extract_job_error,
 )
-from fathom.services.downloader import download_audio
-from fathom.services.summarizer import OPENROUTER_MODEL, stream_summarize_transcript, summarize_transcript
 from fathom.services.supabase import create_supabase_admin_client, listen_for_notifications
-from fathom.services.transcriber import transcribe_url
-from fathom.services.youtube import extract_youtube_video_id
 from supabase import AsyncClient
 
 logger = logging.getLogger(__name__)
@@ -56,349 +38,9 @@ WORKER_SWEEP_INTERVAL_SECONDS = 30.0
 WORKER_BILLING_MAINTENANCE_INTERVAL_SECONDS = 60.0
 WORKER_JOB_NOTIFY_TIMEOUT_SECONDS = 10.0
 
-# Streaming summary flush tuning
-STREAM_FLUSH_CHAR_THRESHOLD = 80
-STREAM_FLUSH_SECONDS = 0.35
-
-
-def _hash_url(url: str) -> str:
-    return hashlib.sha256(url.encode("utf-8")).hexdigest()
-
 
 def _compute_backoff_seconds(base: int, attempt: int) -> int:
     return int(base * (2 ** max(attempt - 1, 0)))
-
-
-def _log_step(label: str, *, duration_ms: float, **fields: object) -> None:
-    logger.info(label, extra={"duration_ms": round(duration_ms, 2), **fields})
-
-
-async def _resolve_transcript(
-    *,
-    url: str,
-    settings: Settings,
-    admin_client: AsyncClient,
-) -> tuple[str, str, str | None]:
-    """Return (transcript_id, transcript_text, video_id_or_hash)."""
-    url_hash = _hash_url(url)
-    parsed_url = urlparse(url)
-    parsed_video_id = extract_youtube_video_id(parsed_url)
-    transcript_text: str
-    video_id: str | None = None
-    provider_model = f"groq:{GROQ_MODEL}"
-
-    transcript_row = None
-    if parsed_video_id:
-        transcript_row = await fetch_transcript_by_video_id(
-            admin_client,
-            video_id=parsed_video_id,
-            provider_model=provider_model,
-        )
-
-    if not transcript_row:
-        transcript_row = await fetch_transcript_by_hash(
-            admin_client,
-            url_hash=url_hash,
-            provider_model=provider_model,
-        )
-
-    if transcript_row:
-        transcript_text = transcript_row["transcript_text"]
-        video_id = transcript_row.get("video_id") or parsed_video_id
-        transcript_id = transcript_row["id"]
-        logger.info(
-            "worker.transcript.cache_hit",
-            extra={"transcript_id": transcript_id, "video_id": video_id},
-        )
-        return transcript_id, transcript_text, video_id or url_hash
-
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        step_start = time.perf_counter()
-        download_result = await asyncio.to_thread(download_audio, url, tmp_dir)
-        _log_step(
-            "worker.audio.downloaded",
-            duration_ms=(time.perf_counter() - step_start) * 1000,
-            video_id=parsed_video_id,
-            bytes=download_result.filesize_bytes,
-        )
-        video_id = download_result.video_id or parsed_video_id
-
-        object_key = f"groq-audio/{uuid.uuid4().hex}.{download_result.subtype or 'bin'}"
-        audio_bytes = await asyncio.to_thread(download_result.path.read_bytes)
-        content_type = download_result.mime_type or "application/octet-stream"
-        await upload_object(
-            admin_client,
-            bucket=SUPABASE_GROQ_BUCKET,
-            object_key=object_key,
-            data=audio_bytes,
-            content_type=content_type,
-        )
-        try:
-            signed_url = await create_signed_url(
-                admin_client,
-                bucket=SUPABASE_GROQ_BUCKET,
-                object_key=object_key,
-                ttl_seconds=GROQ_SIGNED_URL_TTL_SECONDS,
-            )
-            step_start = time.perf_counter()
-            transcript_text = await asyncio.to_thread(
-                transcribe_url,
-                signed_url,
-                settings.groq_api_key,
-                GROQ_MODEL,
-            )
-            _log_step(
-                "worker.transcript.created",
-                duration_ms=(time.perf_counter() - step_start) * 1000,
-                provider="groq",
-            )
-        finally:
-            try:
-                await delete_object(
-                    admin_client,
-                    bucket=SUPABASE_GROQ_BUCKET,
-                    object_key=object_key,
-                )
-            except Exception:
-                logger.warning("worker.audio.cleanup_failed", exc_info=True)
-
-    transcript_row = await create_transcript(
-        admin_client,
-        url_hash=url_hash,
-        video_id=video_id,
-        transcript_text=transcript_text,
-        provider_model=provider_model,
-        source_title=download_result.title,
-        source_author=download_result.author,
-        source_description=download_result.description,
-        source_keywords=download_result.keywords,
-        source_views=download_result.views,
-        source_likes=download_result.likes,
-        source_length_seconds=download_result.length_seconds,
-    )
-    transcript_id = transcript_row["id"]
-    return transcript_id, transcript_text, video_id or url_hash
-
-
-async def _process_job(job: dict[str, Any], settings: Settings, admin_client: AsyncClient) -> None:
-    job_id = job["id"]
-    url = job["url"]
-    user_id = job["user_id"]
-    requested_summary_id = str(uuid.uuid4())
-    job_start = time.perf_counter()
-
-    with log_context(job_id=job_id, user_id=user_id, summary_id=requested_summary_id):
-        logger.info("worker.job.started")
-        await update_job_progress(
-            admin_client,
-            job_id=job_id,
-            stage="warming",
-            progress=10,
-            status_message="Warming up the studio",
-        )
-
-        await update_job_progress(
-            admin_client,
-            job_id=job_id,
-            stage="transcribing",
-            progress=30,
-            status_message="Transcribing the audio",
-        )
-        transcript_id, transcript_text, _video_segment = await _resolve_transcript(
-            url=url,
-            settings=settings,
-            admin_client=admin_client,
-        )
-
-        await update_job_progress(
-            admin_client,
-            job_id=job_id,
-            stage="checking_cache",
-            progress=45,
-            status_message="Checking for existing summaries",
-        )
-        cached_summary = await fetch_summary_by_keys(
-            admin_client,
-            transcript_id=transcript_id,
-            prompt_key=SUMMARY_PROMPT_KEY_DEFAULT,
-            summary_model=OPENROUTER_MODEL,
-        )
-        if cached_summary:
-            cached_summary_id = cached_summary["id"]
-            logger.info("worker.summary.cache_hit", extra={"summary_id": cached_summary_id})
-            with log_context(summary_id=cached_summary_id):
-                await update_job_progress(
-                    admin_client,
-                    job_id=job_id,
-                    stage="cached",
-                    progress=100,
-                    status_message="Summary ready (cached)",
-                    summary_id=cached_summary_id,
-                )
-                await mark_job_succeeded(admin_client, job_id=job_id, summary_id=cached_summary_id)
-                try:
-                    await record_usage_for_job(
-                        user_id=user_id,
-                        job_id=job_id,
-                        duration_seconds=job.get("duration_seconds"),
-                        settings=settings,
-                    )
-                except Exception:
-                    logger.exception("worker.usage_recording.failed", extra={"job_id": job_id, "cache_hit": True})
-            _log_step(
-                "worker.job.completed",
-                duration_ms=(time.perf_counter() - job_start) * 1000,
-                cache_hit=True,
-            )
-            return
-
-        step_start = time.perf_counter()
-        summary_row = await create_summary(
-            admin_client,
-            summary_id=requested_summary_id,
-            user_id=user_id,
-            transcript_id=transcript_id,
-            prompt_key=SUMMARY_PROMPT_KEY_DEFAULT,
-            summary_model=OPENROUTER_MODEL,
-            summary_markdown="",
-            pdf_object_key=None,
-        )
-        summary_id = summary_row["id"]
-        await update_job_progress(
-            admin_client,
-            job_id=job_id,
-            stage="summarizing",
-            progress=60,
-            status_message="Drafting your briefing",
-            summary_id=summary_id,
-        )
-
-        summary_markdown = ""
-        last_flush_len = 0
-        last_flush_time = time.monotonic()
-        progress = 60
-        flush_count = 0
-        first_visible_logged = False
-        playful_messages = [
-            "Pulling out the best insights",
-            "Connecting the dots",
-            "Highlighting the sharpest moments",
-            "Building your action list",
-            "Polishing the key takeaways",
-            "Shaping the final narrative",
-        ]
-        message_index = 0
-
-        stream_failed = False
-        try:
-            async for delta in stream_summarize_transcript(transcript_text, settings.openrouter_api_key):
-                summary_markdown += delta
-                should_flush = False
-                if len(summary_markdown) - last_flush_len >= STREAM_FLUSH_CHAR_THRESHOLD:
-                    should_flush = True
-                if time.monotonic() - last_flush_time >= STREAM_FLUSH_SECONDS:
-                    should_flush = True
-
-                if should_flush:
-                    await update_summary_markdown(
-                        admin_client,
-                        summary_id=summary_id,
-                        summary_markdown=summary_markdown,
-                    )
-                    flush_count += 1
-                    last_flush_len = len(summary_markdown)
-                    last_flush_time = time.monotonic()
-                    if not first_visible_logged:
-                        _log_step(
-                            "worker.summary.first_visible",
-                            duration_ms=(time.perf_counter() - job_start) * 1000,
-                            chars=len(summary_markdown),
-                        )
-                        first_visible_logged = True
-                    progress = min(progress + 1, 92)
-                    await update_job_progress(
-                        admin_client,
-                        job_id=job_id,
-                        stage="summarizing",
-                        progress=progress,
-                        status_message=playful_messages[message_index % len(playful_messages)],
-                    )
-                    message_index += 1
-        except Exception:
-            stream_failed = True
-
-        if stream_failed or not summary_markdown.strip():
-            await update_job_progress(
-                admin_client,
-                job_id=job_id,
-                stage="summarizing",
-                progress=min(progress + 5, 92),
-                status_message="Finalizing a full summary",
-            )
-            summary_markdown = await summarize_transcript(transcript_text, settings.openrouter_api_key)
-
-        if summary_markdown:
-            await update_summary_markdown(
-                admin_client,
-                summary_id=summary_id,
-                summary_markdown=summary_markdown,
-            )
-            if not first_visible_logged:
-                _log_step(
-                    "worker.summary.first_visible",
-                    duration_ms=(time.perf_counter() - job_start) * 1000,
-                    chars=len(summary_markdown),
-                )
-                first_visible_logged = True
-
-        _log_step(
-            "worker.summary.completed",
-            duration_ms=(time.perf_counter() - step_start) * 1000,
-            model=OPENROUTER_MODEL,
-            streamed_chars=len(summary_markdown),
-            flush_count=flush_count,
-        )
-
-        await update_job_progress(
-            admin_client,
-            job_id=job_id,
-            stage="finalizing",
-            progress=96,
-            status_message="Finalizing your briefing",
-            summary_id=summary_id,
-        )
-
-        await update_job_progress(
-            admin_client,
-            job_id=job_id,
-            stage="completed",
-            progress=100,
-            status_message="Summary ready",
-            summary_id=summary_id,
-        )
-
-        with log_context(summary_id=summary_id):
-            await mark_job_succeeded(admin_client, job_id=job_id, summary_id=summary_id)
-        try:
-            await record_usage_for_job(
-                user_id=user_id,
-                job_id=job_id,
-                duration_seconds=job.get("duration_seconds"),
-                settings=settings,
-            )
-        except Exception:
-            logger.exception("worker.usage_recording.failed", extra={"job_id": job_id, "cache_hit": False})
-        _log_step(
-            "worker.job.completed",
-            duration_ms=(time.perf_counter() - job_start) * 1000,
-            cache_hit=False,
-        )
-
-
-def _extract_error(exc: Exception) -> tuple[str, str]:
-    if isinstance(exc, AppError):
-        return exc.code, exc.detail
-    return "internal_error", str(exc) or "Unhandled error."
 
 
 async def _handle_claimed_job(
@@ -412,34 +54,96 @@ async def _handle_claimed_job(
         logger.debug("worker.job.claim_empty")
         return
 
-    logger.info("worker.job.claimed", extra={"job_id": job_id, "attempt": attempt_count})
+    logger.debug(
+        "worker.job.claimed",
+        extra={
+            "job_id": job_id,
+            "attempt": attempt_count,
+            "user_id": job.get("user_id"),
+            "url_host": urlparse(str(job.get("url") or "")).netloc.lower(),
+        },
+    )
+    await record_job_event_best_effort(
+        admin_client,
+        logger,
+        job_id=str(job_id),
+        event_type="job_claimed",
+        stage="running",
+        message="Worker claimed the job.",
+        metadata={
+            "attempt": attempt_count,
+            "user_id": job.get("user_id"),
+            "url_host": urlparse(str(job.get("url") or "")).netloc.lower(),
+        },
+    )
     if not job.get("url") or not job.get("user_id"):
+        error_message = "Job is missing required fields (url or user_id)."
         logger.error("worker.job.invalid_payload", extra={"job_id": job_id})
+        await record_job_event_best_effort(
+            admin_client,
+            logger,
+            job_id=str(job_id),
+            event_type="job_failed",
+            stage="failed",
+            message=error_message,
+            metadata={"attempt": attempt_count, "error_code": "invalid_job_payload", "will_retry": False},
+        )
         await mark_job_failed(
             admin_client,
             job_id=job_id,
             error_code="invalid_job_payload",
-            error_message="Job is missing required fields (url or user_id).",
+            error_message=error_message,
         )
         return
 
     if attempt_count > WORKER_MAX_ATTEMPTS:
+        error_message = "Job exceeded maximum retry attempts."
+        await record_job_event_best_effort(
+            admin_client,
+            logger,
+            job_id=str(job_id),
+            event_type="job_failed",
+            stage="failed",
+            message=error_message,
+            metadata={"attempt": attempt_count, "error_code": "max_attempts_exceeded", "will_retry": False},
+        )
         await mark_job_failed(
             admin_client,
             job_id=job_id,
             error_code="max_attempts_exceeded",
-            error_message="Job exceeded maximum retry attempts.",
+            error_message=error_message,
         )
         return
 
+    attempt_start = time.perf_counter()
     try:
         with log_context(job_id=job_id, attempt=attempt_count):
-            await _process_job(job, settings, admin_client)
+            await process_job(job, settings, admin_client)
     except Exception as exc:
-        error_code, error_message = _extract_error(exc)
+        error_code, error_message = extract_job_error(exc)
+        await record_job_event_best_effort(
+            admin_client,
+            logger,
+            job_id=str(job_id),
+            event_type="job_failed",
+            stage="failed",
+            message=error_message,
+            metadata={
+                "attempt": attempt_count,
+                "duration_ms": elapsed_ms(attempt_start),
+                "error_code": error_code,
+                "will_retry": attempt_count < WORKER_MAX_ATTEMPTS,
+            },
+        )
         logger.exception(
             "worker.job.failed",
-            extra={"job_id": job_id, "attempt": attempt_count, "error_code": error_code},
+            extra={
+                "job_id": job_id,
+                "attempt": attempt_count,
+                "duration_ms": elapsed_ms(attempt_start),
+                "error_code": error_code,
+                "will_retry": attempt_count < WORKER_MAX_ATTEMPTS,
+            },
         )
         if attempt_count < WORKER_MAX_ATTEMPTS:
             backoff_seconds = _compute_backoff_seconds(WORKER_BACKOFF_BASE_SECONDS, attempt_count)
@@ -495,7 +199,9 @@ async def _run_scheduled_maintenance(
     now = time.monotonic()
     if now - last_sweep_at >= WORKER_SWEEP_INTERVAL_SECONDS:
         requeued_jobs = await requeue_stale_jobs(admin_client, stale_after_seconds=WORKER_STALE_AFTER_SECONDS)
-        logger.info(
+        log_level = logging.INFO if requeued_jobs else logging.DEBUG
+        logger.log(
+            log_level,
             "worker.stale_job_sweep.completed",
             extra={
                 "stale_after_seconds": WORKER_STALE_AFTER_SECONDS,
