@@ -8,29 +8,29 @@ readme = "README.md"
 requires-python = ">=3.11,<3.14"
 dependencies = [
   "fastapi==0.140.0",
-  "uvicorn==0.39.0",
+  "uvicorn==0.51.0",
   "python-dotenv==1.2.2",
-  "openai==2.14.0",
-  "markdown==3.10",
+  "openai==2.48.0",
+  "markdown==3.10.2",
   "weasyprint==69.0",
-  "pydantic==2.12.5",
-  "supabase==2.27.1",
+  "pydantic==2.13.4",
+  "supabase==2.31.0",
   "pyjwt==2.13.0",
   "pydantic-settings==2.14.2",
-  "asyncpg==0.30.0",
-  "debugpy>=1.8.19",
-  "groq>=1.0.0",
-  "pytubefix>=10.3.6",
+  "asyncpg==0.31.0",
+  "debugpy>=1.8.21",
+  "groq>=1.6.0",
+  "pytubefix>=10.10.1",
 ]
 
 [dependency-groups]
 dev = [
   # Lint/format
-  "ruff==0.14.10",
+  "ruff==0.16.0",
   # Type-checking
-  "ty==0.0.8",
+  "ty==0.0.63",
   # Git hooks runner
-  "pre-commit==4.5.1",
+  "pre-commit==4.6.1",
 ]
 
 [build-system]
