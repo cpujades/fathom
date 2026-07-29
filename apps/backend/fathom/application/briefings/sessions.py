@@ -94,7 +94,7 @@ async def create_briefing_session(
         )
         if completed_job:
             if str(completed_job.get("status") or "") == "deleted":
-                await restore_job(user_client, job_id=str(completed_job["id"]))
+                await restore_job(admin_client, job_id=str(completed_job["id"]))
                 restored_job = await fetch_job(user_client, str(completed_job["id"]))
                 logger.info("briefing_session.restored_archived", extra={"session_id": restored_job["id"]})
                 return await _build_session_snapshot(
@@ -161,7 +161,7 @@ async def create_briefing_session(
             )
 
         created_job = await create_job(
-            user_client,
+            admin_client,
             url=source.canonical_url,
             user_id=auth.user_id,
             duration_seconds=metadata.duration_seconds,
@@ -374,7 +374,7 @@ async def _create_ready_reused_session(
     settings: Settings,
 ) -> dict[str, Any]:
     created_job = await create_job(
-        user_client,
+        admin_client,
         url=source.canonical_url,
         user_id=user_id,
         duration_seconds=duration_seconds,
