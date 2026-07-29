@@ -68,7 +68,7 @@ export default function HeroSection({ content }: HeroSectionProps) {
             </div>
             <h2 className={styles.cardTitle}>A briefing layer for the conversations worth keeping.</h2>
             <p className={styles.cardText}>
-              Every Talven brief compresses the hours, preserves the source moments, and leaves you with the few ideas worth carrying into action.
+              Talven compresses the hours, preserves the source moments, and leaves you with the few ideas worth carrying into action.
             </p>
 
             <div className={styles.heroCoverSheet}>

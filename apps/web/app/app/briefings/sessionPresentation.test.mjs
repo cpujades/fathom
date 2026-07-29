@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  buildMarkdownFilename,
   getFailurePresentation,
   getFinalizationPresentation,
   isCreditOrPaymentError
@@ -84,4 +85,10 @@ test("structured API error codes remain available to route recovery", () => {
     "not_found"
   );
   assert.equal(getApiErrorCode({ detail: [{ msg: "Invalid request" }] }), null);
+});
+
+test("Markdown exports receive safe, stable filenames", () => {
+  assert.equal(buildMarkdownFilename("Why Málaga's Market Changed"), "why-malaga-s-market-changed.md");
+  assert.equal(buildMarkdownFilename("../../"), "talven-briefing.md");
+  assert.equal(buildMarkdownFilename(null), "talven-briefing.md");
 });

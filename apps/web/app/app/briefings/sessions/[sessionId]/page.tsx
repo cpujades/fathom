@@ -31,6 +31,7 @@ import {
   type SessionStatusPayload
 } from "../../sessionState";
 import {
+  buildMarkdownFilename,
   getFailurePresentation,
   getFinalizationPresentation,
   isCreditOrPaymentError
@@ -154,6 +155,7 @@ export default function BriefingSessionPage() {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
+  const [exportNotice, setExportNotice] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteConfirming, setDeleteConfirming] = useState(false);
   const [sessionLoadError, setSessionLoadError] = useState<string | null>(null);
@@ -193,6 +195,7 @@ export default function BriefingSessionPage() {
     lastStreamActivityRef.current = Date.now();
     setPdfUrl(null);
     setPdfError(null);
+    setExportNotice(null);
     setDeleteLoading(false);
     setDeleteConfirming(false);
     setSessionLoadError(null);
@@ -613,6 +616,26 @@ export default function BriefingSessionPage() {
   ].filter((item): item is { id: string; label: string } => Boolean(item));
   const mobileNavigationSections = navigationSections.slice(0, 3);
 
+  const handleMarkdownDownload = () => {
+    if (!isReady || !rawMarkdown.trim()) {
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(
+      new Blob([rawMarkdown.endsWith("\n") ? rawMarkdown : `${rawMarkdown}\n`], {
+        type: "text/markdown;charset=utf-8"
+      })
+    );
+    const downloadLink = document.createElement("a");
+    downloadLink.href = objectUrl;
+    downloadLink.download = buildMarkdownFilename(session?.source_title ?? parsedBriefing.title);
+    document.body.append(downloadLink);
+    downloadLink.click();
+    downloadLink.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+    setExportNotice("Markdown downloaded.");
+  };
+
   useEffect(() => {
     if (!accessToken || !sessionId || phase !== "delivering") {
       return undefined;
@@ -892,6 +915,11 @@ export default function BriefingSessionPage() {
                 </button>
               )}
               <div className={styles.heroUtilityLinks}>
+                {isReady && rawMarkdown ? (
+                  <button className={styles.textActionLink} type="button" onClick={handleMarkdownDownload}>
+                    Download Markdown
+                  </button>
+                ) : null}
                 {sourceUrl ? (
                   <a className={styles.textActionLink} href={sourceUrl} target="_blank" rel="noreferrer">
                     {sourceActionLabel}
@@ -906,6 +934,11 @@ export default function BriefingSessionPage() {
           {pdfError ? (
             <p className={`${chrome.inlineStatus} ${chrome.inlineStatusError}`} role="alert">
               {pdfError}
+            </p>
+          ) : null}
+          {exportNotice ? (
+            <p className={chrome.inlineStatus} role="status">
+              {exportNotice}
             </p>
           ) : null}
         </section>
@@ -1071,6 +1104,11 @@ export default function BriefingSessionPage() {
               ) : null}
 
               <div className={styles.desktopActionCard}>
+                {isReady && rawMarkdown ? (
+                  <button className={styles.textActionLink} type="button" onClick={handleMarkdownDownload}>
+                    Download Markdown
+                  </button>
+                ) : null}
                 <Link className={styles.textActionLink} href="/app/briefings">
                   Back to briefings
                 </Link>
@@ -1156,6 +1194,11 @@ export default function BriefingSessionPage() {
                 ) : null}
               </div>
               <div className={styles.footerNavigationRow}>
+                {isReady && rawMarkdown ? (
+                  <button className={styles.textActionLink} type="button" onClick={handleMarkdownDownload}>
+                    Download Markdown
+                  </button>
+                ) : null}
                 <Link className={styles.textActionLink} href="/app/briefings">
                   Back to briefings
                 </Link>

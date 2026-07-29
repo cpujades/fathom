@@ -165,7 +165,7 @@ const landingContent: LandingContent = {
     subtitle: "Talven condenses the ideas worth keeping and anchors them to source moments you can verify.",
     sampleLabel: "Sample brief",
     sampleTitle: "58-minute episode -> 4-minute briefing",
-    sampleNote: "Each Talven briefing keeps the same reading logic: key claims first, source moments attached, next moves made clear.",
+    sampleNote: "New Talven briefings use the same reading logic: key claims first, source moments attached, next moves made clear.",
     before: "A long conversation spanning strategy, execution, and personal operating principles.",
     after: [
       "Key claims ranked by importance",
@@ -194,7 +194,7 @@ const landingContent: LandingContent = {
     points: [
       {
         title: "Briefing-first format",
-        text: "Every output follows the same disciplined structure so it reads fast and stays usable."
+        text: "New briefings follow the same disciplined structure so they read fast and stay usable."
       },
       {
         title: "Timestamp traceability",

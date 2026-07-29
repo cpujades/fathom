@@ -1,6 +1,6 @@
-# Fathom
+# Talven (repository: Fathom)
 
-Fathom turns long-form YouTube audio/video into structured briefings with streaming progress, usage-aware billing, and reusable transcript/summary caching.
+Talven turns long-form YouTube audio/video into structured, source-linked briefings with streaming progress, usage-aware billing, and reusable transcript/summary caching. The repository and Python/package namespace remain `fathom`.
 
 ## Stack
 

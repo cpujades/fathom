@@ -183,3 +183,15 @@ export function getFinalizationPresentation(
     status: "Live"
   };
 }
+
+export function buildMarkdownFilename(sourceTitle: string | null | undefined): string {
+  const stem = (sourceTitle ?? "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 72);
+
+  return `${stem || "talven-briefing"}.md`;
+}
