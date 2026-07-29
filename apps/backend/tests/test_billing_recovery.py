@@ -21,6 +21,17 @@ class BillingRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 AsyncMock(return_value=0),
             ),
             patch(
+                "fathom.application.billing.recovery.get_billing_webhook_diagnostics",
+                AsyncMock(
+                    return_value={
+                        "failed_count": 2,
+                        "deferred_count": 1,
+                        "stale_processing_count": 0,
+                        "deferred_unknown_order_count": 1,
+                    }
+                ),
+            ),
+            patch(
                 "fathom.application.billing.recovery.list_refund_pending_pack_orders",
                 AsyncMock(return_value=[]),
             ),
@@ -40,6 +51,9 @@ class BillingRecoveryTests(unittest.IsolatedAsyncioTestCase):
 
         requeue.assert_awaited_once_with(admin_client)
         self.assertEqual(summary["requeued_unsettled_jobs"], 2)
+        self.assertEqual(summary["failed_webhook_events"], 2)
+        self.assertEqual(summary["deferred_webhook_events"], 1)
+        self.assertEqual(summary["deferred_unknown_order_events"], 1)
 
     async def test_maintenance_applies_provider_confirmed_refund(self) -> None:
         admin_client = object()
@@ -59,6 +73,10 @@ class BillingRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 AsyncMock(return_value=0),
             ),
             patch("fathom.application.billing.recovery.reclaim_stale_webhook_processing", AsyncMock(return_value=0)),
+            patch(
+                "fathom.application.billing.recovery.get_billing_webhook_diagnostics",
+                AsyncMock(return_value={}),
+            ),
             patch(
                 "fathom.application.billing.recovery.list_refund_pending_pack_orders",
                 AsyncMock(return_value=[order]),
@@ -108,6 +126,10 @@ class BillingRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 AsyncMock(return_value=0),
             ),
             patch("fathom.application.billing.recovery.reclaim_stale_webhook_processing", AsyncMock(return_value=0)),
+            patch(
+                "fathom.application.billing.recovery.get_billing_webhook_diagnostics",
+                AsyncMock(return_value={}),
+            ),
             patch(
                 "fathom.application.billing.recovery.list_refund_pending_pack_orders",
                 AsyncMock(return_value=[order]),
@@ -163,6 +185,10 @@ class BillingRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 AsyncMock(return_value=0),
             ),
             patch("fathom.application.billing.recovery.reclaim_stale_webhook_processing", AsyncMock(return_value=0)),
+            patch(
+                "fathom.application.billing.recovery.get_billing_webhook_diagnostics",
+                AsyncMock(return_value={}),
+            ),
             patch("fathom.application.billing.recovery.list_refund_pending_pack_orders", AsyncMock(return_value=[])),
             patch(
                 "fathom.application.billing.recovery.list_subscription_entitlements_for_reconciliation",
@@ -201,6 +227,10 @@ class BillingRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 AsyncMock(return_value=0),
             ),
             patch("fathom.application.billing.recovery.reclaim_stale_webhook_processing", AsyncMock(return_value=0)),
+            patch(
+                "fathom.application.billing.recovery.get_billing_webhook_diagnostics",
+                AsyncMock(return_value={}),
+            ),
             patch("fathom.application.billing.recovery.list_refund_pending_pack_orders", AsyncMock(return_value=[])),
             patch(
                 "fathom.application.billing.recovery.list_subscription_entitlements_for_reconciliation",

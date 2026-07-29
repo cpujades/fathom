@@ -230,6 +230,67 @@ async def reclaim_stale_webhook_processing(
     return int(response.count or 0)
 
 
+async def apply_polar_webhook_transaction(
+    client: AsyncClient,
+    *,
+    event_id: str,
+    event_type: str,
+    event_at: datetime,
+    resource_type: str | None,
+    resource_id: str | None,
+    payload: dict[str, Any],
+    debt_cap_seconds: int,
+) -> dict[str, Any]:
+    """Atomically record and apply one normalized Polar event."""
+    try:
+        response = await client.rpc(
+            "apply_polar_webhook_event",
+            {
+                "p_event_id": event_id,
+                "p_event_type": event_type,
+                "p_event_at": event_at.isoformat(),
+                "p_resource_type": resource_type,
+                "p_resource_id": resource_id,
+                "p_payload": payload,
+                "p_debt_cap_seconds": debt_cap_seconds,
+            },
+        ).execute()
+    except APIError as exc:
+        raise_for_postgrest_error(exc, "Failed to apply Polar webhook event.")
+
+    if not isinstance(response.data, Mapping):
+        raise ExternalServiceError("Supabase returned an unexpected Polar webhook resolution shape.")
+
+    result = dict(response.data)
+    if result.get("resolution_type") not in {
+        "processed",
+        "already_processed",
+        "deferred",
+        "failed",
+    }:
+        raise ExternalServiceError("Supabase returned an unexpected Polar webhook resolution shape.")
+    return result
+
+
+async def get_billing_webhook_diagnostics(
+    client: AsyncClient,
+    *,
+    stale_minutes: int = 5,
+) -> dict[str, Any]:
+    """Return non-sensitive counts for unresolved or stale webhook work."""
+    try:
+        response = await client.rpc(
+            "get_billing_webhook_diagnostics",
+            {"p_stale_after": f"{stale_minutes} minutes"},
+        ).execute()
+    except APIError as exc:
+        raise_for_postgrest_error(exc, "Failed to fetch billing webhook diagnostics.")
+
+    if not isinstance(response.data, Mapping):
+        raise ExternalServiceError("Supabase returned an unexpected billing webhook diagnostic shape.")
+    return dict(response.data)
+
+
 async def upsert_billing_order(
     client: AsyncClient,
     *,
