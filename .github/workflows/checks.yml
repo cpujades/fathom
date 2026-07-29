@@ -66,5 +66,8 @@ jobs:
       - name: Typecheck
         run: pnpm --filter @fathom/web typecheck
 
+      - name: Unit tests
+        run: pnpm --filter @fathom/web test
+
       - name: Build
         run: pnpm --filter @fathom/web build

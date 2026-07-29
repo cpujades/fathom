@@ -8,7 +8,13 @@ import { useEffect, useMemo, useState } from "react";
 import styles from "../auth/auth.module.css";
 import { mapAuthCallbackErrorCode, mapAuthError } from "../lib/authErrors";
 import { getSupabaseClient } from "../lib/supabaseClient";
-import { buildAuthCallbackUrl, buildSignUpPath, getSafeNextPath } from "../lib/url";
+import {
+  buildAuthCallbackUrl,
+  buildAuthDestinationPath,
+  buildSignUpPath,
+  getSafeAuthIntentContext,
+  getSafeNextPath
+} from "../lib/url";
 
 export default function SignInPage() {
   const router = useRouter();
@@ -19,15 +25,23 @@ export default function SignInPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const authIntent = getSafeAuthIntentContext({
+      intent: params.get("intent"),
+      plan: params.get("plan")
+    });
     setNextPath(getSafeNextPath(params.get("next")));
-    setIntent(params.get("intent"));
-    setPlan(params.get("plan"));
+    setIntent(authIntent.intent);
+    setPlan(authIntent.plan);
     setError(mapAuthCallbackErrorCode(params.get("auth_error")));
   }, []);
 
   const callbackUrl = useMemo(() => {
-    return buildAuthCallbackUrl(nextPath);
-  }, [nextPath]);
+    return buildAuthCallbackUrl(nextPath, { intent, plan });
+  }, [intent, nextPath, plan]);
+
+  const destinationPath = useMemo(() => {
+    return buildAuthDestinationPath(nextPath, { intent, plan });
+  }, [intent, nextPath, plan]);
 
   const signUpHref = useMemo(() => {
     return buildSignUpPath(nextPath, {
@@ -76,7 +90,7 @@ export default function SignInPage() {
       if (signInError) {
         setError(mapAuthError(signInError, "Unable to sign you in."));
       } else {
-        router.replace(nextPath);
+        router.replace(destinationPath);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
