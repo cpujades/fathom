@@ -4,7 +4,6 @@ import argparse
 import asyncio
 import json
 import sys
-from collections.abc import Mapping
 from datetime import timedelta
 from typing import Any
 
@@ -163,14 +162,18 @@ async def fetch_operability_report(
         timedelta(minutes=stale_minutes),
         sample_limit,
     )
-    if not isinstance(row, Mapping):
+    if row is None:
         raise RuntimeError("Database returned an unexpected operability diagnostic shape.")
+    try:
+        row_data = dict(row)
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("Database returned an unexpected operability diagnostic shape.") from exc
 
-    counts = {field: int(row.get(field) or 0) for field in _COUNT_FIELDS}
-    samples = {field: [str(value) for value in (row.get(field) or [])][:sample_limit] for field in _SAMPLE_FIELDS}
+    counts = {field: int(row_data.get(field) or 0) for field in _COUNT_FIELDS}
+    samples = {field: [str(value) for value in (row_data.get(field) or [])][:sample_limit] for field in _SAMPLE_FIELDS}
     return {
         "status": "attention" if any(counts.values()) else "ok",
-        "generated_at": row.get("generated_at"),
+        "generated_at": row_data.get("generated_at"),
         "stale_after_minutes": stale_minutes,
         "sample_limit": sample_limit,
         "counts": counts,

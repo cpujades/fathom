@@ -7,6 +7,19 @@ from unittest.mock import AsyncMock
 from fathom.application.diagnostics.operability import fetch_operability_report
 
 
+class RecordLike:
+    """Minimal asyncpg.Record-shaped value that is not a Mapping."""
+
+    def __init__(self, values: dict[str, object]) -> None:
+        self._values = values
+
+    def keys(self) -> list[str]:
+        return list(self._values)
+
+    def __getitem__(self, key: str) -> object:
+        return self._values[key]
+
+
 class OperabilityDiagnosticTests(unittest.IsolatedAsyncioTestCase):
     async def test_builds_bounded_privacy_safe_report(self) -> None:
         connection = AsyncMock()
@@ -39,12 +52,19 @@ class OperabilityDiagnosticTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_reports_ok_when_all_counts_are_zero(self) -> None:
         connection = AsyncMock()
-        connection.fetchrow.return_value = {}
+        connection.fetchrow.return_value = RecordLike({})
 
         report = await fetch_operability_report(connection)
 
         self.assertEqual(report["status"], "ok")
         self.assertTrue(all(value == 0 for value in report["counts"].values()))
+
+    async def test_rejects_missing_database_row(self) -> None:
+        connection = AsyncMock()
+        connection.fetchrow.return_value = None
+
+        with self.assertRaises(RuntimeError):
+            await fetch_operability_report(connection)
 
     async def test_rejects_unbounded_inputs_before_querying(self) -> None:
         connection = AsyncMock()
