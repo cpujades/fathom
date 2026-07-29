@@ -42,6 +42,11 @@ class TimelineSummary(DiagnosticModel):
     summary_model: str | None = None
     summary_markdown: str = ""
     pdf_object_key: str | None = None
+    status: str | None = None
+    status_updated_at: datetime | None = None
+    ready_at: datetime | None = None
+    failed_at: datetime | None = None
+    generation_job_id: str | None = None
     created_at: datetime | None = None
     ttl_expires_at: datetime | None = None
 

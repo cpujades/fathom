@@ -31,3 +31,23 @@
   - likely worker problem.
 - API and worker look healthy, but billing state is stale:
   - webhook/provider/reconciliation problem.
+
+## Job leases and summary ownership
+
+- A worker may mutate a running job only while its job lease token is current
+  and the lease has not expired.
+- A `pending` summary has a live producer only when `generation_job_id` points
+  to a `running` job, `generation_token` matches that job's current lease
+  token, and `lease_expires_at` is still in the future.
+- Draft, ready, and failed summary transitions are fenced by that generation
+  token and the live job lease. An expired producer cannot keep writing.
+- If the owner fails normally, the summary becomes `failed`. If the process
+  crashes or loses its lease before cleanup, the row remains `pending` but is
+  considered orphaned. The next valid producer atomically takes ownership,
+  clears partial output, and retries using the stable summary ID.
+- Only `ready` summaries with non-empty Markdown are cacheable. The lifecycle
+  migration classifies a legacy non-empty row as `ready` only when a succeeded
+  or archived job proves completion. Interrupted or orphaned non-empty drafts,
+  plus empty or whitespace-only rows, become `failed`; jobs that previously
+  exposed an empty summary as successful are marked failed with
+  `legacy_empty_summary`.

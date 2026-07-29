@@ -1,14 +1,22 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
+from contextlib import suppress
 from dataclasses import dataclass
 
 from fathom.core.config import Settings
 from fathom.core.constants import SUMMARY_PROMPT_KEY_DEFAULT
 from fathom.crud.supabase.job_events import record_job_event_best_effort
 from fathom.crud.supabase.jobs import JobLeaseLostError, update_job_progress
-from fathom.crud.supabase.summaries import create_summary, fetch_summary_by_keys, update_summary_markdown
+from fathom.crud.supabase.summaries import (
+    fetch_summary_by_keys,
+    mark_summary_failed,
+    mark_summary_ready,
+    prepare_summary,
+    update_summary_markdown,
+)
 from fathom.orchestration.observability import elapsed_ms, log_stage, log_step
 from fathom.services.summarizer import OPENROUTER_MODEL, stream_summarize_transcript, summarize_transcript
 from supabase import AsyncClient
@@ -17,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 STREAM_FLUSH_CHAR_THRESHOLD = 80
 STREAM_FLUSH_SECONDS = 0.35
+SUMMARY_CONTENTION_POLL_SECONDS = 2.0
 
 
 @dataclass(frozen=True)
@@ -55,10 +64,64 @@ async def resolve_summary(
             lease_token=lease_token,
         )
 
+    preparation = await prepare_summary(
+        admin_client,
+        summary_id=requested_summary_id,
+        user_id=user_id,
+        job_id=job_id,
+        generation_token=lease_token,
+        transcript_id=transcript_id,
+        prompt_key=SUMMARY_PROMPT_KEY_DEFAULT,
+        summary_model=OPENROUTER_MODEL,
+    )
+    if preparation.resolution_type == "in_progress":
+        await record_job_event_best_effort(
+            admin_client,
+            logger,
+            job_id=job_id,
+            event_type="summary_generation_waiting",
+            stage="checking_cache",
+            message="Waiting for the active summary producer.",
+            metadata={
+                "provider": "openrouter",
+                "model": OPENROUTER_MODEL,
+                "summary_id": str(preparation.summary["id"]),
+            },
+        )
+
+    while preparation.resolution_type == "in_progress":
+        await update_job_progress(
+            admin_client,
+            job_id=job_id,
+            lease_token=lease_token,
+            stage="checking_cache",
+            progress=50,
+            status_message="Waiting for an existing briefing",
+        )
+        await asyncio.sleep(SUMMARY_CONTENTION_POLL_SECONDS)
+        preparation = await prepare_summary(
+            admin_client,
+            summary_id=requested_summary_id,
+            user_id=user_id,
+            job_id=job_id,
+            generation_token=lease_token,
+            transcript_id=transcript_id,
+            prompt_key=SUMMARY_PROMPT_KEY_DEFAULT,
+            summary_model=OPENROUTER_MODEL,
+        )
+
+    prepared_summary_id = str(preparation.summary["id"])
+    if preparation.resolution_type == "ready":
+        return await _use_cached_summary(
+            job_id=job_id,
+            summary_id=prepared_summary_id,
+            admin_client=admin_client,
+            job_start=job_start,
+            lease_token=lease_token,
+        )
     return await _create_streaming_summary(
         job_id=job_id,
-        user_id=user_id,
-        requested_summary_id=requested_summary_id,
+        summary_id=prepared_summary_id,
         transcript_id=transcript_id,
         transcript_text=transcript_text,
         settings=settings,
@@ -160,8 +223,7 @@ async def _use_cached_summary(
 async def _create_streaming_summary(
     *,
     job_id: str,
-    user_id: str,
-    requested_summary_id: str,
+    summary_id: str,
     transcript_id: str,
     transcript_text: str,
     settings: Settings,
@@ -170,17 +232,6 @@ async def _create_streaming_summary(
     lease_token: str,
 ) -> SummaryResolution:
     step_start = time.perf_counter()
-    summary_row = await create_summary(
-        admin_client,
-        summary_id=requested_summary_id,
-        user_id=user_id,
-        transcript_id=transcript_id,
-        prompt_key=SUMMARY_PROMPT_KEY_DEFAULT,
-        summary_model=OPENROUTER_MODEL,
-        summary_markdown="",
-        pdf_object_key=None,
-    )
-    summary_id = str(summary_row["id"])
     log_stage(
         logger,
         "worker.summary.started",
@@ -218,15 +269,33 @@ async def _create_streaming_summary(
         summary_id=summary_id,
     )
 
-    markdown, flush_count, fallback_used = await _stream_summary_markdown(
-        job_id=job_id,
-        summary_id=summary_id,
-        transcript_text=transcript_text,
-        settings=settings,
-        admin_client=admin_client,
-        job_start=job_start,
-        lease_token=lease_token,
-    )
+    try:
+        markdown, flush_count, fallback_used = await _stream_summary_markdown(
+            job_id=job_id,
+            summary_id=summary_id,
+            transcript_text=transcript_text,
+            settings=settings,
+            admin_client=admin_client,
+            job_start=job_start,
+            lease_token=lease_token,
+        )
+        await mark_summary_ready(
+            admin_client,
+            summary_id=summary_id,
+            generation_token=lease_token,
+            summary_markdown=markdown,
+        )
+    except (Exception, asyncio.CancelledError):
+        with suppress(Exception):
+            await asyncio.shield(
+                mark_summary_failed(
+                    admin_client,
+                    summary_id=summary_id,
+                    generation_token=lease_token,
+                )
+            )
+        raise
+
     await _record_summary_completed(
         job_id=job_id,
         summary_id=summary_id,
@@ -294,6 +363,7 @@ async def _stream_summary_markdown(
             await update_summary_markdown(
                 admin_client,
                 summary_id=summary_id,
+                generation_token=lease_token,
                 summary_markdown=summary_markdown,
             )
             flush_count += 1
@@ -354,6 +424,7 @@ async def _stream_summary_markdown(
         await update_summary_markdown(
             admin_client,
             summary_id=summary_id,
+            generation_token=lease_token,
             summary_markdown=summary_markdown,
         )
         if not first_visible_logged:

@@ -4,12 +4,81 @@ import unittest
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import AsyncMock, patch
+from uuid import UUID
 
-from fathom.application.briefings import list_briefings_for_user
+from fathom.api.deps.auth import AuthContext
+from fathom.application.briefings import create_briefing_pdf, get_briefing, list_briefings_for_user
 from fathom.core.config import Settings
+from fathom.core.errors import NotReadyError
 
 
 class BriefingLibraryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_detail_rejects_pending_partial_summary(self) -> None:
+        settings = cast(Settings, SimpleNamespace())
+        auth = AuthContext(access_token="access-token", user_id="user-123")
+        briefing_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+        user_client = object()
+
+        with (
+            patch(
+                "fathom.application.briefings.create_supabase_user_client",
+                AsyncMock(return_value=user_client),
+            ),
+            patch(
+                "fathom.application.briefings.fetch_summary",
+                AsyncMock(
+                    return_value={
+                        "id": str(briefing_id),
+                        "status": "pending",
+                        "summary_markdown": "# Partial",
+                    }
+                ),
+            ),
+            patch(
+                "fathom.application.briefings.create_supabase_admin_client",
+                AsyncMock(),
+            ) as create_admin_client,
+        ):
+            with self.assertRaises(NotReadyError):
+                await get_briefing(briefing_id, auth, settings)
+
+        create_admin_client.assert_not_awaited()
+
+    async def test_pdf_rejects_pending_partial_summary_before_render_or_upload(self) -> None:
+        settings = cast(Settings, SimpleNamespace())
+        auth = AuthContext(access_token="access-token", user_id="user-123")
+        briefing_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+        user_client = object()
+
+        with (
+            patch(
+                "fathom.application.briefings.create_supabase_user_client",
+                AsyncMock(return_value=user_client),
+            ),
+            patch(
+                "fathom.application.briefings.fetch_summary",
+                AsyncMock(
+                    return_value={
+                        "id": str(briefing_id),
+                        "status": "pending",
+                        "summary_markdown": "# Partial",
+                    }
+                ),
+            ),
+            patch(
+                "fathom.application.briefings.create_supabase_admin_client",
+                AsyncMock(),
+            ) as create_admin_client,
+            patch("fathom.application.briefings.markdown_to_pdf_bytes") as render_pdf,
+            patch("fathom.application.briefings.upload_pdf", AsyncMock()) as upload_pdf,
+        ):
+            with self.assertRaises(NotReadyError):
+                await create_briefing_pdf(briefing_id, auth, settings)
+
+        create_admin_client.assert_not_awaited()
+        render_pdf.assert_not_called()
+        upload_pdf.assert_not_awaited()
+
     async def test_lists_briefings_from_jobs_with_enriched_metadata(self) -> None:
         admin_client = object()
         settings = cast(Settings, SimpleNamespace())

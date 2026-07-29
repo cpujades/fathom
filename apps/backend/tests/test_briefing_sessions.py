@@ -10,6 +10,7 @@ from fathom.api.deps.auth import AuthContext
 from fathom.application.briefings.contract import NormalizedSource
 from fathom.application.briefings.sessions import (
     _create_ready_reused_session,
+    _job_has_ready_summary,
     create_briefing_session,
     delete_briefing_session,
 )
@@ -20,6 +21,27 @@ from fathom.schemas.briefing_sessions import BriefingSessionCreateRequest
 
 
 class CreateBriefingSessionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_reusable_job_requires_explicit_ready_non_empty_summary(self) -> None:
+        client = object()
+        job = {
+            "id": "11111111-1111-1111-1111-111111111111",
+            "summary_id": "22222222-2222-2222-2222-222222222222",
+        }
+
+        with patch(
+            "fathom.application.briefings.sessions.fetch_summary",
+            AsyncMock(
+                return_value={
+                    "id": job["summary_id"],
+                    "status": "failed",
+                    "summary_markdown": "",
+                }
+            ),
+        ):
+            reusable = await _job_has_ready_summary(client, job)
+
+        self.assertFalse(reusable)
+
     async def test_creates_job_with_atomic_server_command_after_user_scoped_lookup(self) -> None:
         auth = AuthContext(access_token="access-token", user_id="user-123")
         settings = cast(Settings, SimpleNamespace())
@@ -110,6 +132,7 @@ class CreateBriefingSessionTests(unittest.IsolatedAsyncioTestCase):
             "id": session_id,
             "status": "deleted",
             "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            "summary_id": "22222222-2222-2222-2222-222222222222",
         }
         restored_job = {**archived_job, "status": "succeeded"}
         expected_response = object()
@@ -130,6 +153,16 @@ class CreateBriefingSessionTests(unittest.IsolatedAsyncioTestCase):
             patch(
                 "fathom.application.briefings.sessions.fetch_reusable_job_for_source",
                 AsyncMock(return_value=archived_job),
+            ),
+            patch(
+                "fathom.application.briefings.sessions.fetch_summary",
+                AsyncMock(
+                    return_value={
+                        "id": "22222222-2222-2222-2222-222222222222",
+                        "status": "ready",
+                        "summary_markdown": "# Ready",
+                    }
+                ),
             ),
             patch("fathom.application.briefings.sessions.restore_job", AsyncMock()) as restore_job_mock,
             patch(

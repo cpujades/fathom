@@ -11,7 +11,7 @@ from fathom.api.deps.auth import AuthContext
 from fathom.application.briefings.contract import build_source_thumbnail_url, normalize_source, resolve_source_title
 from fathom.core.config import Settings
 from fathom.core.constants import SIGNED_URL_TTL_SECONDS, SUPABASE_PDF_BUCKET
-from fathom.core.errors import ExternalServiceError
+from fathom.core.errors import ExternalServiceError, NotReadyError
 from fathom.core.logging import log_context
 from fathom.crud.supabase.jobs import fetch_briefing_jobs_page
 from fathom.crud.supabase.storage_objects import create_pdf_signed_url, upload_pdf
@@ -40,6 +40,7 @@ async def get_briefing(briefing_id: UUID, auth: AuthContext, settings: Settings)
     with log_context(user_id=auth.user_id, briefing_id=briefing_id_str):
         user_client = await create_supabase_user_client(settings, auth.access_token)
         summary = await fetch_summary(user_client, briefing_id_str)
+        _require_ready_summary(summary)
         object_key = summary.get("pdf_object_key")
         has_pdf = isinstance(object_key, str) and bool(object_key)
         logger.info("briefing.fetched", extra={"has_pdf": has_pdf})
@@ -70,6 +71,7 @@ async def create_briefing_pdf(briefing_id: UUID, auth: AuthContext, settings: Se
     with log_context(user_id=auth.user_id, briefing_id=briefing_id_str):
         user_client = await create_supabase_user_client(settings, auth.access_token)
         summary = await fetch_summary(user_client, briefing_id_str)
+        _require_ready_summary(summary)
 
         admin_client = await create_supabase_admin_client(settings)
         existing_object_key = summary.get("pdf_object_key")
@@ -121,6 +123,12 @@ async def create_briefing_pdf(briefing_id: UUID, auth: AuthContext, settings: Se
 
         logger.info("briefing_pdf.signed_url.issued")
         return BriefingPdfResponse(briefing_id=summary["id"], pdf_url=pdf_url)
+
+
+def _require_ready_summary(summary: dict[str, Any]) -> None:
+    markdown = summary.get("summary_markdown")
+    if summary.get("status") != "ready" or not isinstance(markdown, str) or not markdown.strip():
+        raise NotReadyError("Briefing is not ready.")
 
 
 async def list_briefings_for_user(

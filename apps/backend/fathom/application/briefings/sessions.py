@@ -91,6 +91,12 @@ async def create_briefing_session(
             user_id=auth.user_id,
             source_key=source.source_identity_key,
         )
+        if completed_job and not await _job_has_ready_summary(user_client, completed_job):
+            logger.warning(
+                "briefing_session.reusable_summary_not_ready",
+                extra={"session_id": completed_job["id"]},
+            )
+            completed_job = None
         if completed_job:
             if str(completed_job.get("status") or "") == "deleted":
                 await restore_job(admin_client, job_id=str(completed_job["id"]))
@@ -449,6 +455,16 @@ async def _find_ready_cached_summary(admin_client: Any, source: NormalizedSource
         return None
 
     return summary
+
+
+async def _job_has_ready_summary(user_client: Any, job: dict[str, Any]) -> bool:
+    summary_id = job.get("summary_id")
+    if not summary_id:
+        return False
+
+    summary = await fetch_summary(user_client, str(summary_id))
+    markdown = summary.get("summary_markdown")
+    return summary.get("status") == "ready" and isinstance(markdown, str) and bool(markdown.strip())
 
 
 def _hash_url(url: str) -> str:

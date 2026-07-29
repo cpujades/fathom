@@ -18,7 +18,18 @@ values (
 select '00000000-0000-0000-0000-000000000001'::uuid as example_user_id;
 
 -- Example summary referencing the transcript
-insert into public.summaries (id, user_id, transcript_id, prompt_key, summary_model, summary_markdown, pdf_object_key)
+insert into public.summaries (
+  id,
+  user_id,
+  transcript_id,
+  prompt_key,
+  summary_model,
+  summary_markdown,
+  pdf_object_key,
+  status,
+  status_updated_at,
+  ready_at
+)
 select
   gen_random_uuid(),
   '00000000-0000-0000-0000-000000000001'::uuid,
@@ -28,7 +39,10 @@ select
   '# Example summary
 
 This is a seeded summary.',
-  null
+  null,
+  'ready',
+  now(),
+  now()
 from public.transcripts t
 where t.url_hash = 'example_url_hash';
 

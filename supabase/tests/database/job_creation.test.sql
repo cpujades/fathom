@@ -2,7 +2,7 @@ begin;
 
 set local search_path = extensions, public, pg_catalog;
 
-select plan(35);
+select plan(36);
 
 select col_not_null(
   'public',
@@ -155,7 +155,10 @@ insert into public.summaries (
   transcript_id,
   prompt_key,
   summary_model,
-  summary_markdown
+  summary_markdown,
+  status,
+  status_updated_at,
+  ready_at
 )
 values (
   '60000000-0000-0000-0000-000000000001',
@@ -163,7 +166,10 @@ values (
   '50000000-0000-0000-0000-000000000001',
   'default',
   'test-model',
-  '# Ready'
+  '# Ready',
+  'ready',
+  pg_catalog.now(),
+  pg_catalog.now()
 );
 
 update public.jobs
@@ -288,6 +294,44 @@ select throws_ok(
   '22023',
   'source key does not match the canonical url',
   'source key must match the canonical URL'
+);
+
+insert into public.summaries (
+  id,
+  user_id,
+  transcript_id,
+  prompt_key,
+  summary_model,
+  summary_markdown,
+  status,
+  status_updated_at,
+  failed_at
+)
+values (
+  '60000000-0000-0000-0000-000000000002',
+  '40000000-0000-0000-0000-000000000003',
+  '50000000-0000-0000-0000-000000000001',
+  'failed-test',
+  'test-model',
+  '',
+  'failed',
+  pg_catalog.now(),
+  pg_catalog.now()
+);
+
+select throws_ok(
+  $$
+    select public.create_or_reuse_job(
+      '40000000-0000-0000-0000-000000000003',
+      'https://www.youtube.com/watch?v=failed-cache',
+      'youtube:failed-cache',
+      1800,
+      '60000000-0000-0000-0000-000000000002'
+    )
+  $$,
+  '22023',
+  'cached summary must be ready and non-empty',
+  'failed empty summary can never create a cached session'
 );
 
 update public.jobs
