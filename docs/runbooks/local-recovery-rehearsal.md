@@ -59,30 +59,59 @@ Acceptance criteria:
 If `FATHOM_TEST_DATABASE_URL` is absent, these tests skip; a skip is not a
 passing Gate B result.
 
-## Gate C: one-process crash and recovery check
+## Gate C: authenticated product and recovery rehearsal
 
-1. Start the API and exactly one worker against the disposable local database.
-2. Submit at most five fixture jobs through fake provider adapters.
-3. Stop the worker once during provider work and once during finalization.
-4. Restart one worker and wait for one lease sweep and billing-maintenance
-   interval.
-5. Run the bounded operability report from the incident runbook before and
-   after.
+Gate C is an opt-in integration test against a disposable, fully migrated local
+Supabase project. It uses test-only dependency injection at the existing
+download, transcription, and summarization boundaries; there is no runtime
+fake-provider setting.
+
+Start only the local services needed by Auth, PostgREST, Storage, and the
+database. Exclude analytics and its Docker-socket dependency:
+
+```bash
+supabase start \
+  -x logflare,vector,studio,mailpit,realtime,imgproxy,postgres-meta,edge-runtime
+```
+
+Read that disposable project's local status and set these variables without
+copying them into a tracked file:
+
+- `FATHOM_GATE_C_SUPABASE_URL`
+- `FATHOM_GATE_C_PUBLISHABLE_KEY`
+- `FATHOM_GATE_C_SECRET_KEY`
+- `FATHOM_GATE_C_DATABASE_URL`
+
+Then run:
+
+```bash
+FATHOM_RUN_GATE_C=1 \
+PYTHONPATH=apps/backend ./.venv/bin/python -m unittest \
+  apps.backend.tests.test_gate_c_e2e
+```
+
+The test creates an isolated local Auth user and session, exercises authenticated
+session creation, a fake worker success, persisted SSE replay after reconnect,
+Markdown and PDF retrieval, archive and restore, billing reads and settlement,
+a transient retry, and a permanent provider failure. It also prints
+`GATE_C_POLL_METRIC` for the one-second per-viewer event polling loop.
 
 Pass only when:
 
-- the stopped worker cannot commit after losing its lease;
-- each recoverable job converges through a visible retry/finalization state;
-- no ready empty summary is exposed;
-- each successful settlement is present exactly once and balances to duration;
-- unresolved webhook, orphaned summary, expired lease, and settlement mismatch
-  counts return to zero;
-- logs contain correlation IDs but no account IDs, source URLs, tokens,
-  transcript text, summary Markdown, or webhook payloads.
+- the full test passes instead of skipping;
+- persisted event IDs remain ordered across reconnect and the terminal snapshot
+  contains the completed briefing;
+- PDF, archive, restore, and billing fixtures converge through the public API;
+- retry succeeds on its second claim and settles exactly once;
+- permanent failure is visible and creates no settlement;
+- the polling metric reports one query for one viewer after approximately one
+  configured interval;
+- the fixture removes its Auth user, database rows, and stored PDF; and
+- stopping the disposable project does not stop or reset another local project.
 
-Gate C is intentionally a manual local rehearsal until fake-provider selection
-is exposed as a supported runtime mode. Do not add production-only switches or
-provider credentials solely to automate it.
+Stop the disposable project with `supabase stop --no-backup`, then remove only
+its temporary project directory. The ordinary test suite skips Gate C when its
+explicit opt-in and isolated settings are absent.
 
 ## What this does not prove
 
