@@ -121,7 +121,14 @@ export default function ProfilePage() {
               </button>
             </div>
 
-            {status ? <p className={`${chrome.inlineStatus} ${statusError ? chrome.inlineStatusError : ""}`}>{status}</p> : null}
+            {status ? (
+              <p
+                className={`${chrome.inlineStatus} ${statusError ? chrome.inlineStatusError : ""}`}
+                role={statusError ? "alert" : "status"}
+              >
+                {status}
+              </p>
+            ) : null}
           </article>
         </section>
       </main>

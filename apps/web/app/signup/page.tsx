@@ -163,7 +163,7 @@ export default function SignUpPage() {
 
   return (
     <div className={styles.page}>
-      <div className={styles.shell}>
+      <main className={styles.shell} id="main-content">
         <aside className={styles.panel}>
           <div className={styles.brand}>
             <span className={styles.brandMark} aria-hidden="true" />
@@ -179,14 +179,24 @@ export default function SignUpPage() {
           <p className={styles.panelFooter}>Already have an account? Sign in and continue where you left off.</p>
         </aside>
 
-        <section className={styles.card}>
+        <section className={styles.card} aria-labelledby="signup-title">
           <div>
-            <h2 className={styles.title}>Sign up</h2>
+            <h2 className={styles.title} id="signup-title">
+              Sign up
+            </h2>
             <p className={styles.subtitle}>Magic link is the fastest way to start. You can switch to password anytime.</p>
           </div>
 
-          {error ? <div className={styles.error}>{error}</div> : null}
-          {message ? <div className={styles.notice}>{message}</div> : null}
+          {error ? (
+            <div className={styles.error} role="alert">
+              {error}
+            </div>
+          ) : null}
+          {message ? (
+            <div className={styles.notice} role="status">
+              {message}
+            </div>
+          ) : null}
 
           <form className={styles.form} onSubmit={handleSignUp}>
             <div className={styles.field}>
@@ -274,7 +284,12 @@ export default function SignUpPage() {
 
           <div className={styles.divider}>or</div>
 
-          <button className={`${styles.button} ${styles.buttonGhost}`} onClick={handleGoogle} disabled={loading}>
+          <button
+            className={`${styles.button} ${styles.buttonGhost}`}
+            type="button"
+            onClick={handleGoogle}
+            disabled={loading}
+          >
             <Image className={styles.googleIcon} src="/google-logo.webp" alt="" aria-hidden="true" width={18} height={18} />
             Continue with Google
           </button>
@@ -286,7 +301,7 @@ export default function SignUpPage() {
             <Link href="/">Return to Talven</Link>
           </div>
         </section>
-      </div>
+      </main>
     </div>
   );
 }

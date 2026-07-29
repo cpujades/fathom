@@ -718,6 +718,26 @@ export default function BriefingSessionPage() {
     };
   }, [canShowReader, sessionId]);
 
+  useEffect(() => {
+    if (!deleteConfirming) {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      focusFirstVisibleControl("[data-remove-cancel]");
+    });
+  }, [deleteConfirming]);
+
+  const closeDeleteConfirmation = () => {
+    if (deleteLoading) {
+      return;
+    }
+    setDeleteConfirming(false);
+    window.requestAnimationFrame(() => {
+      focusFirstVisibleControl("[data-remove-trigger]");
+    });
+  };
+
   return (
     <div className={chrome.pageFrame}>
       <AppShellHeader
@@ -1060,6 +1080,7 @@ export default function BriefingSessionPage() {
                 {isReady && !deleteConfirming ? (
                   <button
                     className={`${styles.textActionLink} ${styles.removeTextButton}`}
+                    data-remove-trigger
                     type="button"
                     onClick={() => {
                       setDeleteConfirming(true);
@@ -1071,17 +1092,14 @@ export default function BriefingSessionPage() {
                   </button>
                 ) : null}
                 {isReady && deleteConfirming ? (
-                  <div className={styles.sidebarDeleteConfirm}>
+                  <div className={styles.sidebarDeleteConfirm} role="group" aria-label="Remove briefing">
                     <p>Remove this briefing?</p>
                     <div className={styles.sidebarDeleteActions}>
                       <button
                         className={styles.textActionLink}
+                        data-remove-cancel
                         type="button"
-                        onClick={() => {
-                          if (!deleteLoading) {
-                            setDeleteConfirming(false);
-                          }
-                        }}
+                        onClick={closeDeleteConfirmation}
                         disabled={deleteLoading}
                       >
                         Cancel
@@ -1149,6 +1167,7 @@ export default function BriefingSessionPage() {
                 <div className={styles.footerDangerRow}>
                   <button
                     className={`${styles.textActionLink} ${styles.removeTextButton}`}
+                    data-remove-trigger
                     type="button"
                     onClick={() => {
                       setDeleteConfirming(true);
@@ -1161,16 +1180,13 @@ export default function BriefingSessionPage() {
                 </div>
               ) : null}
               {isReady && deleteConfirming ? (
-                <div className={styles.footerDeleteConfirm}>
+                <div className={styles.footerDeleteConfirm} role="group" aria-label="Remove briefing">
                   <span>Remove this briefing from your library?</span>
                   <button
                     className={styles.textActionLink}
+                    data-remove-cancel
                     type="button"
-                    onClick={() => {
-                      if (!deleteLoading) {
-                        setDeleteConfirming(false);
-                      }
-                    }}
+                    onClick={closeDeleteConfirmation}
                     disabled={deleteLoading}
                   >
                     Cancel
@@ -1210,6 +1226,11 @@ function BriefingContentSection({ section }: { section: ParsedBriefingSection })
       <StreamingMarkdown markdown={section.content} className={markdownClassName} />
     </section>
   );
+}
+
+function focusFirstVisibleControl(selector: string): void {
+  const controls = Array.from(document.querySelectorAll<HTMLElement>(selector));
+  controls.find((control) => control.getClientRects().length > 0)?.focus();
 }
 
 async function sleep(ms: number, signal: AbortSignal) {

@@ -608,9 +608,9 @@ function BillingPageContent() {
       <div className={chrome.pageFrame}>
         <AppShellHeader active="billing" remainingSeconds={null} accountLabel={null} onSignOut={() => undefined} />
         <main id="main-content" className={chrome.mainFrame}>
-          <section className={chrome.surface}>
+          <section className={chrome.surface} aria-busy="true">
             <h1 className={chrome.surfaceTitle}>Loading your access...</h1>
-            <p className={chrome.surfaceText}>Fetching plans, balances, and billing details.</p>
+            <p className={chrome.surfaceText} role="status">Fetching plans, balances, and billing details.</p>
           </section>
         </main>
       </div>
@@ -708,7 +708,7 @@ function BillingPageContent() {
         ) : null}
 
         {error ? (
-          <section className={`${chrome.notice} ${styles.pageColumn} ${chrome.noticeError}`}>
+          <section className={`${chrome.notice} ${styles.pageColumn} ${chrome.noticeError}`} role="alert">
             <h2 className={chrome.noticeTitle}>Billing action failed</h2>
             <p className={chrome.noticeText}>{error}</p>
           </section>
@@ -923,9 +923,9 @@ export default function BillingPage() {
         <div className={chrome.pageFrame}>
           <AppShellHeader active="billing" remainingSeconds={null} accountLabel={null} onSignOut={() => undefined} />
           <main id="main-content" className={chrome.mainFrame}>
-            <section className={chrome.surface}>
+            <section className={chrome.surface} aria-busy="true">
               <h1 className={chrome.surfaceTitle}>Loading your access...</h1>
-              <p className={chrome.surfaceText}>Preparing your plan and billing details.</p>
+              <p className={chrome.surfaceText} role="status">Preparing your plan and billing details.</p>
             </section>
           </main>
         </div>

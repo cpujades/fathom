@@ -110,9 +110,12 @@ export default function AppHome() {
                 <div className={styles.commandField}>
                   <input
                     className={`${chrome.input} ${styles.commandInput}`}
+                    id="briefing-source-url"
                     type="url"
                     placeholder="Paste a YouTube or podcast URL"
                     aria-label="Podcast or YouTube URL"
+                    aria-describedby={error ? "briefing-source-error" : undefined}
+                    aria-invalid={error ? true : undefined}
                     value={url}
                     onChange={(event) => setUrl(event.target.value)}
                     disabled={loading}
@@ -141,7 +144,15 @@ export default function AppHome() {
                   <Link href="/app/billing#billing-offers">Add time</Link>
                 ) : null}
               </div>
-              {error ? <p className={`${chrome.inlineStatus} ${chrome.inlineStatusError}`}>{error}</p> : null}
+              {error ? (
+                <p
+                  className={`${chrome.inlineStatus} ${chrome.inlineStatusError}`}
+                  id="briefing-source-error"
+                  role="alert"
+                >
+                  {error}
+                </p>
+              ) : null}
             </form>
           </article>
         </section>

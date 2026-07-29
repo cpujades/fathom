@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+import styles from "./streaming-markdown.module.css";
+
 interface StreamingMarkdownProps {
   markdown: string;
   isStreaming?: boolean;
@@ -22,7 +24,8 @@ export function StreamingMarkdown({
   const lastFrameTimeRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!isStreaming) {
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!isStreaming || reduceMotion) {
       const frameId = window.requestAnimationFrame(() => {
         setDisplayedMarkdown(markdown);
       });
@@ -83,7 +86,18 @@ export function StreamingMarkdown({
 
   return (
     <div className={className}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{renderedMarkdown}</ReactMarkdown>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          table: ({ node: _node, ...props }) => (
+            <div className={styles.tableScroll} role="region" aria-label="Scrollable briefing table" tabIndex={0}>
+              <table {...props} />
+            </div>
+          )
+        }}
+      >
+        {renderedMarkdown}
+      </ReactMarkdown>
       {isStreaming ? <span className={cursorClassName} aria-hidden="true" /> : null}
     </div>
   );

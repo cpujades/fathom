@@ -1,0 +1,10 @@
+.tableScroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+}
+
+.tableScroll:focus-visible {
+  border-radius: 8px;
+}
