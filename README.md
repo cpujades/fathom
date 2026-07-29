@@ -84,6 +84,8 @@ Optional backend runtime variables:
 - `TRUST_PROXY_HEADERS`
 - `POLAR_CHECKOUT_RETURN_URL`
 - `POLAR_SERVER`
+- `PROVIDER_TRANSCRIPTION_DEADLINE_SECONDS`
+- `PROVIDER_SUMMARY_DEADLINE_SECONDS`
 
 `APP_ENV` defaults to `local`. Set `APP_ENV=production` for hosted API and worker deployments so readiness checks use the stricter production path.
 

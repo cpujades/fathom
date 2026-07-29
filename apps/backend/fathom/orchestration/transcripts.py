@@ -20,7 +20,7 @@ from fathom.crud.supabase.transcripts import (
 )
 from fathom.orchestration.observability import log_stage, log_step
 from fathom.services.downloader import download_audio
-from fathom.services.transcriber import transcribe_url
+from fathom.services.transcriber import transcribe_url_with_resilience
 from fathom.services.youtube import extract_youtube_video_id
 from supabase import AsyncClient
 
@@ -286,11 +286,11 @@ async def _transcribe_uploaded_audio(
     )
 
     started_at = time.perf_counter()
-    transcript_text = await asyncio.to_thread(
-        transcribe_url,
+    transcript_text = await transcribe_url_with_resilience(
         signed_url,
         settings.groq_api_key,
         GROQ_MODEL,
+        deadline_seconds=settings.provider_transcription_deadline_seconds,
     )
     duration_ms = (time.perf_counter() - started_at) * 1000
     log_step(

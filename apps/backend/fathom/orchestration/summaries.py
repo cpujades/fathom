@@ -342,7 +342,11 @@ async def _stream_summary_markdown(
 
     stream_failed = False
     try:
-        async for delta in stream_summarize_transcript(transcript_text, settings.openrouter_api_key):
+        async for delta in stream_summarize_transcript(
+            transcript_text,
+            settings.openrouter_api_key,
+            deadline_seconds=settings.provider_summary_deadline_seconds,
+        ):
             summary_markdown += delta
             if not first_stream_chunk_logged:
                 log_stage(
@@ -487,7 +491,11 @@ async def _fallback_summary(
         progress=min(progress + 5, 92),
         status_message="Finalizing a full summary",
     )
-    markdown = await summarize_transcript(transcript_text, settings.openrouter_api_key)
+    markdown = await summarize_transcript(
+        transcript_text,
+        settings.openrouter_api_key,
+        deadline_seconds=settings.provider_summary_deadline_seconds,
+    )
     log_step(
         logger,
         "worker.summary.fallback.completed",

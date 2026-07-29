@@ -10,6 +10,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 DEFAULT_BILLING_DEBT_CAP_SECONDS = 600
 DEFAULT_SUPABASE_DB_PORT = 5432
 DEFAULT_WORKER_MAX_CONCURRENT_JOBS = 10
+DEFAULT_PROVIDER_SUMMARY_DEADLINE_SECONDS = 1805.0
+DEFAULT_PROVIDER_TRANSCRIPTION_DEADLINE_SECONDS = 190.0
 
 
 class Settings(BaseSettings):
@@ -63,6 +65,18 @@ class Settings(BaseSettings):
     polar_server: str = Field(default="sandbox", validation_alias="POLAR_SERVER")
     billing_debt_cap_seconds: int = DEFAULT_BILLING_DEBT_CAP_SECONDS
     worker_max_concurrent_jobs: int = DEFAULT_WORKER_MAX_CONCURRENT_JOBS
+    provider_transcription_deadline_seconds: float = Field(
+        default=DEFAULT_PROVIDER_TRANSCRIPTION_DEADLINE_SECONDS,
+        validation_alias="PROVIDER_TRANSCRIPTION_DEADLINE_SECONDS",
+        gt=0,
+        le=3600,
+    )
+    provider_summary_deadline_seconds: float = Field(
+        default=DEFAULT_PROVIDER_SUMMARY_DEADLINE_SECONDS,
+        validation_alias="PROVIDER_SUMMARY_DEADLINE_SECONDS",
+        gt=0,
+        le=3600,
+    )
 
     @field_validator(
         "openrouter_api_key",

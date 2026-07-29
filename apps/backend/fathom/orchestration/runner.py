@@ -26,6 +26,11 @@ from fathom.orchestration.observability import (
     elapsed_ms,
     extract_job_error,
 )
+from fathom.services.provider_resilience import (
+    ProviderOperationError,
+    RetryPolicy,
+    compute_retry_delay,
+)
 from fathom.services.supabase import create_supabase_admin_client, listen_for_notifications
 from supabase import AsyncClient
 
@@ -43,10 +48,30 @@ WORKER_HEARTBEAT_INTERVAL_SECONDS = 30.0
 WORKER_SWEEP_INTERVAL_SECONDS = 30.0
 WORKER_BILLING_MAINTENANCE_INTERVAL_SECONDS = 60.0
 WORKER_JOB_NOTIFY_TIMEOUT_SECONDS = 10.0
+WORKER_RETRY_POLICY = RetryPolicy(
+    deadline_seconds=3600,
+    max_attempts=WORKER_MAX_ATTEMPTS,
+    backoff_base_seconds=WORKER_BACKOFF_BASE_SECONDS,
+    backoff_max_seconds=60,
+)
 
 
-def _compute_backoff_seconds(base: int, attempt: int) -> int:
-    return int(base * (2 ** max(attempt - 1, 0)))
+def _compute_backoff_seconds(
+    attempt: int,
+    *,
+    retry_after_seconds: float | None = None,
+) -> float:
+    return compute_retry_delay(
+        WORKER_RETRY_POLICY,
+        attempt=attempt,
+        retry_after_seconds=retry_after_seconds,
+    )
+
+
+def _should_retry_failure(exc: Exception, *, attempt_count: int) -> bool:
+    if attempt_count >= WORKER_MAX_ATTEMPTS:
+        return False
+    return not isinstance(exc, ProviderOperationError) or exc.retryable
 
 
 async def _handle_claimed_job(
@@ -143,6 +168,8 @@ async def _handle_claimed_job(
         return
     except Exception as exc:
         error_code, error_message = extract_job_error(exc)
+        will_retry = _should_retry_failure(exc, attempt_count=attempt_count)
+        provider_failure_kind = exc.kind.value if isinstance(exc, ProviderOperationError) else None
         await record_job_event_best_effort(
             admin_client,
             logger,
@@ -154,7 +181,8 @@ async def _handle_claimed_job(
                 "attempt": attempt_count,
                 "duration_ms": elapsed_ms(attempt_start),
                 "error_code": error_code,
-                "will_retry": attempt_count < WORKER_MAX_ATTEMPTS,
+                "will_retry": will_retry,
+                "provider_failure_kind": provider_failure_kind,
             },
         )
         logger.exception(
@@ -164,12 +192,17 @@ async def _handle_claimed_job(
                 "attempt": attempt_count,
                 "duration_ms": elapsed_ms(attempt_start),
                 "error_code": error_code,
-                "will_retry": attempt_count < WORKER_MAX_ATTEMPTS,
+                "will_retry": will_retry,
+                "provider_failure_kind": provider_failure_kind,
             },
         )
         try:
-            if attempt_count < WORKER_MAX_ATTEMPTS:
-                backoff_seconds = _compute_backoff_seconds(WORKER_BACKOFF_BASE_SECONDS, attempt_count)
+            if will_retry:
+                retry_after_seconds = exc.retry_after_seconds if isinstance(exc, ProviderOperationError) else None
+                backoff_seconds = _compute_backoff_seconds(
+                    attempt_count,
+                    retry_after_seconds=retry_after_seconds,
+                )
                 run_after = datetime.now(UTC) + timedelta(seconds=backoff_seconds)
                 if isinstance(exc, UsageSettlementError):
                     await mark_job_finalization_retry(
