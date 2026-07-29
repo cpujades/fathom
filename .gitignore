@@ -20,3 +20,5 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 apps/web/tsconfig.tsbuildinfo
+apps/web/playwright-report/
+apps/web/test-results/
