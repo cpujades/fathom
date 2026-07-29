@@ -4,8 +4,6 @@ import logging
 import time
 from contextlib import asynccontextmanager
 
-from postgrest import APIError
-
 from fathom.api import __version__
 from fathom.core.config import Settings
 from fathom.core.errors import ConfigurationError, NotReadyError
@@ -16,6 +14,53 @@ from fathom.services.supabase import create_postgres_connection, create_supabase
 _START_TIME = time.monotonic()
 
 logger = logging.getLogger(__name__)
+
+_REQUIRED_DATABASE_OBJECTS = (
+    "jobs_table",
+    "summaries_table",
+    "job_events_table",
+    "usage_settlements_table",
+    "billing_webhook_events_table",
+    "create_or_reuse_settled_job_function",
+    "claim_next_settled_job_function",
+    "renew_job_lease_function",
+    "prepare_summary_function",
+    "settle_job_usage_function",
+    "apply_polar_webhook_event_function",
+)
+
+_SCHEMA_CHECK_SQL = """
+select
+  to_regclass('public.jobs') is not null as jobs_table,
+  to_regclass('public.summaries') is not null as summaries_table,
+  to_regclass('public.job_events') is not null as job_events_table,
+  to_regclass('public.usage_settlements') is not null as usage_settlements_table,
+  to_regclass('public.billing_webhook_events') is not null as billing_webhook_events_table,
+  exists (
+    select 1 from pg_proc join pg_namespace on pg_namespace.oid = pg_proc.pronamespace
+    where pg_namespace.nspname = 'public' and pg_proc.proname = 'create_or_reuse_settled_job'
+  ) as create_or_reuse_settled_job_function,
+  exists (
+    select 1 from pg_proc join pg_namespace on pg_namespace.oid = pg_proc.pronamespace
+    where pg_namespace.nspname = 'public' and pg_proc.proname = 'claim_next_settled_job'
+  ) as claim_next_settled_job_function,
+  exists (
+    select 1 from pg_proc join pg_namespace on pg_namespace.oid = pg_proc.pronamespace
+    where pg_namespace.nspname = 'public' and pg_proc.proname = 'renew_job_lease'
+  ) as renew_job_lease_function,
+  exists (
+    select 1 from pg_proc join pg_namespace on pg_namespace.oid = pg_proc.pronamespace
+    where pg_namespace.nspname = 'public' and pg_proc.proname = 'prepare_summary'
+  ) as prepare_summary_function,
+  exists (
+    select 1 from pg_proc join pg_namespace on pg_namespace.oid = pg_proc.pronamespace
+    where pg_namespace.nspname = 'public' and pg_proc.proname = 'settle_job_usage'
+  ) as settle_job_usage_function,
+  exists (
+    select 1 from pg_proc join pg_namespace on pg_namespace.oid = pg_proc.pronamespace
+    where pg_namespace.nspname = 'public' and pg_proc.proname = 'apply_polar_webhook_event'
+  ) as apply_polar_webhook_event_function
+"""
 
 
 async def health_status() -> HealthResponse:
@@ -29,7 +74,9 @@ def _is_strict_runtime_env(settings: Settings) -> bool:
 
 def _require_supabase_config(settings: Settings) -> None:
     if settings.supabase_url and settings.supabase_publishable_key and settings.supabase_secret_key:
+        _log_readiness_check("supabase_config", "ok")
         return
+    _log_readiness_check("supabase_config", "failed")
     raise NotReadyError("Supabase is not configured.")
 
 
@@ -40,7 +87,9 @@ def _require_billing_config(settings: Settings) -> None:
         polar.get_polar_success_url(settings)
         polar.get_polar_portal_return_url(settings)
     except ConfigurationError as exc:
+        _log_readiness_check("billing_config", "failed")
         raise NotReadyError(f"Billing is not configured: {exc.detail}") from exc
+    _log_readiness_check("billing_config", "ok")
 
 
 @asynccontextmanager
@@ -52,25 +101,43 @@ async def _postgres_connection(settings: Settings):
 async def _check_postgrest(settings: Settings) -> None:
     try:
         client = await create_supabase_admin_client(settings)
-        await client.table("jobs").select("id").limit(1).execute()
-    except APIError as exc:
+        await client.table("jobs").select("id,status,lease_expires_at,usage_settlement_required").limit(1).execute()
+        await client.table("summaries").select("id,status,generation_job_id,status_updated_at").limit(1).execute()
+        await client.table("job_events").select("id,job_id,event_type,created_at").limit(1).execute()
+    except Exception as exc:
         logger.warning(
             "api.ready.failed",
-            extra={"dependency": "supabase", "error_type": type(exc).__name__},
+            extra={"check": "postgrest_schema", "error_type": type(exc).__name__},
         )
         raise NotReadyError("Supabase is not reachable.") from exc
+    _log_readiness_check("postgrest_schema", "ok")
 
 
 async def _check_postgres(settings: Settings) -> None:
     try:
         async with _postgres_connection(settings) as conn:
             await conn.fetchval("select 1")
+            schema_status = await conn.fetchrow(_SCHEMA_CHECK_SQL)
     except ConfigurationError as exc:
-        logger.warning("api.ready.failed", extra={"dependency": "postgres", "error_type": type(exc).__name__})
+        logger.warning("api.ready.failed", extra={"check": "postgres", "error_type": type(exc).__name__})
         raise NotReadyError(f"Direct Postgres is not configured: {exc.detail}") from exc
     except Exception as exc:
-        logger.warning("api.ready.failed", extra={"dependency": "postgres", "error_type": type(exc).__name__})
+        logger.warning("api.ready.failed", extra={"check": "postgres", "error_type": type(exc).__name__})
         raise NotReadyError("Direct Postgres is not reachable.") from exc
+
+    _log_readiness_check("postgres", "ok")
+    missing_objects = [name for name in _REQUIRED_DATABASE_OBJECTS if not schema_status or not schema_status.get(name)]
+    if missing_objects:
+        logger.warning(
+            "api.ready.failed",
+            extra={"check": "database_schema", "missing_count": len(missing_objects)},
+        )
+        raise NotReadyError("Database schema is incomplete.")
+    _log_readiness_check("database_schema", "ok")
+
+
+def _log_readiness_check(check: str, result: str) -> None:
+    logger.info("api.ready.check", extra={"check": check, "result": result})
 
 
 async def readiness_status(settings: Settings) -> ReadyResponse:
@@ -81,8 +148,10 @@ async def readiness_status(settings: Settings) -> ReadyResponse:
 
     if _is_strict_runtime_env(settings):
         _require_billing_config(settings)
+    else:
+        _log_readiness_check("billing_config", "skipped")
 
-    logger.info("api.ready.ok")
+    logger.info("api.ready.ok", extra={"provider_reachability": "not_checked"})
     return ReadyResponse(status="ok")
 
 
