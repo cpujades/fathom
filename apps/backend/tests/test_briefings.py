@@ -13,6 +13,46 @@ from fathom.core.errors import NotReadyError
 
 
 class BriefingLibraryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_pdf_url_checks_owned_summary_before_admin_storage_access(self) -> None:
+        settings = cast(Settings, SimpleNamespace())
+        auth = AuthContext(access_token="access-token", user_id="user-123")
+        briefing_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+        user_client = object()
+        admin_client = object()
+        object_key = "user-123/video/briefing.pdf"
+
+        with (
+            patch(
+                "fathom.application.briefings.create_supabase_user_client",
+                AsyncMock(return_value=user_client),
+            ),
+            patch(
+                "fathom.application.briefings.create_supabase_admin_client",
+                AsyncMock(return_value=admin_client),
+            ),
+            patch(
+                "fathom.application.briefings.fetch_summary",
+                AsyncMock(
+                    return_value={
+                        "id": str(briefing_id),
+                        "status": "ready",
+                        "summary_markdown": "# Complete",
+                        "pdf_object_key": object_key,
+                    }
+                ),
+            ) as fetch_summary,
+            patch(
+                "fathom.application.briefings.create_pdf_signed_url",
+                AsyncMock(return_value="https://storage.example/signed"),
+            ) as create_signed_url,
+        ):
+            response = await get_briefing(briefing_id, auth, settings)
+
+        fetch_summary.assert_awaited_once_with(user_client, str(briefing_id))
+        create_signed_url.assert_awaited_once()
+        self.assertIs(create_signed_url.await_args.args[0], admin_client)
+        self.assertEqual(response.pdf_url, "https://storage.example/signed")
+
     async def test_detail_rejects_pending_partial_summary(self) -> None:
         settings = cast(Settings, SimpleNamespace())
         auth = AuthContext(access_token="access-token", user_id="user-123")
