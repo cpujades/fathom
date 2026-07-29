@@ -24,6 +24,7 @@ from fathom.schemas.briefing_contract import (
 )
 from fathom.schemas.transcripts import TranscriptSegment
 from fathom.services.provider_resilience import (
+    DEFAULT_PROVIDER_MAX_ATTEMPTS,
     CallableProviderAdapter,
     ProviderFailureKind,
     ProviderOperationError,
@@ -62,11 +63,15 @@ async def summarize_transcript_with_evidence(
     api_key: str,
     *,
     deadline_seconds: float = DEFAULT_PROVIDER_SUMMARY_DEADLINE_SECONDS,
+    max_attempts: int = DEFAULT_PROVIDER_MAX_ATTEMPTS,
+    max_output_tokens: int | None = None,
 ) -> BriefingContract:
     if not api_key:
         raise SummarizationError("Missing OPENROUTER_API_KEY.")
     if not segments:
         raise SummarizationError("Timestamped transcript segments are required.")
+    if max_output_tokens is not None and max_output_tokens <= 0:
+        raise SummarizationError("max_output_tokens must be greater than zero.")
 
     client = AsyncOpenAI(
         api_key=api_key,
@@ -94,6 +99,9 @@ async def summarize_transcript_with_evidence(
     )
 
     async def operation() -> BriefingContract:
+        output_limit: dict[str, Any] = {}
+        if max_output_tokens is not None:
+            output_limit["max_tokens"] = max_output_tokens
         response = await client.chat.completions.create(
             model=OPENROUTER_MODEL,
             messages=[
@@ -109,6 +117,7 @@ async def summarize_transcript_with_evidence(
                     "schema": BriefingContract.model_json_schema(),
                 },
             },
+            **output_limit,
         )
 
         content: Any = response.choices[0].message.content if response.choices else None
@@ -137,7 +146,10 @@ async def summarize_transcript_with_evidence(
     async with client:
         return await call_with_resilience(
             adapter,
-            RetryPolicy(deadline_seconds=deadline_seconds),
+            RetryPolicy(
+                deadline_seconds=deadline_seconds,
+                max_attempts=max_attempts,
+            ),
         )
 
 

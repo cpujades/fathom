@@ -225,6 +225,7 @@ class StructuredSummaryProviderTests(unittest.IsolatedAsyncioTestCase):
         request = create.await_args.kwargs
         self.assertEqual(request["model"], "x-ai/grok-4.3")
         self.assertEqual(request["temperature"], 0)
+        self.assertNotIn("max_tokens", request)
         self.assertEqual(request["response_format"]["type"], "json_schema")
         self.assertTrue(request["response_format"]["json_schema"]["strict"])
         required = request["response_format"]["json_schema"]["schema"]["required"]
@@ -284,6 +285,39 @@ class StructuredSummaryProviderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.title, "Evidence-first product review")
         self.assertEqual(observed_kinds, [ProviderFailureKind.TRANSIENT])
         self.assertEqual(create.await_count, 2)
+
+    async def test_provider_applies_opt_in_attempt_and_output_caps(self) -> None:
+        response = SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(_contract_payload())))]
+        )
+        create = AsyncMock(return_value=response)
+        client = _openai_client(create)
+        observed_attempts: list[int] = []
+
+        async def capture_policy(adapter: Any, policy: Any) -> BriefingContract:
+            observed_attempts.append(policy.max_attempts)
+            return await adapter.invoke()
+
+        with (
+            patch(
+                "fathom.services.summarizer.AsyncOpenAI",
+                return_value=client,
+            ),
+            patch(
+                "fathom.services.summarizer.call_with_resilience",
+                side_effect=capture_policy,
+            ),
+        ):
+            await summarize_transcript_with_evidence(
+                _segments(),
+                "test-key",
+                deadline_seconds=5,
+                max_attempts=1,
+                max_output_tokens=1_234,
+            )
+
+        self.assertEqual(observed_attempts, [1])
+        self.assertEqual(create.await_args.kwargs["max_tokens"], 1_234)
 
 
 def _openai_client(create: AsyncMock) -> MagicMock:
