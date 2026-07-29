@@ -2,7 +2,7 @@ begin;
 
 set local search_path = extensions, public, pg_catalog;
 
-select plan(14);
+select plan(18);
 
 select ok(
   not has_function_privilege('authenticated', 'public.renew_job_lease(uuid,uuid,interval)', 'execute'),
@@ -39,6 +39,50 @@ select ok((select heartbeat_at is not null from claimed_job), 'claim records a h
 select ok(
   (select lease_expires_at > heartbeat_at from claimed_job),
   'claim sets a future lease expiry'
+);
+
+insert into public.jobs (
+  id,
+  user_id,
+  status,
+  url,
+  source_key,
+  stage,
+  progress,
+  usage_settlement_required
+)
+values (
+  '10000000-0000-0000-0000-000000000002',
+  '20000000-0000-0000-0000-000000000002',
+  'queued',
+  'https://www.youtube.com/watch?v=settled-claim',
+  'youtube:settled-claim',
+  'queued',
+  5,
+  true
+);
+
+select ok(
+  (public.claim_next_job(interval '2 minutes')).id is null,
+  'rolling old worker cannot claim settlement-required jobs'
+);
+
+create temporary table settled_claimed_job as
+select *
+from public.claim_next_settled_job(interval '2 minutes');
+
+select is(
+  (select id from settled_claimed_job),
+  '10000000-0000-0000-0000-000000000002'::uuid,
+  'new worker claims settlement-required jobs'
+);
+select ok(
+  (select usage_settlement_required from settled_claimed_job),
+  'new worker retains the settlement requirement'
+);
+select ok(
+  (select lease_token is not null from settled_claimed_job),
+  'new worker receives a lease token'
 );
 
 select ok(

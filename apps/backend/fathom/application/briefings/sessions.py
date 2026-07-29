@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import logging
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -21,16 +22,19 @@ from fathom.application.guards import validate_video_duration, validate_youtube_
 from fathom.application.usage import ensure_usage_allowed, record_usage_for_job
 from fathom.core.config import Settings
 from fathom.core.constants import SUMMARY_PROMPT_KEY_DEFAULT
-from fathom.core.errors import NotFoundError
+from fathom.core.errors import NotFoundError, UsageSettlementError
 from fathom.core.logging import log_context
 from fathom.crud.supabase.job_events import record_job_event_best_effort
 from fathom.crud.supabase.jobs import (
     JobCreateResolution,
+    JobLeaseLostError,
     archive_job,
     create_or_reuse_job,
     fetch_active_job_for_source,
     fetch_job,
     fetch_reusable_job_for_source,
+    mark_job_finalization_retry,
+    mark_job_succeeded,
     restore_job,
 )
 from fathom.crud.supabase.summaries import fetch_summary, fetch_summary_by_keys
@@ -409,15 +413,49 @@ async def _create_ready_reused_session(
         return JobCreateResolution(job=job, resolution_type=job_resolution.resolution_type)
 
     session_id = str(job_resolution.job["id"])
+    lease_token = str(job_resolution.job.get("lease_token") or "")
+    if not lease_token:
+        raise UsageSettlementError("Cached briefing finalization did not receive a job lease.")
     try:
         await record_usage_for_job(
             user_id=user_id,
             job_id=session_id,
+            lease_token=lease_token,
             duration_seconds=duration_seconds,
             settings=settings,
+            admin_client=admin_client,
         )
-    except Exception:
-        logger.exception("briefing_session.usage_recording.failed", extra={"session_id": session_id})
+        await mark_job_succeeded(
+            admin_client,
+            job_id=session_id,
+            summary_id=summary_id,
+            lease_token=lease_token,
+        )
+    except UsageSettlementError as exc:
+        logger.warning(
+            "briefing_session.usage_settlement.retrying",
+            extra={"session_id": session_id},
+            exc_info=True,
+        )
+        try:
+            await mark_job_finalization_retry(
+                admin_client,
+                job_id=session_id,
+                lease_token=lease_token,
+                error_code=exc.code,
+                error_message=exc.detail,
+                run_after=_billing_retry_time(),
+            )
+        except JobLeaseLostError:
+            logger.warning(
+                "briefing_session.usage_settlement.retry_lease_lost",
+                extra={"session_id": session_id},
+            )
+    except JobLeaseLostError:
+        logger.warning(
+            "briefing_session.finalization_lease_lost",
+            extra={"session_id": session_id},
+        )
     job = await fetch_job(user_client, session_id)
     return JobCreateResolution(job=job, resolution_type="new")
 
@@ -469,6 +507,10 @@ async def _job_has_ready_summary(user_client: Any, job: dict[str, Any]) -> bool:
 
 def _hash_url(url: str) -> str:
     return hashlib.sha256(url.encode("utf-8")).hexdigest()
+
+
+def _billing_retry_time() -> datetime:
+    return datetime.now(UTC) + timedelta(seconds=5)
 
 
 def _snapshot_signature(snapshot: BriefingSessionResponse) -> tuple[Any, ...]:

@@ -15,7 +15,7 @@ from fathom.application.briefings.sessions import (
     delete_briefing_session,
 )
 from fathom.core.config import Settings
-from fathom.core.errors import NotFoundError
+from fathom.core.errors import NotFoundError, UsageSettlementError
 from fathom.crud.supabase.jobs import JobCreateResolution
 from fathom.schemas.briefing_sessions import BriefingSessionCreateRequest
 
@@ -199,12 +199,22 @@ class CreateBriefingSessionTests(unittest.IsolatedAsyncioTestCase):
                 "fathom.application.briefings.sessions.create_or_reuse_job",
                 AsyncMock(
                     return_value=JobCreateResolution(
-                        job={"id": session_id},
+                        job={
+                            "id": session_id,
+                            "lease_token": "33333333-3333-3333-3333-333333333333",
+                        },
                         resolution_type="new",
                     )
                 ),
             ) as create_job_mock,
-            patch("fathom.application.briefings.sessions.record_usage_for_job", AsyncMock()),
+            patch(
+                "fathom.application.briefings.sessions.record_usage_for_job",
+                AsyncMock(),
+            ) as record_usage,
+            patch(
+                "fathom.application.briefings.sessions.mark_job_succeeded",
+                AsyncMock(),
+            ) as mark_succeeded,
             patch(
                 "fathom.application.briefings.sessions.fetch_job",
                 AsyncMock(return_value=expected_job),
@@ -231,6 +241,20 @@ class CreateBriefingSessionTests(unittest.IsolatedAsyncioTestCase):
             summary_id="22222222-2222-2222-2222-222222222222",
         )
         fetch_job_mock.assert_awaited_once_with(user_client, session_id)
+        record_usage.assert_awaited_once_with(
+            user_id="user-123",
+            job_id=session_id,
+            lease_token="33333333-3333-3333-3333-333333333333",
+            duration_seconds=1800,
+            settings=settings,
+            admin_client=admin_client,
+        )
+        mark_succeeded.assert_awaited_once_with(
+            admin_client,
+            job_id=session_id,
+            summary_id="22222222-2222-2222-2222-222222222222",
+            lease_token="33333333-3333-3333-3333-333333333333",
+        )
 
     async def test_cached_session_join_does_not_overwrite_or_charge_existing_job(self) -> None:
         settings = cast(Settings, SimpleNamespace())
@@ -278,6 +302,73 @@ class CreateBriefingSessionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(resolution.job, expected_job)
         self.assertEqual(resolution.resolution_type, "joined_existing")
         record_usage.assert_not_awaited()
+
+    async def test_cached_settlement_failure_returns_visible_finalization_retry(self) -> None:
+        settings = cast(Settings, SimpleNamespace())
+        user_client = object()
+        admin_client = object()
+        session_id = "11111111-1111-1111-1111-111111111111"
+        lease_token = "33333333-3333-3333-3333-333333333333"
+        summary_id = "22222222-2222-2222-2222-222222222222"
+        source = NormalizedSource(
+            submitted_url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            canonical_url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            source_type="youtube",
+            source_identity_key="youtube:dQw4w9WgXcQ",
+            video_id="dQw4w9WgXcQ",
+        )
+        expected_job = {
+            "id": session_id,
+            "status": "queued",
+            "stage": "finalizing",
+            "progress": 98,
+        }
+        settlement_error = UsageSettlementError("Usage accounting could not be finalized; retrying shortly.")
+
+        with (
+            patch(
+                "fathom.application.briefings.sessions.create_or_reuse_job",
+                AsyncMock(
+                    return_value=JobCreateResolution(
+                        job={"id": session_id, "lease_token": lease_token},
+                        resolution_type="new",
+                    )
+                ),
+            ),
+            patch(
+                "fathom.application.briefings.sessions.record_usage_for_job",
+                AsyncMock(side_effect=settlement_error),
+            ),
+            patch(
+                "fathom.application.briefings.sessions.mark_job_succeeded",
+                AsyncMock(),
+            ) as mark_succeeded,
+            patch(
+                "fathom.application.briefings.sessions.mark_job_finalization_retry",
+                AsyncMock(),
+            ) as mark_retry,
+            patch(
+                "fathom.application.briefings.sessions.fetch_job",
+                AsyncMock(return_value=expected_job),
+            ),
+        ):
+            resolution = await _create_ready_reused_session(
+                user_id="user-123",
+                source=source,
+                duration_seconds=1800,
+                summary_id=summary_id,
+                user_client=user_client,
+                admin_client=admin_client,
+                settings=settings,
+            )
+
+        self.assertEqual(resolution.job, expected_job)
+        mark_succeeded.assert_not_awaited()
+        mark_retry.assert_awaited_once()
+        retry_kwargs = mark_retry.await_args.kwargs
+        self.assertEqual(retry_kwargs["job_id"], session_id)
+        self.assertEqual(retry_kwargs["lease_token"], lease_token)
+        self.assertEqual(retry_kwargs["error_code"], "usage_settlement_failed")
 
 
 class DeleteBriefingSessionTests(unittest.IsolatedAsyncioTestCase):

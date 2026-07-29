@@ -2,7 +2,7 @@ begin;
 
 set local search_path = extensions, public, pg_catalog;
 
-select plan(20);
+select plan(24);
 
 select ok(
   not has_function_privilege('anon', 'public.claim_next_job(interval)', 'execute'),
@@ -15,6 +15,18 @@ select ok(
 select ok(
   has_function_privilege('service_role', 'public.claim_next_job(interval)', 'execute'),
   'service role can claim jobs'
+);
+select ok(
+  not has_function_privilege('anon', 'public.claim_next_settled_job(interval)', 'execute'),
+  'anon cannot claim settlement-required jobs'
+);
+select ok(
+  not has_function_privilege('authenticated', 'public.claim_next_settled_job(interval)', 'execute'),
+  'authenticated users cannot claim settlement-required jobs'
+);
+select ok(
+  has_function_privilege('service_role', 'public.claim_next_settled_job(interval)', 'execute'),
+  'service role can claim settlement-required jobs'
 );
 
 select ok(
@@ -92,6 +104,15 @@ select is(
   ),
   array['search_path=pg_catalog']::text[],
   'claim function has an immutable search path'
+);
+select is(
+  (
+    select proconfig
+    from pg_catalog.pg_proc
+    where oid = 'public.claim_next_settled_job(interval)'::regprocedure
+  ),
+  array['search_path=pg_catalog']::text[],
+  'settlement-aware claim function has an immutable search path'
 );
 
 select is(

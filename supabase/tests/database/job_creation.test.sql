@@ -2,7 +2,7 @@ begin;
 
 set local search_path = extensions, public, pg_catalog;
 
-select plan(36);
+select plan(48);
 
 select col_not_null(
   'public',
@@ -74,9 +74,33 @@ select ok(
   ),
   'service role can create jobs through the server command'
 );
+select ok(
+  not has_function_privilege(
+    'anon',
+    'public.create_or_reuse_settled_job(uuid,text,text,integer,uuid,interval)',
+    'execute'
+  ),
+  'anon cannot create lease-owned cached jobs'
+);
+select ok(
+  not has_function_privilege(
+    'authenticated',
+    'public.create_or_reuse_settled_job(uuid,text,text,integer,uuid,interval)',
+    'execute'
+  ),
+  'authenticated users cannot create lease-owned cached jobs'
+);
+select ok(
+  has_function_privilege(
+    'service_role',
+    'public.create_or_reuse_settled_job(uuid,text,text,integer,uuid,interval)',
+    'execute'
+  ),
+  'service role can create lease-owned cached jobs'
+);
 
 create temporary table first_resolution as
-select public.create_or_reuse_job(
+select public.create_or_reuse_settled_job(
   '40000000-0000-0000-0000-000000000001',
   'https://www.youtube.com/watch?v=idempotent',
   'youtube:idempotent',
@@ -102,9 +126,16 @@ select is(
   'youtube:idempotent',
   'new job persists the normalized source key'
 );
+select ok(
+  (
+    select (result -> 'job' ->> 'usage_settlement_required')::boolean
+    from first_resolution
+  ),
+  'new application job requires usage settlement'
+);
 
 create temporary table joined_resolution as
-select public.create_or_reuse_job(
+select public.create_or_reuse_settled_job(
   '40000000-0000-0000-0000-000000000001',
   'https://www.youtube.com/watch?v=idempotent',
   'youtube:idempotent',
@@ -183,7 +214,7 @@ where id = (
 
 select is(
   (
-    public.create_or_reuse_job(
+    public.create_or_reuse_settled_job(
       '40000000-0000-0000-0000-000000000001',
       'https://www.youtube.com/watch?v=idempotent',
       'youtube:idempotent',
@@ -203,7 +234,7 @@ where user_id = '40000000-0000-0000-0000-000000000001'
 
 select is(
   (
-    public.create_or_reuse_job(
+    public.create_or_reuse_settled_job(
       '40000000-0000-0000-0000-000000000001',
       'https://www.youtube.com/watch?v=idempotent',
       'youtube:idempotent',
@@ -227,7 +258,7 @@ select is(
 
 select is(
   (
-    public.create_or_reuse_job(
+    public.create_or_reuse_settled_job(
       '40000000-0000-0000-0000-000000000002',
       'https://www.youtube.com/watch?v=idempotent',
       'youtube:idempotent',
@@ -255,7 +286,7 @@ select throws_ok(
 );
 select throws_ok(
   $$
-    select public.create_or_reuse_job(
+    select public.create_or_reuse_settled_job(
       '40000000-0000-0000-0000-000000000003',
       'https://www.youtube.com/watch?v=invalid',
       '',
@@ -269,7 +300,7 @@ select throws_ok(
 );
 select throws_ok(
   $$
-    select public.create_or_reuse_job(
+    select public.create_or_reuse_settled_job(
       '40000000-0000-0000-0000-000000000003',
       'https://www.youtube.com/watch?v=invalid',
       'youtube:invalid',
@@ -283,7 +314,7 @@ select throws_ok(
 );
 select throws_ok(
   $$
-    select public.create_or_reuse_job(
+    select public.create_or_reuse_settled_job(
       '40000000-0000-0000-0000-000000000003',
       'https://www.youtube.com/watch?v=canonical',
       'youtube:different',
@@ -321,7 +352,7 @@ values (
 
 select throws_ok(
   $$
-    select public.create_or_reuse_job(
+    select public.create_or_reuse_settled_job(
       '40000000-0000-0000-0000-000000000003',
       'https://www.youtube.com/watch?v=failed-cache',
       'youtube:failed-cache',
@@ -356,12 +387,12 @@ select is(
 select is(
   (select result -> 'job' ->> 'status' from cached_resolution),
   'succeeded',
-  'cached session is created in its final state'
+  'compatibility command preserves historical cached terminal behavior'
 );
 select is(
   (select result -> 'job' ->> 'stage' from cached_resolution),
   'cached',
-  'cached session records its reuse stage atomically'
+  'compatibility command preserves the cached stage'
 );
 select is(
   (select result -> 'job' ->> 'summary_id' from cached_resolution),
@@ -370,7 +401,58 @@ select is(
 );
 select ok(
   (public.claim_next_job(interval '2 minutes')).id is null,
-  'worker cannot claim an atomically completed cached session'
+  'worker cannot claim a compatibility cached session'
+);
+select ok(
+  not (
+    select (result -> 'job' ->> 'usage_settlement_required')::boolean
+    from cached_resolution
+  ),
+  'rolling-deploy compatibility rows are exempt from unsafe recharging'
+);
+
+create temporary table leased_cached_resolution as
+select public.create_or_reuse_settled_job(
+  '40000000-0000-0000-0000-000000000004',
+  'https://www.youtube.com/watch?v=cached-leased',
+  'youtube:cached-leased',
+  1800,
+  '60000000-0000-0000-0000-000000000001',
+  interval '2 minutes'
+) as result;
+
+select is(
+  (select result ->> 'resolution_type' from leased_cached_resolution),
+  'new',
+  'new cached command creates an independent session'
+);
+select is(
+  (select result -> 'job' ->> 'status' from leased_cached_resolution),
+  'running',
+  'new cached session remains running through settlement'
+);
+select is(
+  (select result -> 'job' ->> 'stage' from leased_cached_resolution),
+  'finalizing',
+  'new cached session visibly finalizes'
+);
+select ok(
+  (
+    select (result -> 'job' ->> 'usage_settlement_required')::boolean
+    from leased_cached_resolution
+  ),
+  'new cached session requires settlement'
+);
+select ok(
+  (
+    select result -> 'job' ->> 'lease_token' is not null
+    from leased_cached_resolution
+  ),
+  'new cached session receives a lease token'
+);
+select ok(
+  (public.claim_next_settled_job(interval '2 minutes')).id is null,
+  'worker cannot steal a request-owned cached lease'
 );
 
 select is(
@@ -381,6 +463,15 @@ select is(
   ),
   array['search_path=pg_catalog']::text[],
   'server command has an immutable search path'
+);
+select is(
+  (
+    select proconfig
+    from pg_catalog.pg_proc
+    where oid = 'public.create_or_reuse_settled_job(uuid,text,text,integer,uuid,interval)'::regprocedure
+  ),
+  array['search_path=pg_catalog']::text[],
+  'cached server command has an immutable search path'
 );
 
 select * from finish();

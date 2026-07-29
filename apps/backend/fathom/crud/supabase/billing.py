@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
@@ -1047,3 +1048,36 @@ async def insert_usage_entry(
         await client.table("usage_ledger").insert(payload).execute()
     except APIError as exc:
         raise_for_postgrest_error(exc, "Failed to insert usage ledger entry.")
+
+
+async def settle_job_usage(
+    client: AsyncClient,
+    *,
+    job_id: str,
+    lease_token: str,
+    debt_cap_seconds: int,
+) -> dict[str, Any]:
+    """Atomically settle one lease-owned job, returning the immutable settlement."""
+    try:
+        response = await client.rpc(
+            "settle_job_usage",
+            {
+                "p_job_id": job_id,
+                "p_lease_token": lease_token,
+                "p_debt_cap_seconds": debt_cap_seconds,
+            },
+        ).execute()
+    except APIError as exc:
+        raise_for_postgrest_error(exc, "Failed to settle job usage.")
+
+    data = response.data
+    if not isinstance(data, Mapping):
+        raise ExternalServiceError("Supabase returned an unexpected usage settlement shape.")
+
+    result = dict(data)
+    resolution_type = result.get("resolution_type")
+    settlement = result.get("settlement")
+    if resolution_type not in {"settled", "already_settled"} or not isinstance(settlement, Mapping):
+        raise ExternalServiceError("Supabase returned an unexpected usage settlement shape.")
+
+    return result

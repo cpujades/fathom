@@ -9,12 +9,14 @@ from urllib.parse import urlparse
 
 from fathom.application.billing import run_billing_maintenance
 from fathom.core.config import Settings, get_settings
+from fathom.core.errors import UsageSettlementError
 from fathom.core.logging import log_context, setup_logging
 from fathom.crud.supabase.job_events import record_job_event_best_effort
 from fathom.crud.supabase.jobs import (
     JobLeaseLostError,
     claim_next_job,
     mark_job_failed,
+    mark_job_finalization_retry,
     mark_job_retry,
     renew_job_lease,
     requeue_stale_jobs,
@@ -169,14 +171,24 @@ async def _handle_claimed_job(
             if attempt_count < WORKER_MAX_ATTEMPTS:
                 backoff_seconds = _compute_backoff_seconds(WORKER_BACKOFF_BASE_SECONDS, attempt_count)
                 run_after = datetime.now(UTC) + timedelta(seconds=backoff_seconds)
-                await mark_job_retry(
-                    admin_client,
-                    job_id=job_id,
-                    lease_token=lease_token,
-                    error_code=error_code,
-                    error_message=error_message,
-                    run_after=run_after,
-                )
+                if isinstance(exc, UsageSettlementError):
+                    await mark_job_finalization_retry(
+                        admin_client,
+                        job_id=job_id,
+                        lease_token=lease_token,
+                        error_code=error_code,
+                        error_message=error_message,
+                        run_after=run_after,
+                    )
+                else:
+                    await mark_job_retry(
+                        admin_client,
+                        job_id=job_id,
+                        lease_token=lease_token,
+                        error_code=error_code,
+                        error_message=error_message,
+                        run_after=run_after,
+                    )
             else:
                 await mark_job_failed(
                     admin_client,

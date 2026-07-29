@@ -51,3 +51,24 @@
   plus empty or whitespace-only rows, become `failed`; jobs that previously
   exposed an empty summary as successful are marked failed with
   `legacy_empty_summary`.
+
+## Usage settlement and finalization
+
+- New jobs require exactly one `usage_settlements` row before terminal success.
+  Its subscription, pack, and newly incurred debt components must add up to the
+  job duration. Linked `usage_ledger` rows are unique per settlement and source.
+- Settlement is post-processing, as before: admission does not reserve credit.
+  The command consumes subscription credit first, then eligible pack credit,
+  then records uncovered duration as debt. Refund-pending packs remain excluded.
+- Credit-lot mutations, debt, the entitlement snapshot, settlement audit row,
+  and ledger rows commit in one transaction while the worker lease is current.
+  Replaying the command returns the existing settlement without another charge.
+- A job with a ready summary but incomplete settlement remains `finalizing`.
+  Normal failures queue a short retry; an expired worker lease is reclaimed by
+  the stale-job sweep. Billing maintenance also requeues any new terminal job
+  whose required settlement is unexpectedly missing.
+- Historical jobs and jobs created by a rolling old application instance are
+  explicitly settlement-exempt because charging them again cannot be proven
+  safe. Old workers cannot claim new settlement-required jobs. Do not flip that
+  flag manually. Reconcile a suspected legacy discrepancy from provider,
+  ledger, and entitlement evidence.

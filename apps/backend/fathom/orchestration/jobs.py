@@ -86,7 +86,14 @@ async def process_job(job: dict[str, object], settings: Settings, admin_client: 
                 lease_token=lease_token,
             )
 
-        await _record_usage(job=job, user_id=user_id, job_id=job_id, settings=settings)
+        await _record_usage(
+            job=job,
+            user_id=user_id,
+            job_id=job_id,
+            lease_token=lease_token,
+            settings=settings,
+            admin_client=admin_client,
+        )
         await _record_job_completed(
             job_id=job_id,
             summary_id=summary.summary_id,
@@ -133,16 +140,23 @@ async def _finalize_new_summary(
     )
 
 
-async def _record_usage(*, job: dict[str, object], user_id: str, job_id: str, settings: Settings) -> None:
-    try:
-        await record_usage_for_job(
-            user_id=user_id,
-            job_id=job_id,
-            duration_seconds=_duration_seconds(job.get("duration_seconds")),
-            settings=settings,
-        )
-    except Exception:
-        logger.exception("worker.usage_recording.failed", extra={"job_id": job_id})
+async def _record_usage(
+    *,
+    job: dict[str, object],
+    user_id: str,
+    job_id: str,
+    lease_token: str,
+    settings: Settings,
+    admin_client: AsyncClient,
+) -> None:
+    await record_usage_for_job(
+        user_id=user_id,
+        job_id=job_id,
+        lease_token=lease_token,
+        duration_seconds=_duration_seconds(job.get("duration_seconds")),
+        settings=settings,
+        admin_client=admin_client,
+    )
 
 
 def _duration_seconds(value: object) -> int | None:

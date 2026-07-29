@@ -10,7 +10,7 @@ from typing import Any, Literal
 from postgrest import APIError
 from postgrest.types import CountMethod
 
-from fathom.core.errors import ExternalServiceError
+from fathom.core.errors import ExternalServiceError, UsageSettlementError
 from fathom.services.supabase.helpers import first_row, raise_for_postgrest_error
 from supabase import AsyncClient
 
@@ -38,19 +38,20 @@ async def create_or_reuse_job(
     user_id: str,
     duration_seconds: int | None = None,
     summary_id: str | None = None,
+    cached_lease_seconds: int = 120,
 ) -> JobCreateResolution:
     """Create, join, or reuse a job atomically for one user and source."""
+    params: dict[str, Any] = {
+        "p_user_id": user_id,
+        "p_url": url,
+        "p_source_key": source_key,
+        "p_duration_seconds": duration_seconds,
+        "p_summary_id": summary_id,
+        "p_cached_lease_for": f"{cached_lease_seconds} seconds",
+    }
+
     try:
-        response = await client.rpc(
-            "create_or_reuse_job",
-            {
-                "p_user_id": user_id,
-                "p_url": url,
-                "p_source_key": source_key,
-                "p_duration_seconds": duration_seconds,
-                "p_summary_id": summary_id,
-            },
-        ).execute()
+        response = await client.rpc("create_or_reuse_settled_job", params).execute()
     except APIError as exc:
         raise_for_postgrest_error(exc, "Failed to create or reuse job.")
 
@@ -185,7 +186,7 @@ async def fetch_briefing_jobs_page(
 async def claim_next_job(client: AsyncClient, *, lease_seconds: int) -> dict[str, Any] | None:
     try:
         response = await client.rpc(
-            "claim_next_job",
+            "claim_next_settled_job",
             {"p_lease_for": f"{lease_seconds} seconds"},
         ).execute()
     except APIError as exc:
@@ -249,6 +250,23 @@ async def requeue_stale_jobs(client: AsyncClient, *, stale_after_seconds: int) -
     return 0
 
 
+async def requeue_unsettled_jobs(client: AsyncClient) -> int:
+    """Recover settlement-required jobs that were incorrectly made terminal."""
+    try:
+        response = await client.rpc("requeue_unsettled_jobs").execute()
+    except APIError as exc:
+        raise_for_postgrest_error(exc, "Failed to reconcile unsettled jobs.")
+
+    data = response.data
+    if isinstance(data, int):
+        return data
+    if isinstance(data, dict) and "requeue_unsettled_jobs" in data:
+        value = data.get("requeue_unsettled_jobs")
+        if isinstance(value, int):
+            return value
+    return 0
+
+
 async def mark_job_succeeded(
     client: AsyncClient,
     *,
@@ -256,27 +274,25 @@ async def mark_job_succeeded(
     summary_id: str,
     lease_token: str,
 ) -> None:
-    await _update_job(
-        client,
-        job_id=job_id,
-        lease_token=lease_token,
-        payload={
-            "status": "succeeded",
-            "stage": "completed",
-            "progress": 100,
-            "status_message": "Summary ready",
-            "summary_id": summary_id,
-            "error_code": None,
-            "error_message": None,
-            "last_error_at": None,
-            "run_after": None,
-            "claimed_at": None,
-            "heartbeat_at": None,
-            "lease_token": None,
-            "lease_expires_at": None,
-        },
-        error_message="Failed to update job status.",
-    )
+    try:
+        response = await client.rpc(
+            "complete_job_after_settlement",
+            {
+                "p_job_id": job_id,
+                "p_summary_id": summary_id,
+                "p_lease_token": lease_token,
+            },
+        ).execute()
+    except APIError as exc:
+        try:
+            raise_for_postgrest_error(exc, "Failed to finalize settled job.")
+        except ExternalServiceError as converted:
+            raise UsageSettlementError(
+                "Usage settlement completion could not be confirmed; retrying shortly."
+            ) from converted
+
+    if response.data is not True:
+        raise JobLeaseLostError(f"Job lease lost or usage settlement missing for {job_id}.")
 
 
 async def mark_job_failed(
@@ -339,6 +355,39 @@ async def mark_job_retry(
             "lease_expires_at": None,
         },
         error_message="Failed to update job status.",
+    )
+
+
+async def mark_job_finalization_retry(
+    client: AsyncClient,
+    *,
+    job_id: str,
+    lease_token: str,
+    error_code: str,
+    error_message: str,
+    run_after: datetime,
+) -> None:
+    """Release a failed settlement attempt without hiding the finalization state."""
+    last_error_at = datetime.now(UTC).isoformat()
+    await _update_job(
+        client,
+        job_id=job_id,
+        lease_token=lease_token,
+        payload={
+            "status": "queued",
+            "stage": "finalizing",
+            "progress": 98,
+            "status_message": "Finalizing your briefing; retrying shortly",
+            "error_code": error_code,
+            "error_message": error_message,
+            "last_error_at": last_error_at,
+            "run_after": run_after.isoformat(),
+            "claimed_at": None,
+            "heartbeat_at": None,
+            "lease_token": None,
+            "lease_expires_at": None,
+        },
+        error_message="Failed to queue job finalization retry.",
     )
 
 

@@ -7,7 +7,13 @@ from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
 from fathom.core.config import Settings
-from fathom.crud.supabase.jobs import JobLeaseLostError, update_job_progress
+from fathom.crud.supabase.jobs import (
+    JobLeaseLostError,
+    claim_next_job,
+    create_or_reuse_job,
+    mark_job_succeeded,
+    update_job_progress,
+)
 from fathom.orchestration.jobs import process_job
 from fathom.orchestration.runner import _run_job_with_heartbeat
 from fathom.orchestration.summaries import SummaryResolution
@@ -25,6 +31,94 @@ def _claimed_job() -> dict[str, object]:
 
 
 class JobLeaseCrudTests(unittest.IsolatedAsyncioTestCase):
+    async def test_new_worker_uses_settlement_aware_claim_command(self) -> None:
+        query = MagicMock()
+        query.execute = AsyncMock(return_value=SimpleNamespace(data=None))
+        client = MagicMock()
+        client.rpc.return_value = query
+
+        claimed = await claim_next_job(cast(AsyncClient, client), lease_seconds=120)
+
+        self.assertIsNone(claimed)
+        client.rpc.assert_called_once_with(
+            "claim_next_settled_job",
+            {"p_lease_for": "120 seconds"},
+        )
+
+    async def test_cached_job_creation_uses_lease_owned_command(self) -> None:
+        query = MagicMock()
+        query.execute = AsyncMock(
+            return_value=SimpleNamespace(
+                data={
+                    "resolution_type": "new",
+                    "job": {
+                        "id": "11111111-1111-1111-1111-111111111111",
+                        "status": "running",
+                        "lease_token": "33333333-3333-3333-3333-333333333333",
+                    },
+                }
+            )
+        )
+        client = MagicMock()
+        client.rpc.return_value = query
+
+        await create_or_reuse_job(
+            cast(AsyncClient, client),
+            user_id="22222222-2222-2222-2222-222222222222",
+            url="https://www.youtube.com/watch?v=cached",
+            source_key="youtube:cached",
+            duration_seconds=1800,
+            summary_id="55555555-5555-5555-5555-555555555555",
+        )
+
+        client.rpc.assert_called_once_with(
+            "create_or_reuse_settled_job",
+            {
+                "p_user_id": "22222222-2222-2222-2222-222222222222",
+                "p_url": "https://www.youtube.com/watch?v=cached",
+                "p_source_key": "youtube:cached",
+                "p_duration_seconds": 1800,
+                "p_summary_id": "55555555-5555-5555-5555-555555555555",
+                "p_cached_lease_for": "120 seconds",
+            },
+        )
+
+    async def test_terminal_success_uses_settlement_guarded_command(self) -> None:
+        query = MagicMock()
+        query.execute = AsyncMock(return_value=SimpleNamespace(data=True))
+        client = MagicMock()
+        client.rpc.return_value = query
+
+        await mark_job_succeeded(
+            cast(AsyncClient, client),
+            job_id="11111111-1111-1111-1111-111111111111",
+            summary_id="55555555-5555-5555-5555-555555555555",
+            lease_token="33333333-3333-3333-3333-333333333333",
+        )
+
+        client.rpc.assert_called_once_with(
+            "complete_job_after_settlement",
+            {
+                "p_job_id": "11111111-1111-1111-1111-111111111111",
+                "p_summary_id": "55555555-5555-5555-5555-555555555555",
+                "p_lease_token": "33333333-3333-3333-3333-333333333333",
+            },
+        )
+
+    async def test_terminal_success_rejects_missing_settlement_or_lost_lease(self) -> None:
+        query = MagicMock()
+        query.execute = AsyncMock(return_value=SimpleNamespace(data=False))
+        client = MagicMock()
+        client.rpc.return_value = query
+
+        with self.assertRaises(JobLeaseLostError):
+            await mark_job_succeeded(
+                cast(AsyncClient, client),
+                job_id="11111111-1111-1111-1111-111111111111",
+                summary_id="55555555-5555-5555-5555-555555555555",
+                lease_token="33333333-3333-3333-3333-333333333333",
+            )
+
     async def test_guarded_progress_update_rejects_lost_lease(self) -> None:
         query = MagicMock()
         query.update.return_value = query
