@@ -423,7 +423,7 @@ async def record_usage_for_job(
     settings: Settings,
     admin_client: Any,
 ) -> None:
-    with log_context(user_id=user_id, job_id=job_id):
+    with log_context(job_id=job_id):
         try:
             result = await settle_job_usage(
                 admin_client,

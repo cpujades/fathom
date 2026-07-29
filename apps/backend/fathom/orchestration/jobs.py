@@ -28,7 +28,7 @@ async def process_job(job: dict[str, object], settings: Settings, admin_client: 
     requested_summary_id = str(uuid.uuid4())
     job_start = time.perf_counter()
 
-    with log_context(job_id=job_id, user_id=user_id, summary_id=requested_summary_id):
+    with log_context(job_id=job_id, summary_id=requested_summary_id):
         logger.info(
             "worker.job.started",
             extra={

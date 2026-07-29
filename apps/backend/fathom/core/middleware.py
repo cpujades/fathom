@@ -2,14 +2,13 @@ from __future__ import annotations
 
 import logging
 import time
-import uuid
 
 from fastapi import Request
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
 
 from fathom.core.errors import RequestTooLargeError
-from fathom.core.logging import log_context
+from fathom.core.logging import log_context, normalize_correlation_id
 from fathom.core.rate_limits import maybe_enforce_rate_limit
 
 # ---------------------------------------------------------------------------
@@ -38,7 +37,7 @@ async def _enforce_request_size(request: Request) -> None:
 
 
 async def log_requests(request: Request, call_next: RequestResponseEndpoint) -> Response:
-    request_id = request.headers.get("X-Request-Id") or uuid.uuid4().hex
+    request_id = normalize_correlation_id(request.headers.get("X-Request-Id"))
     request.state.request_id = request_id
     started_at = time.perf_counter()
 

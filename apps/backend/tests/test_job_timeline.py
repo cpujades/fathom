@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from fathom.application.diagnostics.job_timeline import format_job_timeline
+from fathom.application.diagnostics.job_timeline import format_job_timeline, serialize_job_timeline
 from fathom.application.diagnostics.schemas import JobTimeline
 
 
@@ -53,9 +53,12 @@ class JobTimelineFormattingTests(unittest.TestCase):
         )
 
         self.assertIn("Talven job timeline", output)
+        self.assertIn("Source host: youtube.com", output)
         self.assertIn("Source: A source by An author (2m 5s)", output)
         self.assertIn("summary_completed [summarizing]", output)
         self.assertIn("markdown_chars=11", output)
+        self.assertNotIn("user-1", output)
+        self.assertNotIn("watch?v=test", output)
 
     def test_formats_inferred_checkpoints_without_events(self) -> None:
         output = format_job_timeline(
@@ -85,6 +88,33 @@ class JobTimelineFormattingTests(unittest.TestCase):
         self.assertIn("job_events unavailable", output)
         self.assertIn("session_created [queued]", output)
         self.assertIn("job_claimed [running]", output)
+
+    def test_json_snapshot_omits_private_and_generated_content(self) -> None:
+        timeline = JobTimeline.model_validate(
+            {
+                "session_id": "job-3",
+                "job": {
+                    "id": "job-3",
+                    "user_id": "user-private",
+                    "url": "https://youtube.com/watch?v=private",
+                },
+                "summary": {
+                    "id": "summary-3",
+                    "user_id": "user-private",
+                    "summary_markdown": "private generated briefing",
+                    "pdf_object_key": "private/object.pdf",
+                },
+            }
+        )
+
+        snapshot = serialize_job_timeline(timeline)
+
+        self.assertNotIn("user_id", snapshot["job"])
+        self.assertNotIn("url", snapshot["job"])
+        self.assertNotIn("user_id", snapshot["summary"])
+        self.assertNotIn("summary_markdown", snapshot["summary"])
+        self.assertNotIn("pdf_object_key", snapshot["summary"])
+        self.assertEqual(snapshot["summary"]["markdown_chars"], 26)
 
 
 if __name__ == "__main__":

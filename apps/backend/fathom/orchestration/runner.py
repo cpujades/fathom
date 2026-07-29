@@ -95,7 +95,6 @@ async def _handle_claimed_job(
         extra={
             "job_id": job_id,
             "attempt": attempt_count,
-            "user_id": job.get("user_id"),
             "url_host": urlparse(str(job.get("url") or "")).netloc.lower(),
         },
     )
@@ -108,7 +107,6 @@ async def _handle_claimed_job(
         message="Worker claimed the job.",
         metadata={
             "attempt": attempt_count,
-            "user_id": job.get("user_id"),
             "url_host": urlparse(str(job.get("url") or "")).netloc.lower(),
         },
     )

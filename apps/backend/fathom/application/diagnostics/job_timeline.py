@@ -6,6 +6,7 @@ import json
 import sys
 from datetime import datetime
 from typing import Any
+from urllib.parse import urlparse
 
 from postgrest import APIError
 
@@ -50,8 +51,7 @@ def format_job_timeline(timeline: JobTimeline) -> str:
         f"Status: {timeline.job.status or 'unknown'}"
         f" / stage {timeline.job.stage or 'unknown'}"
         f" / progress {timeline.job.progress or 0}%",
-        f"User: {timeline.job.user_id or 'unknown'}",
-        f"URL: {timeline.job.url or 'unknown'}",
+        f"Source host: {_source_host(timeline.job.url)}",
     ]
 
     if timeline.transcript:
@@ -213,6 +213,29 @@ def _format_duration(value: Any) -> str:
     return f"{minutes}m {seconds}s"
 
 
+def _source_host(value: str | None) -> str:
+    if not value:
+        return "unknown"
+    return urlparse(value).netloc.lower() or "unknown"
+
+
+def serialize_job_timeline(timeline: JobTimeline) -> dict[str, Any]:
+    """Return a diagnostic snapshot without account IDs or source/generated content."""
+
+    snapshot = timeline.model_dump(mode="json")
+    job = snapshot.get("job")
+    if isinstance(job, dict):
+        job.pop("user_id", None)
+        job.pop("url", None)
+    summary = snapshot.get("summary")
+    if isinstance(summary, dict):
+        summary.pop("user_id", None)
+        summary.pop("summary_markdown", None)
+        summary.pop("pdf_object_key", None)
+        summary["markdown_chars"] = timeline.summary.markdown_chars if timeline.summary else 0
+    return snapshot
+
+
 def _format_datetime(value: datetime | None) -> str:
     return value.isoformat() if value else "unknown time"
 
@@ -220,7 +243,7 @@ def _format_datetime(value: datetime | None) -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Show a local/admin timeline for a Talven briefing session.")
     parser.add_argument("session_id", help="Briefing session/job UUID.")
-    parser.add_argument("--json", action="store_true", help="Print the raw timeline snapshot as JSON.")
+    parser.add_argument("--json", action="store_true", help="Print the privacy-safe timeline snapshot as JSON.")
     args = parser.parse_args()
 
     try:
@@ -230,7 +253,7 @@ def main() -> None:
         raise SystemExit(1) from exc
 
     if args.json:
-        print(json.dumps(timeline.model_dump(mode="json"), indent=2, sort_keys=True))
+        print(json.dumps(serialize_job_timeline(timeline), indent=2, sort_keys=True))
         return
     print(format_job_timeline(timeline))
 
