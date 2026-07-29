@@ -6,7 +6,7 @@ from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import cast
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 from groq import APIConnectionError as GroqConnectionError
@@ -35,7 +35,7 @@ from fathom.services.provider_resilience import (
     retryable_status,
 )
 from fathom.services.summarizer import _classify_openrouter_error
-from fathom.services.transcriber import _classify_groq_error
+from fathom.services.transcriber import _classify_groq_error, transcribe_url
 from supabase import AsyncClient
 
 
@@ -268,6 +268,41 @@ class ProviderResilienceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             _classify_groq_error(GroqStatusError("unavailable", response=server_error_response, body=None)).kind,
             ProviderFailureKind.TRANSIENT,
+        )
+
+    async def test_groq_transcription_uses_cancellable_async_client(self) -> None:
+        create = AsyncMock(return_value=SimpleNamespace(text="transcript"))
+        client = SimpleNamespace(
+            audio=SimpleNamespace(
+                transcriptions=SimpleNamespace(create=create),
+            )
+        )
+        context = MagicMock()
+        context.__aenter__ = AsyncMock(return_value=client)
+        context.__aexit__ = AsyncMock(return_value=None)
+
+        with patch(
+            "fathom.services.transcriber.AsyncGroq",
+            return_value=context,
+        ) as client_factory:
+            result = await transcribe_url(
+                "https://storage.example/audio.webm",
+                "groq-key",
+                "whisper",
+                timeout_seconds=15,
+            )
+
+        self.assertEqual(result, "transcript")
+        client_factory.assert_called_once_with(
+            api_key="groq-key",
+            max_retries=0,
+            timeout=15,
+        )
+        create.assert_awaited_once_with(
+            url="https://storage.example/audio.webm",
+            model="whisper",
+            response_format="json",
+            temperature=0.0,
         )
 
 

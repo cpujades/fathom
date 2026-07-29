@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from typing import Any
 
 from groq import (
@@ -8,7 +7,7 @@ from groq import (
     APIError,
     APIStatusError,
     APITimeoutError,
-    Groq,
+    AsyncGroq,
     RateLimitError,
 )
 
@@ -56,7 +55,7 @@ def _extract_groq_text(response: Any) -> str:
     return text
 
 
-def transcribe_url(
+async def transcribe_url(
     media_url: str,
     api_key: str,
     model: str,
@@ -66,12 +65,12 @@ def transcribe_url(
     if not api_key:
         raise TranscriptionError("Missing GROQ_API_KEY.")
 
-    with Groq(
+    async with AsyncGroq(
         api_key=api_key,
         max_retries=0,
         timeout=timeout_seconds,
     ) as client:
-        response = client.audio.transcriptions.create(
+        response = await client.audio.transcriptions.create(
             url=media_url,
             model=model,
             response_format="json",
@@ -90,8 +89,7 @@ async def transcribe_url_with_resilience(
     request_timeout_seconds = min(deadline_seconds, 60.0)
 
     async def operation() -> str:
-        return await asyncio.to_thread(
-            transcribe_url,
+        return await transcribe_url(
             media_url,
             api_key,
             model,

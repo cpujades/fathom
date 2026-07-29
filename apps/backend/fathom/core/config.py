@@ -10,6 +10,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 DEFAULT_BILLING_DEBT_CAP_SECONDS = 600
 DEFAULT_SUPABASE_DB_PORT = 5432
 DEFAULT_WORKER_MAX_CONCURRENT_JOBS = 10
+DEFAULT_WORKER_SHUTDOWN_GRACE_SECONDS = 30.0
 DEFAULT_SOURCE_DOWNLOAD_DEADLINE_SECONDS = 600.0
 DEFAULT_PROVIDER_SUMMARY_DEADLINE_SECONDS = 1805.0
 DEFAULT_PROVIDER_TRANSCRIPTION_DEADLINE_SECONDS = 190.0
@@ -66,6 +67,12 @@ class Settings(BaseSettings):
     polar_server: str = Field(default="sandbox", validation_alias="POLAR_SERVER")
     billing_debt_cap_seconds: int = DEFAULT_BILLING_DEBT_CAP_SECONDS
     worker_max_concurrent_jobs: int = DEFAULT_WORKER_MAX_CONCURRENT_JOBS
+    worker_shutdown_grace_seconds: float = Field(
+        default=DEFAULT_WORKER_SHUTDOWN_GRACE_SECONDS,
+        validation_alias="WORKER_SHUTDOWN_GRACE_SECONDS",
+        ge=0,
+        le=300,
+    )
     source_download_deadline_seconds: float = Field(
         default=DEFAULT_SOURCE_DOWNLOAD_DEADLINE_SECONDS,
         validation_alias="SOURCE_DOWNLOAD_DEADLINE_SECONDS",

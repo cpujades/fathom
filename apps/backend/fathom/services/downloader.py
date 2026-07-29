@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pathlib
+import threading
 import time
 import uuid
 from collections.abc import Callable, Iterable
@@ -70,12 +71,18 @@ class _DownloadBudget:
     max_bytes: int
     deadline_seconds: float
     started_at: float
+    cancel_event: threading.Event | None = None
     downloaded_bytes: int = 0
 
     def on_progress(self, _stream: object, chunk: bytes, _bytes_remaining: int) -> None:
         self.downloaded_bytes += len(chunk)
         if self.downloaded_bytes > self.max_bytes:
             raise _DownloadLimitExceeded
+
+    def should_interrupt(self) -> bool:
+        if self.cancel_event is not None and self.cancel_event.is_set():
+            return True
+        return time.monotonic() - self.started_at >= self.deadline_seconds
 
     def deadline_exceeded(self) -> bool:
         return time.monotonic() - self.started_at >= self.deadline_seconds
@@ -134,6 +141,7 @@ def download_audio(
     *,
     max_bytes: int = MAX_AUDIO_FILE_BYTES,
     deadline_seconds: float = DEFAULT_SOURCE_DOWNLOAD_DEADLINE_SECONDS,
+    cancel_event: threading.Event | None = None,
 ) -> DownloadResult:
     if max_bytes <= 0:
         raise ValueError("max_bytes must be greater than zero")
@@ -144,6 +152,7 @@ def download_audio(
         max_bytes=max_bytes,
         deadline_seconds=deadline_seconds,
         started_at=time.monotonic(),
+        cancel_event=cancel_event,
     )
     try:
         yt = YouTube(url, on_progress_callback=budget.on_progress)
@@ -170,7 +179,7 @@ def download_audio(
                 1,
                 min(int(deadline_seconds), DOWNLOAD_REQUEST_TIMEOUT_SECONDS),
             ),
-            interrupt_checker=budget.deadline_exceeded,
+            interrupt_checker=budget.should_interrupt,
         )
     except _DownloadLimitExceeded as exc:
         target_path.unlink(missing_ok=True)
@@ -179,6 +188,9 @@ def download_audio(
         target_path.unlink(missing_ok=True)
         raise DownloadError("Failed to download audio stream.") from exc
 
+    if cancel_event is not None and cancel_event.is_set():
+        target_path.unlink(missing_ok=True)
+        raise DownloadError("Source audio download was cancelled.")
     if budget.deadline_exceeded():
         target_path.unlink(missing_ok=True)
         raise DownloadError("Source audio download deadline exceeded.")

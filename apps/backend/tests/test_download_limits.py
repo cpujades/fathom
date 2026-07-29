@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import tempfile
+import threading
 import unittest
 from collections.abc import Callable
 from pathlib import Path
@@ -150,6 +151,27 @@ class DownloadLimitTests(unittest.TestCase):
                     temp_dir,
                     max_bytes=100,
                     deadline_seconds=10,
+                )
+
+            self.assertEqual(list(Path(temp_dir).iterdir()), [])
+
+    def test_cancellation_interrupts_download_and_removes_partial_file(self) -> None:
+        stream = FakeAudioStream(
+            advertised_size=10,
+            chunks=[b"content"],
+        )
+        cancel_event = threading.Event()
+        cancel_event.set()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with (
+                patch("fathom.services.downloader.YouTube", _youtube_factory(stream)),
+                self.assertRaisesRegex(DownloadError, "cancelled"),
+            ):
+                download_audio(
+                    "https://www.youtube.com/watch?v=test",
+                    temp_dir,
+                    max_bytes=100,
+                    cancel_event=cancel_event,
                 )
 
             self.assertEqual(list(Path(temp_dir).iterdir()), [])

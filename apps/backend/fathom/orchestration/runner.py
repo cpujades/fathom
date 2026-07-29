@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import signal
 import time
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -244,19 +245,33 @@ async def _run_job_with_heartbeat(
 ) -> None:
     job_id = str(job["id"])
     lease_token = str(job["lease_token"])
-    processing_task = asyncio.create_task(process_job(job, settings, admin_client))
+    processing_task = asyncio.create_task(
+        process_job(job, settings, admin_client),
+        name=f"job-{job_id}-processing",
+    )
     heartbeat_task = asyncio.create_task(
         _maintain_job_lease(
             admin_client,
             job_id=job_id,
             lease_token=lease_token,
-        )
+        ),
+        name=f"job-{job_id}-heartbeat",
     )
 
-    done, _ = await asyncio.wait(
-        {processing_task, heartbeat_task},
-        return_when=asyncio.FIRST_COMPLETED,
-    )
+    try:
+        done, _ = await asyncio.wait(
+            {processing_task, heartbeat_task},
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+    except asyncio.CancelledError:
+        processing_task.cancel()
+        heartbeat_task.cancel()
+        await asyncio.gather(
+            processing_task,
+            heartbeat_task,
+            return_exceptions=True,
+        )
+        raise
     if processing_task in done:
         try:
             await processing_task
@@ -305,15 +320,35 @@ async def _wait_for_job_notification(
     queue: asyncio.Queue[dict[str, Any]],
     *,
     timeout_seconds: float,
+    shutdown_event: asyncio.Event | None = None,
 ) -> bool:
+    if shutdown_event is None:
+        shutdown_event = asyncio.Event()
+
+    notification_task = asyncio.create_task(queue.get())
+    shutdown_task = asyncio.create_task(shutdown_event.wait())
     try:
-        payload = await asyncio.wait_for(queue.get(), timeout=timeout_seconds)
-        return payload is not None
-    except TimeoutError:
-        return False
+        done, _ = await asyncio.wait(
+            {notification_task, shutdown_task},
+            timeout=timeout_seconds,
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        if shutdown_task in done:
+            return False
+        if notification_task not in done:
+            return False
+        return notification_task.result() is not None
     except Exception as exc:
         logger.warning("worker.job_notification.listen_failed", exc_info=exc)
         return False
+    finally:
+        notification_task.cancel()
+        shutdown_task.cancel()
+        await asyncio.gather(
+            notification_task,
+            shutdown_task,
+            return_exceptions=True,
+        )
 
 
 def _drain_completed_tasks(tasks: set[asyncio.Task[None]]) -> None:
@@ -322,6 +357,8 @@ def _drain_completed_tasks(tasks: set[asyncio.Task[None]]) -> None:
         tasks.remove(task)
         try:
             task.result()
+        except asyncio.CancelledError:
+            logger.info("worker.task.cancelled")
         except Exception:
             logger.exception("worker.task.crashed")
 
@@ -354,7 +391,48 @@ async def _run_scheduled_maintenance(
     return last_sweep_at, last_billing_maintenance_at
 
 
-async def _run_loop(settings: Settings) -> None:
+async def _shutdown_running_tasks(
+    tasks: set[asyncio.Task[None]],
+    *,
+    grace_seconds: float,
+) -> None:
+    _drain_completed_tasks(tasks)
+    if not tasks:
+        logger.info("worker.shutdown.completed", extra={"remaining_jobs": 0})
+        return
+
+    logger.info(
+        "worker.shutdown.draining",
+        extra={"active_jobs": len(tasks), "grace_seconds": grace_seconds},
+    )
+    _, pending = await asyncio.wait(tasks, timeout=grace_seconds)
+    _drain_completed_tasks(tasks)
+    if pending:
+        logger.warning(
+            "worker.shutdown.cancelling",
+            extra={
+                "remaining_jobs": len(pending),
+                "recovery": "lease_expiry",
+            },
+        )
+        # Fenced mutations prevent stale work from committing after cancellation.
+        # The next worker sweep requeues each job once its renewable lease expires.
+        for task in pending:
+            task.cancel()
+
+    await asyncio.gather(*pending, return_exceptions=True)
+    tasks.difference_update(pending)
+    logger.info("worker.shutdown.completed", extra={"remaining_jobs": 0})
+
+
+async def _run_loop(
+    settings: Settings,
+    *,
+    shutdown_event: asyncio.Event | None = None,
+) -> None:
+    if shutdown_event is None:
+        shutdown_event = asyncio.Event()
+
     admin_client = await create_supabase_admin_client(settings)
     max_concurrent_jobs = max(1, settings.worker_max_concurrent_jobs)
     notify_timeout_seconds = WORKER_JOB_NOTIFY_TIMEOUT_SECONDS
@@ -362,40 +440,87 @@ async def _run_loop(settings: Settings) -> None:
     last_sweep_at = 0.0
     last_billing_maintenance_at = 0.0
 
-    while True:
-        try:
-            async with listen_for_notifications(settings, "job_created") as queue:
-                logger.info("worker.job_listener.ready", extra={"channel": "job_created"})
-                while True:
-                    _drain_completed_tasks(running_tasks)
-                    last_sweep_at, last_billing_maintenance_at = await _run_scheduled_maintenance(
-                        admin_client,
-                        settings=settings,
-                        last_sweep_at=last_sweep_at,
-                        last_billing_maintenance_at=last_billing_maintenance_at,
-                    )
-                    while len(running_tasks) < max_concurrent_jobs:
-                        job = await claim_next_job(
+    try:
+        while not shutdown_event.is_set():
+            try:
+                async with listen_for_notifications(settings, "job_created") as queue:
+                    logger.info("worker.job_listener.ready", extra={"channel": "job_created"})
+                    while not shutdown_event.is_set():
+                        _drain_completed_tasks(running_tasks)
+                        last_sweep_at, last_billing_maintenance_at = await _run_scheduled_maintenance(
                             admin_client,
-                            lease_seconds=WORKER_LEASE_SECONDS,
+                            settings=settings,
+                            last_sweep_at=last_sweep_at,
+                            last_billing_maintenance_at=last_billing_maintenance_at,
                         )
-                        if not job:
-                            break
+                        while not shutdown_event.is_set() and len(running_tasks) < max_concurrent_jobs:
+                            job = await claim_next_job(
+                                admin_client,
+                                lease_seconds=WORKER_LEASE_SECONDS,
+                            )
+                            if not job:
+                                break
 
-                        task = asyncio.create_task(_handle_claimed_job(job, settings, admin_client))
-                        running_tasks.add(task)
+                            task = asyncio.create_task(
+                                _handle_claimed_job(job, settings, admin_client),
+                                name=f"job-{job.get('id', 'unknown')}",
+                            )
+                            running_tasks.add(task)
 
-                    if running_tasks:
-                        await asyncio.sleep(WORKER_IDLE_SLEEP_SECONDS)
-                        continue
+                        if running_tasks:
+                            await asyncio.sleep(WORKER_IDLE_SLEEP_SECONDS)
+                            continue
 
-                    if await _wait_for_job_notification(queue, timeout_seconds=notify_timeout_seconds):
-                        continue
+                        if await _wait_for_job_notification(
+                            queue,
+                            timeout_seconds=notify_timeout_seconds,
+                            shutdown_event=shutdown_event,
+                        ):
+                            continue
 
+                        if not shutdown_event.is_set():
+                            await asyncio.sleep(WORKER_IDLE_SLEEP_SECONDS)
+            except Exception:
+                logger.warning(
+                    "worker.job_listener.reconnecting",
+                    extra={"channel": "job_created"},
+                    exc_info=True,
+                )
+                if not shutdown_event.is_set():
                     await asyncio.sleep(WORKER_IDLE_SLEEP_SECONDS)
-        except Exception:
-            logger.warning("worker.job_listener.reconnecting", extra={"channel": "job_created"}, exc_info=True)
-            await asyncio.sleep(WORKER_IDLE_SLEEP_SECONDS)
+    finally:
+        await _shutdown_running_tasks(
+            running_tasks,
+            grace_seconds=settings.worker_shutdown_grace_seconds,
+        )
+
+
+async def _run_worker(settings: Settings) -> None:
+    shutdown_event = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    installed_signals: list[signal.Signals] = []
+
+    def request_shutdown() -> None:
+        if not shutdown_event.is_set():
+            logger.info("worker.shutdown.requested")
+        shutdown_event.set()
+
+    for shutdown_signal in (signal.SIGINT, signal.SIGTERM):
+        try:
+            loop.add_signal_handler(shutdown_signal, request_shutdown)
+        except NotImplementedError:  # pragma: no cover - Windows event loops
+            logger.warning(
+                "worker.shutdown.signal_unsupported",
+                extra={"signal": shutdown_signal.name},
+            )
+        else:
+            installed_signals.append(shutdown_signal)
+
+    try:
+        await _run_loop(settings, shutdown_event=shutdown_event)
+    finally:
+        for shutdown_signal in installed_signals:
+            loop.remove_signal_handler(shutdown_signal)
 
 
 def main() -> None:
@@ -405,7 +530,7 @@ def main() -> None:
         "worker.started",
         extra={"max_concurrent_jobs": settings.worker_max_concurrent_jobs},
     )
-    asyncio.run(_run_loop(settings))
+    asyncio.run(_run_worker(settings))
 
 
 if __name__ == "__main__":

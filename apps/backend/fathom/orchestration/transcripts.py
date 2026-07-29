@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import logging
 import tempfile
+import threading
 import time
 import uuid
 from dataclasses import dataclass
@@ -148,12 +149,25 @@ async def _create_transcript(
             level=logging.DEBUG,
         )
         download_start = time.perf_counter()
-        download_result = await asyncio.to_thread(
-            download_audio,
-            url,
-            tmp_dir,
-            deadline_seconds=settings.source_download_deadline_seconds,
+        cancel_download = threading.Event()
+        download_task = asyncio.create_task(
+            asyncio.to_thread(
+                download_audio,
+                url,
+                tmp_dir,
+                deadline_seconds=settings.source_download_deadline_seconds,
+                cancel_event=cancel_download,
+            )
         )
+        try:
+            download_result = await asyncio.shield(download_task)
+        except asyncio.CancelledError:
+            cancel_download.set()
+            try:
+                await asyncio.shield(download_task)
+            except (Exception, asyncio.CancelledError):
+                pass
+            raise
         download_duration_ms = (time.perf_counter() - download_start) * 1000
         log_step(
             logger,
