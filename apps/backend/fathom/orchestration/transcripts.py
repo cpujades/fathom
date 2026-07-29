@@ -18,8 +18,10 @@ from fathom.crud.supabase.transcripts import (
     create_transcript,
     fetch_transcript_by_hash,
     fetch_transcript_by_video_id,
+    fetch_transcript_segments,
 )
 from fathom.orchestration.observability import log_stage, log_step
+from fathom.schemas.transcripts import TranscriptionResult, TranscriptSegment
 from fathom.services.downloader import download_audio
 from fathom.services.transcriber import transcribe_url_with_resilience
 from fathom.services.youtube import extract_youtube_video_id
@@ -33,6 +35,7 @@ class TranscriptResolution:
     transcript_id: str
     transcript_text: str
     source_key: str
+    segments: tuple[TranscriptSegment, ...] = ()
 
 
 async def resolve_transcript(
@@ -95,6 +98,10 @@ async def _cached_resolution(
     transcript_text = str(transcript_row["transcript_text"])
     video_id = transcript_row.get("video_id") or parsed_video_id
     transcript_id = str(transcript_row["id"])
+    segments = await fetch_transcript_segments(
+        admin_client,
+        transcript_id=transcript_id,
+    )
     log_stage(
         logger,
         "worker.transcript.cache_hit",
@@ -105,6 +112,7 @@ async def _cached_resolution(
         transcript_id=transcript_id,
         video_id=video_id,
         transcript_chars=len(transcript_text),
+        transcript_segments=len(segments),
     )
     await record_job_event_best_effort(
         admin_client,
@@ -119,12 +127,14 @@ async def _cached_resolution(
             "transcript_id": transcript_id,
             "video_id": video_id,
             "transcript_chars": len(transcript_text),
+            "transcript_segments": len(segments),
         },
     )
     return TranscriptResolution(
         transcript_id=transcript_id,
         transcript_text=transcript_text,
         source_key=str(video_id or url_hash),
+        segments=segments,
     )
 
 
@@ -201,7 +211,7 @@ async def _create_transcript(
             content_type=download_result.mime_type or "application/octet-stream",
         )
         try:
-            transcript_text = await _transcribe_uploaded_audio(
+            transcription = await _transcribe_uploaded_audio(
                 job_id=job_id,
                 settings=settings,
                 admin_client=admin_client,
@@ -223,8 +233,9 @@ async def _create_transcript(
         admin_client,
         url_hash=url_hash,
         video_id=video_id,
-        transcript_text=transcript_text,
+        transcript_text=transcription.text,
         provider_model=provider_model,
+        segments=transcription.segments,
         source_title=download_result.title,
         source_author=download_result.author,
         source_description=download_result.description,
@@ -234,6 +245,11 @@ async def _create_transcript(
         source_length_seconds=download_result.length_seconds,
     )
     transcript_id = str(transcript_row["id"])
+    transcript_text = str(transcript_row["transcript_text"])
+    segments = await fetch_transcript_segments(
+        admin_client,
+        transcript_id=transcript_id,
+    )
     log_stage(
         logger,
         "worker.transcript.persisted",
@@ -244,6 +260,7 @@ async def _create_transcript(
         transcript_id=transcript_id,
         video_id=video_id,
         transcript_chars=len(transcript_text),
+        transcript_segments=len(segments),
         level=logging.DEBUG,
     )
     await record_job_event_best_effort(
@@ -259,12 +276,14 @@ async def _create_transcript(
             "transcript_id": transcript_id,
             "video_id": video_id,
             "transcript_chars": len(transcript_text),
+            "transcript_segments": len(segments),
         },
     )
     return TranscriptResolution(
         transcript_id=transcript_id,
         transcript_text=transcript_text,
         source_key=str(video_id or url_hash),
+        segments=segments,
     )
 
 
@@ -276,7 +295,7 @@ async def _transcribe_uploaded_audio(
     job_start: float,
     object_key: str,
     audio_bytes: int | None,
-) -> str:
+) -> TranscriptionResult:
     signed_url = await create_signed_url(
         admin_client,
         bucket=SUPABASE_GROQ_BUCKET,
@@ -304,7 +323,7 @@ async def _transcribe_uploaded_audio(
     )
 
     started_at = time.perf_counter()
-    transcript_text = await transcribe_url_with_resilience(
+    transcription = await transcribe_url_with_resilience(
         signed_url,
         settings.groq_api_key,
         GROQ_MODEL,
@@ -318,7 +337,8 @@ async def _transcribe_uploaded_audio(
         stage="transcribing",
         provider="groq",
         model=GROQ_MODEL,
-        transcript_chars=len(transcript_text),
+        transcript_chars=len(transcription.text),
+        transcript_segments=len(transcription.segments),
     )
     await record_job_event_best_effort(
         admin_client,
@@ -330,11 +350,12 @@ async def _transcribe_uploaded_audio(
         metadata={
             "provider": "groq",
             "model": GROQ_MODEL,
-            "transcript_chars": len(transcript_text),
+            "transcript_chars": len(transcription.text),
+            "transcript_segments": len(transcription.segments),
             "duration_ms": round(duration_ms, 2),
         },
     )
-    return transcript_text
+    return transcription
 
 
 def _hash_url(url: str) -> str:

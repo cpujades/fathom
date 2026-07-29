@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from postgrest import APIError
 
+from fathom.core.errors import ExternalServiceError
+from fathom.schemas.transcripts import TranscriptSegment
 from fathom.services.supabase.helpers import first_row, is_unique_violation, raise_for_postgrest_error
 from supabase import AsyncClient
 
@@ -67,6 +70,7 @@ async def create_transcript(
     video_id: str | None,
     transcript_text: str,
     provider_model: str,
+    segments: tuple[TranscriptSegment, ...] = (),
     source_title: str | None = None,
     source_author: str | None = None,
     source_description: str | None = None,
@@ -76,23 +80,32 @@ async def create_transcript(
     source_length_seconds: int | None = None,
 ) -> dict[str, Any]:
     payload = {
-        "url_hash": url_hash,
-        "video_id": video_id,
-        "transcript_text": transcript_text,
-        "provider_model": provider_model,
-        "source_title": source_title,
-        "source_author": source_author,
-        "source_description": source_description,
-        "source_keywords": source_keywords,
-        "source_views": source_views,
-        "source_likes": source_likes,
-        "source_length_seconds": source_length_seconds,
+        "p_url_hash": url_hash,
+        "p_video_id": video_id,
+        "p_transcript_text": transcript_text,
+        "p_provider_model": provider_model,
+        "p_segments": [
+            {
+                "segment_index": segment.segment_index,
+                "start_seconds": segment.start_seconds,
+                "end_seconds": segment.end_seconds,
+                "text": segment.text,
+            }
+            for segment in segments
+        ],
+        "p_source_title": source_title,
+        "p_source_author": source_author,
+        "p_source_description": source_description,
+        "p_source_keywords": source_keywords,
+        "p_source_views": source_views,
+        "p_source_likes": source_likes,
+        "p_source_length_seconds": source_length_seconds,
     }
 
     try:
-        response = await client.table("transcripts").insert(payload).execute()
+        response = await client.rpc("create_transcript_with_segments", payload).execute()
     except APIError as exc:
-        # Make the insert idempotent under retries/races.
+        # Preserve compatibility with races against an older worker during rollout.
         if is_unique_violation(exc):
             existing = await fetch_transcript_by_hash(
                 client,
@@ -103,7 +116,45 @@ async def create_transcript(
                 return existing
         raise_for_postgrest_error(exc, "Failed to create transcript.")
 
+    if isinstance(response.data, Mapping):
+        return dict(response.data)
     return first_row(response.data, error_message="Failed to create transcript.")
+
+
+async def fetch_transcript_segments(
+    client: AsyncClient,
+    *,
+    transcript_id: str,
+) -> tuple[TranscriptSegment, ...]:
+    try:
+        response = await (
+            client.table("transcript_segments")
+            .select("segment_index,start_seconds,end_seconds,segment_text")
+            .eq("transcript_id", transcript_id)
+            .order("segment_index")
+            .execute()
+        )
+    except APIError as exc:
+        raise_for_postgrest_error(exc, "Failed to fetch transcript segments.")
+
+    segments: list[TranscriptSegment] = []
+    for expected_index, row in enumerate(response.data or []):
+        if not isinstance(row, dict):
+            raise ExternalServiceError("Supabase returned invalid transcript segments.")
+        try:
+            segment = TranscriptSegment(
+                segment_index=int(row["segment_index"]),
+                start_seconds=float(row["start_seconds"]),
+                end_seconds=float(row["end_seconds"]),
+                text=str(row["segment_text"]),
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ExternalServiceError("Supabase returned invalid transcript segments.") from exc
+        if segment.segment_index != expected_index:
+            raise ExternalServiceError("Supabase returned non-contiguous transcript segments.")
+        segments.append(segment)
+
+    return tuple(segments)
 
 
 async def fetch_transcript_by_id(client: AsyncClient, transcript_id: str) -> dict[str, Any]:

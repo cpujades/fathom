@@ -271,7 +271,18 @@ class ProviderResilienceTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_groq_transcription_uses_cancellable_async_client(self) -> None:
-        create = AsyncMock(return_value=SimpleNamespace(text="transcript"))
+        create = AsyncMock(
+            return_value=SimpleNamespace(
+                text="transcript",
+                segments=[
+                    {
+                        "start": 0.0,
+                        "end": 2.5,
+                        "text": " transcript ",
+                    }
+                ],
+            )
+        )
         client = SimpleNamespace(
             audio=SimpleNamespace(
                 transcriptions=SimpleNamespace(create=create),
@@ -292,7 +303,12 @@ class ProviderResilienceTests(unittest.IsolatedAsyncioTestCase):
                 timeout_seconds=15,
             )
 
-        self.assertEqual(result, "transcript")
+        self.assertEqual(result.text, "transcript")
+        self.assertEqual(len(result.segments), 1)
+        self.assertEqual(result.segments[0].segment_index, 0)
+        self.assertEqual(result.segments[0].start_seconds, 0)
+        self.assertEqual(result.segments[0].end_seconds, 2.5)
+        self.assertEqual(result.segments[0].text, "transcript")
         client_factory.assert_called_once_with(
             api_key="groq-key",
             max_retries=0,
@@ -301,8 +317,9 @@ class ProviderResilienceTests(unittest.IsolatedAsyncioTestCase):
         create.assert_awaited_once_with(
             url="https://storage.example/audio.webm",
             model="whisper",
-            response_format="json",
+            response_format="verbose_json",
             temperature=0.0,
+            timestamp_granularities=["segment"],
         )
 
 

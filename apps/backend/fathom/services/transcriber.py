@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Mapping
+from typing import Any, Literal, cast
 
 from groq import (
     APIConnectionError,
@@ -12,6 +13,7 @@ from groq import (
 )
 
 from fathom.core.config import DEFAULT_PROVIDER_TRANSCRIPTION_DEADLINE_SECONDS
+from fathom.schemas.transcripts import TranscriptionResult, TranscriptSegment
 from fathom.services.provider_resilience import (
     CallableProviderAdapter,
     ProviderFailureKind,
@@ -40,7 +42,7 @@ class TranscriptionError(ProviderOperationError):
         )
 
 
-def _extract_groq_text(response: Any) -> str:
+def _extract_groq_transcription(response: Any) -> TranscriptionResult:
     text = getattr(response, "text", None)
     if not isinstance(text, str):
         raise TranscriptionError(
@@ -52,7 +54,64 @@ def _extract_groq_text(response: Any) -> str:
             "Empty transcript.",
             kind=ProviderFailureKind.TRANSIENT,
         )
-    return text
+
+    raw_segments = getattr(response, "segments", None)
+    if raw_segments is None:
+        return TranscriptionResult(text=text, segments=())
+    if not isinstance(raw_segments, list):
+        raise TranscriptionError(
+            "Groq response contained invalid timestamp segments.",
+            kind=ProviderFailureKind.TRANSIENT,
+        )
+
+    segments: list[TranscriptSegment] = []
+    previous_start = 0.0
+    for raw_segment in raw_segments:
+        raw_start = _segment_value(raw_segment, "start")
+        raw_end = _segment_value(raw_segment, "end")
+        raw_text = _segment_value(raw_segment, "text")
+        if (
+            not isinstance(raw_start, (int, float))
+            or isinstance(raw_start, bool)
+            or not isinstance(raw_end, (int, float))
+            or isinstance(raw_end, bool)
+            or not isinstance(raw_text, str)
+        ):
+            raise TranscriptionError(
+                "Groq response contained invalid timestamp segments.",
+                kind=ProviderFailureKind.TRANSIENT,
+            )
+
+        segment_text = raw_text.strip()
+        if not segment_text:
+            continue
+        try:
+            segment = TranscriptSegment(
+                segment_index=len(segments),
+                start_seconds=float(raw_start),
+                end_seconds=float(raw_end),
+                text=segment_text,
+            )
+        except ValueError as exc:
+            raise TranscriptionError(
+                "Groq response contained invalid timestamp segments.",
+                kind=ProviderFailureKind.TRANSIENT,
+            ) from exc
+        if segments and segment.start_seconds < previous_start:
+            raise TranscriptionError(
+                "Groq response timestamp segments were out of order.",
+                kind=ProviderFailureKind.TRANSIENT,
+            )
+        segments.append(segment)
+        previous_start = segment.start_seconds
+
+    return TranscriptionResult(text=text, segments=tuple(segments))
+
+
+def _segment_value(segment: object, name: str) -> object:
+    if isinstance(segment, Mapping):
+        return cast(Mapping[str, object], segment).get(name)
+    return getattr(segment, name, None)
 
 
 async def transcribe_url(
@@ -61,10 +120,11 @@ async def transcribe_url(
     model: str,
     *,
     timeout_seconds: float = 60.0,
-) -> str:
+) -> TranscriptionResult:
     if not api_key:
         raise TranscriptionError("Missing GROQ_API_KEY.")
 
+    timestamp_granularities: list[Literal["word", "segment"]] = ["segment"]
     async with AsyncGroq(
         api_key=api_key,
         max_retries=0,
@@ -73,10 +133,11 @@ async def transcribe_url(
         response = await client.audio.transcriptions.create(
             url=media_url,
             model=model,
-            response_format="json",
+            response_format="verbose_json",
             temperature=0.0,
+            timestamp_granularities=timestamp_granularities,
         )
-    return _extract_groq_text(response)
+    return _extract_groq_transcription(response)
 
 
 async def transcribe_url_with_resilience(
@@ -85,10 +146,10 @@ async def transcribe_url_with_resilience(
     model: str,
     *,
     deadline_seconds: float = DEFAULT_PROVIDER_TRANSCRIPTION_DEADLINE_SECONDS,
-) -> str:
+) -> TranscriptionResult:
     request_timeout_seconds = min(deadline_seconds, 60.0)
 
-    async def operation() -> str:
+    async def operation() -> TranscriptionResult:
         return await transcribe_url(
             media_url,
             api_key,
