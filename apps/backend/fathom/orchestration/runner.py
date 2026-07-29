@@ -12,9 +12,11 @@ from fathom.core.config import Settings, get_settings
 from fathom.core.logging import log_context, setup_logging
 from fathom.crud.supabase.job_events import record_job_event_best_effort
 from fathom.crud.supabase.jobs import (
+    JobLeaseLostError,
     claim_next_job,
     mark_job_failed,
     mark_job_retry,
+    renew_job_lease,
     requeue_stale_jobs,
 )
 from fathom.orchestration.jobs import process_job
@@ -34,6 +36,8 @@ WORKER_IDLE_SLEEP_SECONDS = 1
 WORKER_MAX_ATTEMPTS = 3
 WORKER_BACKOFF_BASE_SECONDS = 5
 WORKER_STALE_AFTER_SECONDS = 300  # 5 minutes
+WORKER_LEASE_SECONDS = 120
+WORKER_HEARTBEAT_INTERVAL_SECONDS = 30.0
 WORKER_SWEEP_INTERVAL_SECONDS = 30.0
 WORKER_BILLING_MAINTENANCE_INTERVAL_SECONDS = 60.0
 WORKER_JOB_NOTIFY_TIMEOUT_SECONDS = 10.0
@@ -49,9 +53,13 @@ async def _handle_claimed_job(
     admin_client: AsyncClient,
 ) -> None:
     attempt_count = int(job.get("attempt_count") or 0)
-    job_id = job.get("id")
+    job_id = str(job.get("id") or "")
     if not job_id:
         logger.debug("worker.job.claim_empty")
+        return
+    lease_token = str(job.get("lease_token") or "")
+    if not lease_token:
+        logger.error("worker.job.lease_missing", extra={"job_id": job_id})
         return
 
     logger.debug(
@@ -91,6 +99,7 @@ async def _handle_claimed_job(
         await mark_job_failed(
             admin_client,
             job_id=job_id,
+            lease_token=lease_token,
             error_code="invalid_job_payload",
             error_message=error_message,
         )
@@ -110,6 +119,7 @@ async def _handle_claimed_job(
         await mark_job_failed(
             admin_client,
             job_id=job_id,
+            lease_token=lease_token,
             error_code="max_attempts_exceeded",
             error_message=error_message,
         )
@@ -118,7 +128,17 @@ async def _handle_claimed_job(
     attempt_start = time.perf_counter()
     try:
         with log_context(job_id=job_id, attempt=attempt_count):
-            await process_job(job, settings, admin_client)
+            await _run_job_with_heartbeat(job, settings, admin_client)
+    except JobLeaseLostError:
+        logger.warning(
+            "worker.job.lease_lost",
+            extra={
+                "job_id": job_id,
+                "attempt": attempt_count,
+                "duration_ms": elapsed_ms(attempt_start),
+            },
+        )
+        return
     except Exception as exc:
         error_code, error_message = extract_job_error(exc)
         await record_job_event_best_effort(
@@ -145,23 +165,95 @@ async def _handle_claimed_job(
                 "will_retry": attempt_count < WORKER_MAX_ATTEMPTS,
             },
         )
-        if attempt_count < WORKER_MAX_ATTEMPTS:
-            backoff_seconds = _compute_backoff_seconds(WORKER_BACKOFF_BASE_SECONDS, attempt_count)
-            run_after = datetime.now(UTC) + timedelta(seconds=backoff_seconds)
-            await mark_job_retry(
-                admin_client,
-                job_id=job_id,
-                error_code=error_code,
-                error_message=error_message,
-                run_after=run_after,
+        try:
+            if attempt_count < WORKER_MAX_ATTEMPTS:
+                backoff_seconds = _compute_backoff_seconds(WORKER_BACKOFF_BASE_SECONDS, attempt_count)
+                run_after = datetime.now(UTC) + timedelta(seconds=backoff_seconds)
+                await mark_job_retry(
+                    admin_client,
+                    job_id=job_id,
+                    lease_token=lease_token,
+                    error_code=error_code,
+                    error_message=error_message,
+                    run_after=run_after,
+                )
+            else:
+                await mark_job_failed(
+                    admin_client,
+                    job_id=job_id,
+                    lease_token=lease_token,
+                    error_code=error_code,
+                    error_message=error_message,
+                )
+        except JobLeaseLostError:
+            logger.warning(
+                "worker.job.failure_not_recorded_after_lease_loss",
+                extra={"job_id": job_id, "attempt": attempt_count},
             )
-        else:
-            await mark_job_failed(
-                admin_client,
-                job_id=job_id,
-                error_code=error_code,
-                error_message=error_message,
-            )
+
+
+async def _run_job_with_heartbeat(
+    job: dict[str, Any],
+    settings: Settings,
+    admin_client: AsyncClient,
+) -> None:
+    job_id = str(job["id"])
+    lease_token = str(job["lease_token"])
+    processing_task = asyncio.create_task(process_job(job, settings, admin_client))
+    heartbeat_task = asyncio.create_task(
+        _maintain_job_lease(
+            admin_client,
+            job_id=job_id,
+            lease_token=lease_token,
+        )
+    )
+
+    done, _ = await asyncio.wait(
+        {processing_task, heartbeat_task},
+        return_when=asyncio.FIRST_COMPLETED,
+    )
+    if processing_task in done:
+        try:
+            await processing_task
+        finally:
+            await _stop_heartbeat(heartbeat_task)
+        return
+
+    processing_task.cancel()
+    try:
+        await processing_task
+    except asyncio.CancelledError:
+        pass
+    await heartbeat_task
+
+
+async def _maintain_job_lease(
+    admin_client: AsyncClient,
+    *,
+    job_id: str,
+    lease_token: str,
+) -> None:
+    while True:
+        await asyncio.sleep(WORKER_HEARTBEAT_INTERVAL_SECONDS)
+        renewed = await renew_job_lease(
+            admin_client,
+            job_id=job_id,
+            lease_token=lease_token,
+            lease_seconds=WORKER_LEASE_SECONDS,
+        )
+        if not renewed:
+            raise JobLeaseLostError(f"Job lease lost for {job_id}.")
+
+
+async def _stop_heartbeat(task: asyncio.Task[None]) -> None:
+    if not task.done():
+        task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+    except Exception:
+        logger.debug("worker.job.heartbeat_stopped", exc_info=True)
 
 
 async def _wait_for_job_notification(
@@ -238,7 +330,10 @@ async def _run_loop(settings: Settings) -> None:
                         last_billing_maintenance_at=last_billing_maintenance_at,
                     )
                     while len(running_tasks) < max_concurrent_jobs:
-                        job = await claim_next_job(admin_client)
+                        job = await claim_next_job(
+                            admin_client,
+                            lease_seconds=WORKER_LEASE_SECONDS,
+                        )
                         if not job:
                             break
 

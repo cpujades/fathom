@@ -160,8 +160,8 @@ class CreateBriefingSessionTests(unittest.IsolatedAsyncioTestCase):
                 "fathom.application.briefings.sessions.create_job",
                 AsyncMock(return_value={"id": session_id}),
             ) as create_job_mock,
-            patch("fathom.application.briefings.sessions.update_job_progress", AsyncMock()),
-            patch("fathom.application.briefings.sessions.mark_job_succeeded", AsyncMock()),
+            patch("fathom.application.briefings.sessions.update_server_job_progress", AsyncMock()),
+            patch("fathom.application.briefings.sessions.mark_server_job_succeeded", AsyncMock()),
             patch("fathom.application.briefings.sessions.record_usage_for_job", AsyncMock()),
             patch(
                 "fathom.application.briefings.sessions.fetch_job",

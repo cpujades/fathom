@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from fathom.core.config import Settings
 from fathom.core.constants import SUMMARY_PROMPT_KEY_DEFAULT
 from fathom.crud.supabase.job_events import record_job_event_best_effort
-from fathom.crud.supabase.jobs import mark_job_succeeded, update_job_progress
+from fathom.crud.supabase.jobs import JobLeaseLostError, update_job_progress
 from fathom.crud.supabase.summaries import create_summary, fetch_summary_by_keys, update_summary_markdown
 from fathom.orchestration.observability import elapsed_ms, log_stage, log_step
 from fathom.services.summarizer import OPENROUTER_MODEL, stream_summarize_transcript, summarize_transcript
@@ -37,12 +37,14 @@ async def resolve_summary(
     settings: Settings,
     admin_client: AsyncClient,
     job_start: float,
+    lease_token: str,
 ) -> SummaryResolution:
     cached_summary = await _fetch_cached_summary(
         job_id=job_id,
         transcript_id=transcript_id,
         admin_client=admin_client,
         job_start=job_start,
+        lease_token=lease_token,
     )
     if cached_summary:
         return await _use_cached_summary(
@@ -50,6 +52,7 @@ async def resolve_summary(
             summary_id=str(cached_summary["id"]),
             admin_client=admin_client,
             job_start=job_start,
+            lease_token=lease_token,
         )
 
     return await _create_streaming_summary(
@@ -61,6 +64,7 @@ async def resolve_summary(
         settings=settings,
         admin_client=admin_client,
         job_start=job_start,
+        lease_token=lease_token,
     )
 
 
@@ -70,6 +74,7 @@ async def _fetch_cached_summary(
     transcript_id: str,
     admin_client: AsyncClient,
     job_start: float,
+    lease_token: str,
 ) -> dict[str, object] | None:
     cache_check_start = time.perf_counter()
     log_stage(
@@ -86,6 +91,7 @@ async def _fetch_cached_summary(
     await update_job_progress(
         admin_client,
         job_id=job_id,
+        lease_token=lease_token,
         stage="checking_cache",
         progress=45,
         status_message="Checking for existing summaries",
@@ -115,6 +121,7 @@ async def _use_cached_summary(
     summary_id: str,
     admin_client: AsyncClient,
     job_start: float,
+    lease_token: str,
 ) -> SummaryResolution:
     log_stage(
         logger,
@@ -141,12 +148,12 @@ async def _use_cached_summary(
     await update_job_progress(
         admin_client,
         job_id=job_id,
-        stage="cached",
-        progress=100,
-        status_message="Summary ready (cached)",
+        lease_token=lease_token,
+        stage="finalizing",
+        progress=96,
+        status_message="Using an existing briefing",
         summary_id=summary_id,
     )
-    await mark_job_succeeded(admin_client, job_id=job_id, summary_id=summary_id)
     return SummaryResolution(summary_id=summary_id, markdown="", cache_hit=True)
 
 
@@ -160,6 +167,7 @@ async def _create_streaming_summary(
     settings: Settings,
     admin_client: AsyncClient,
     job_start: float,
+    lease_token: str,
 ) -> SummaryResolution:
     step_start = time.perf_counter()
     summary_row = await create_summary(
@@ -203,6 +211,7 @@ async def _create_streaming_summary(
     await update_job_progress(
         admin_client,
         job_id=job_id,
+        lease_token=lease_token,
         stage="summarizing",
         progress=60,
         status_message="Drafting your briefing",
@@ -216,6 +225,7 @@ async def _create_streaming_summary(
         settings=settings,
         admin_client=admin_client,
         job_start=job_start,
+        lease_token=lease_token,
     )
     await _record_summary_completed(
         job_id=job_id,
@@ -242,6 +252,7 @@ async def _stream_summary_markdown(
     settings: Settings,
     admin_client: AsyncClient,
     job_start: float,
+    lease_token: str,
 ) -> tuple[str, int, bool]:
     summary_markdown = ""
     last_flush_len = 0
@@ -302,11 +313,14 @@ async def _stream_summary_markdown(
             await update_job_progress(
                 admin_client,
                 job_id=job_id,
+                lease_token=lease_token,
                 stage="summarizing",
                 progress=progress,
                 status_message=status_messages[message_index % len(status_messages)],
             )
             message_index += 1
+    except JobLeaseLostError:
+        raise
     except Exception:
         stream_failed = True
         logger.warning(
@@ -333,6 +347,7 @@ async def _stream_summary_markdown(
             stream_failed=stream_failed,
             streamed_chars=len(summary_markdown),
             flush_count=flush_count,
+            lease_token=lease_token,
         )
 
     if summary_markdown:
@@ -364,6 +379,7 @@ async def _fallback_summary(
     stream_failed: bool,
     streamed_chars: int,
     flush_count: int,
+    lease_token: str,
 ) -> str:
     fallback_start = time.perf_counter()
     logger.warning(
@@ -395,6 +411,7 @@ async def _fallback_summary(
     await update_job_progress(
         admin_client,
         job_id=job_id,
+        lease_token=lease_token,
         stage="summarizing",
         progress=min(progress + 5, 92),
         status_message="Finalizing a full summary",

@@ -5,15 +5,15 @@ set local search_path = extensions, public, pg_catalog;
 select plan(20);
 
 select ok(
-  not has_function_privilege('anon', 'public.claim_next_job()', 'execute'),
+  not has_function_privilege('anon', 'public.claim_next_job(interval)', 'execute'),
   'anon cannot claim jobs'
 );
 select ok(
-  not has_function_privilege('authenticated', 'public.claim_next_job()', 'execute'),
+  not has_function_privilege('authenticated', 'public.claim_next_job(interval)', 'execute'),
   'authenticated users cannot claim jobs'
 );
 select ok(
-  has_function_privilege('service_role', 'public.claim_next_job()', 'execute'),
+  has_function_privilege('service_role', 'public.claim_next_job(interval)', 'execute'),
   'service role can claim jobs'
 );
 
@@ -88,7 +88,7 @@ select is(
   (
     select proconfig
     from pg_catalog.pg_proc
-    where oid = 'public.claim_next_job()'::regprocedure
+    where oid = 'public.claim_next_job(interval)'::regprocedure
   ),
   array['search_path=pg_catalog']::text[],
   'claim function has an immutable search path'

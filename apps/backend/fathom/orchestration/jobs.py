@@ -24,6 +24,7 @@ async def process_job(job: dict[str, object], settings: Settings, admin_client: 
     job_id = str(job["id"])
     url = str(job["url"])
     user_id = str(job["user_id"])
+    lease_token = str(job["lease_token"])
     requested_summary_id = str(uuid.uuid4())
     job_start = time.perf_counter()
 
@@ -42,6 +43,7 @@ async def process_job(job: dict[str, object], settings: Settings, admin_client: 
         await update_job_progress(
             admin_client,
             job_id=job_id,
+            lease_token=lease_token,
             stage="warming",
             progress=10,
             status_message="Warming up the studio",
@@ -49,6 +51,7 @@ async def process_job(job: dict[str, object], settings: Settings, admin_client: 
         await update_job_progress(
             admin_client,
             job_id=job_id,
+            lease_token=lease_token,
             stage="transcribing",
             progress=30,
             status_message="Transcribing the audio",
@@ -70,6 +73,7 @@ async def process_job(job: dict[str, object], settings: Settings, admin_client: 
             settings=settings,
             admin_client=admin_client,
             job_start=job_start,
+            lease_token=lease_token,
         )
 
         if not summary.cache_hit:
@@ -79,6 +83,7 @@ async def process_job(job: dict[str, object], settings: Settings, admin_client: 
                 markdown=summary.markdown,
                 admin_client=admin_client,
                 job_start=job_start,
+                lease_token=lease_token,
             )
 
         await _record_usage(job=job, user_id=user_id, job_id=job_id, settings=settings)
@@ -91,6 +96,12 @@ async def process_job(job: dict[str, object], settings: Settings, admin_client: 
             admin_client=admin_client,
             job_start=job_start,
         )
+        await mark_job_succeeded(
+            admin_client,
+            job_id=job_id,
+            summary_id=summary.summary_id,
+            lease_token=lease_token,
+        )
 
 
 async def _finalize_new_summary(
@@ -100,6 +111,7 @@ async def _finalize_new_summary(
     markdown: str,
     admin_client: AsyncClient,
     job_start: float,
+    lease_token: str,
 ) -> None:
     log_stage(
         logger,
@@ -113,21 +125,12 @@ async def _finalize_new_summary(
     await update_job_progress(
         admin_client,
         job_id=job_id,
+        lease_token=lease_token,
         stage="finalizing",
         progress=96,
         status_message="Finalizing your briefing",
         summary_id=summary_id,
     )
-    await update_job_progress(
-        admin_client,
-        job_id=job_id,
-        stage="completed",
-        progress=100,
-        status_message="Summary ready",
-        summary_id=summary_id,
-    )
-    with log_context(summary_id=summary_id):
-        await mark_job_succeeded(admin_client, job_id=job_id, summary_id=summary_id)
 
 
 async def _record_usage(*, job: dict[str, object], user_id: str, job_id: str, settings: Settings) -> None:

@@ -30,9 +30,9 @@ from fathom.crud.supabase.jobs import (
     fetch_active_job_for_source,
     fetch_job,
     fetch_reusable_job_for_source,
-    mark_job_succeeded,
+    mark_server_job_succeeded,
     restore_job,
-    update_job_progress,
+    update_server_job_progress,
 )
 from fathom.crud.supabase.summaries import fetch_summary, fetch_summary_by_keys
 from fathom.crud.supabase.transcripts import (
@@ -380,7 +380,7 @@ async def _create_ready_reused_session(
         duration_seconds=duration_seconds,
     )
     session_id = str(created_job["id"])
-    await update_job_progress(
+    await update_server_job_progress(
         admin_client,
         job_id=session_id,
         stage="cached",
@@ -388,7 +388,7 @@ async def _create_ready_reused_session(
         status_message="Using an existing briefing",
         summary_id=summary_id,
     )
-    await mark_job_succeeded(admin_client, job_id=session_id, summary_id=summary_id)
+    await mark_server_job_succeeded(admin_client, job_id=session_id, summary_id=summary_id)
     try:
         await record_usage_for_job(
             user_id=user_id,
