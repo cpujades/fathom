@@ -35,6 +35,7 @@ class JobTimelineFormattingTests(unittest.TestCase):
                     "events": [
                         {
                             "job_id": "job-1",
+                            "sequence_id": 41,
                             "created_at": "2026-05-17T15:00:00+00:00",
                             "event_type": "summary_completed",
                             "stage": "summarizing",

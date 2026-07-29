@@ -69,6 +69,7 @@ class TimelineTranscript(DiagnosticModel):
 
 class TimelineEvent(DiagnosticModel):
     id: str | None = None
+    sequence_id: int
     job_id: str
     event_type: str
     stage: str | None = None
