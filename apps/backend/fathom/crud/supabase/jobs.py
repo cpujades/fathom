@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 from postgrest import APIError
 from postgrest.types import CountMethod
 
+from fathom.core.errors import ExternalServiceError
 from fathom.services.supabase.helpers import first_row, raise_for_postgrest_error
 from supabase import AsyncClient
 
@@ -16,29 +19,53 @@ class JobLeaseLostError(RuntimeError):
     """The worker no longer owns the current attempt for a job."""
 
 
-async def create_job(
+JobResolutionType = Literal["new", "joined_existing", "reused_ready"]
+
+
+@dataclass(frozen=True)
+class JobCreateResolution:
+    """Race-safe result from the server job-creation command."""
+
+    job: dict[str, Any]
+    resolution_type: JobResolutionType
+
+
+async def create_or_reuse_job(
     client: AsyncClient,
     *,
     url: str,
+    source_key: str,
     user_id: str,
     duration_seconds: int | None = None,
-) -> dict[str, Any]:
-    """Insert a new job row and return it."""
+    summary_id: str | None = None,
+) -> JobCreateResolution:
+    """Create, join, or reuse a job atomically for one user and source."""
     try:
-        payload: dict[str, Any] = {
-            "url": url,
-            "user_id": user_id,
-            "stage": "queued",
-            "progress": 5,
-            "status_message": "Queued — waiting for a worker",
-        }
-        if duration_seconds is not None:
-            payload["duration_seconds"] = duration_seconds
-        response = await client.table("jobs").insert(payload).execute()
+        response = await client.rpc(
+            "create_or_reuse_job",
+            {
+                "p_user_id": user_id,
+                "p_url": url,
+                "p_source_key": source_key,
+                "p_duration_seconds": duration_seconds,
+                "p_summary_id": summary_id,
+            },
+        ).execute()
     except APIError as exc:
-        raise_for_postgrest_error(exc, "Failed to create job.")
+        raise_for_postgrest_error(exc, "Failed to create or reuse job.")
 
-    return first_row(response.data, error_message="Failed to create job.")
+    data = response.data
+    if isinstance(data, Mapping):
+        result = dict(data)
+    else:
+        result = first_row(data, error_message="Supabase returned an unexpected job resolution shape.")
+
+    resolution_type = result.get("resolution_type")
+    job = result.get("job")
+    if resolution_type not in {"new", "joined_existing", "reused_ready"} or not isinstance(job, Mapping):
+        raise ExternalServiceError("Supabase returned an unexpected job resolution shape.")
+
+    return JobCreateResolution(job=dict(job), resolution_type=resolution_type)
 
 
 async def fetch_job(client: AsyncClient, job_id: str) -> dict[str, Any]:
@@ -65,14 +92,14 @@ async def fetch_active_job_for_source(
     client: AsyncClient,
     *,
     user_id: str,
-    url: str,
+    source_key: str,
 ) -> dict[str, Any] | None:
     try:
         response = await (
             client.table("jobs")
             .select("id,status,url,summary_id,error_code,error_message,stage,progress,status_message,duration_seconds")
             .eq("user_id", user_id)
-            .eq("url", url)
+            .eq("source_key", source_key)
             .in_("status", ["queued", "running"])
             .order("created_at", desc=True)
             .limit(1)
@@ -92,14 +119,14 @@ async def fetch_reusable_job_for_source(
     client: AsyncClient,
     *,
     user_id: str,
-    url: str,
+    source_key: str,
 ) -> dict[str, Any] | None:
     try:
         response = await (
             client.table("jobs")
             .select("id,status,url,summary_id,error_code,error_message,stage,progress,status_message,duration_seconds")
             .eq("user_id", user_id)
-            .eq("url", url)
+            .eq("source_key", source_key)
             .in_("status", ["succeeded", "deleted"])
             .not_.is_("summary_id", "null")
             .order("created_at", desc=True)
@@ -252,26 +279,6 @@ async def mark_job_succeeded(
     )
 
 
-async def mark_server_job_succeeded(client: AsyncClient, *, job_id: str, summary_id: str) -> None:
-    await _update_job(
-        client,
-        job_id=job_id,
-        lease_token=None,
-        payload={
-            "status": "succeeded",
-            "stage": "completed",
-            "progress": 100,
-            "status_message": "Summary ready",
-            "summary_id": summary_id,
-            "error_code": None,
-            "error_message": None,
-            "last_error_at": None,
-            "run_after": None,
-        },
-        error_message="Failed to update server-created job status.",
-    )
-
-
 async def mark_job_failed(
     client: AsyncClient,
     *,
@@ -364,37 +371,6 @@ async def update_job_progress(
         lease_token=lease_token,
         payload=payload,
         error_message="Failed to update job progress.",
-    )
-
-
-async def update_server_job_progress(
-    client: AsyncClient,
-    *,
-    job_id: str,
-    stage: str | None = None,
-    progress: int | None = None,
-    status_message: str | None = None,
-    summary_id: str | None = None,
-) -> None:
-    payload: dict[str, Any] = {}
-    if stage is not None:
-        payload["stage"] = stage
-    if progress is not None:
-        payload["progress"] = progress
-    if status_message is not None:
-        payload["status_message"] = status_message
-    if summary_id is not None:
-        payload["summary_id"] = summary_id
-
-    if not payload:
-        return
-
-    await _update_job(
-        client,
-        job_id=job_id,
-        lease_token=None,
-        payload=payload,
-        error_message="Failed to update server-created job progress.",
     )
 
 

@@ -13,12 +13,13 @@ select ok(
   'service role can renew worker leases'
 );
 
-insert into public.jobs (id, user_id, status, url, stage, progress)
+insert into public.jobs (id, user_id, status, url, source_key, stage, progress)
 values (
   '10000000-0000-0000-0000-000000000001',
   '20000000-0000-0000-0000-000000000001',
   'queued',
   'https://www.youtube.com/watch?v=lease-test',
+  'youtube:lease-test',
   'queued',
   5
 );

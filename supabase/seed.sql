@@ -33,11 +33,12 @@ from public.transcripts t
 where t.url_hash = 'example_url_hash';
 
 -- Example job referencing the summary
-insert into public.jobs (user_id, status, url, summary_id)
+insert into public.jobs (user_id, status, url, source_key, summary_id)
 select
   '00000000-0000-0000-0000-000000000001'::uuid,
   'succeeded',
   'https://example.com/video',
+  'url:a08900a35d94e4853a9efe9cd3d9b14cb415e91700b02dc48bf815ee533b1e21',
   s.id
 from public.summaries s
 join public.transcripts t on t.id = s.transcript_id

@@ -15,11 +15,12 @@ from fathom.application.briefings.sessions import (
 )
 from fathom.core.config import Settings
 from fathom.core.errors import NotFoundError
+from fathom.crud.supabase.jobs import JobCreateResolution
 from fathom.schemas.briefing_sessions import BriefingSessionCreateRequest
 
 
 class CreateBriefingSessionTests(unittest.IsolatedAsyncioTestCase):
-    async def test_creates_job_with_admin_client_after_user_scoped_lookup(self) -> None:
+    async def test_creates_job_with_atomic_server_command_after_user_scoped_lookup(self) -> None:
         auth = AuthContext(access_token="access-token", user_id="user-123")
         settings = cast(Settings, SimpleNamespace())
         request = BriefingSessionCreateRequest(url="https://www.youtube.com/watch?v=dQw4w9WgXcQ")
@@ -27,6 +28,10 @@ class CreateBriefingSessionTests(unittest.IsolatedAsyncioTestCase):
         admin_client = object()
         session_id = "11111111-1111-1111-1111-111111111111"
         expected_response = object()
+        created_resolution = JobCreateResolution(
+            job={"id": session_id},
+            resolution_type="new",
+        )
 
         with (
             patch(
@@ -59,8 +64,8 @@ class CreateBriefingSessionTests(unittest.IsolatedAsyncioTestCase):
                 AsyncMock(return_value=None),
             ),
             patch(
-                "fathom.application.briefings.sessions.create_job",
-                AsyncMock(return_value={"id": session_id}),
+                "fathom.application.briefings.sessions.create_or_reuse_job",
+                AsyncMock(return_value=created_resolution),
             ) as create_job_mock,
             patch(
                 "fathom.application.briefings.sessions.fetch_job",
@@ -78,16 +83,17 @@ class CreateBriefingSessionTests(unittest.IsolatedAsyncioTestCase):
         fetch_active_job.assert_awaited_once_with(
             user_client,
             user_id=auth.user_id,
-            url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            source_key="youtube:dQw4w9WgXcQ",
         )
         fetch_reusable_job.assert_awaited_once_with(
             user_client,
             user_id=auth.user_id,
-            url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            source_key="youtube:dQw4w9WgXcQ",
         )
         create_job_mock.assert_awaited_once_with(
             admin_client,
             url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            source_key="youtube:dQw4w9WgXcQ",
             user_id=auth.user_id,
             duration_seconds=1800,
         )
@@ -157,11 +163,14 @@ class CreateBriefingSessionTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch(
-                "fathom.application.briefings.sessions.create_job",
-                AsyncMock(return_value={"id": session_id}),
+                "fathom.application.briefings.sessions.create_or_reuse_job",
+                AsyncMock(
+                    return_value=JobCreateResolution(
+                        job={"id": session_id},
+                        resolution_type="new",
+                    )
+                ),
             ) as create_job_mock,
-            patch("fathom.application.briefings.sessions.update_server_job_progress", AsyncMock()),
-            patch("fathom.application.briefings.sessions.mark_server_job_succeeded", AsyncMock()),
             patch("fathom.application.briefings.sessions.record_usage_for_job", AsyncMock()),
             patch(
                 "fathom.application.briefings.sessions.fetch_job",
@@ -178,14 +187,64 @@ class CreateBriefingSessionTests(unittest.IsolatedAsyncioTestCase):
                 settings=settings,
             )
 
-        self.assertEqual(job, expected_job)
+        self.assertEqual(job.job, expected_job)
+        self.assertEqual(job.resolution_type, "new")
         create_job_mock.assert_awaited_once_with(
             admin_client,
             url=source.canonical_url,
+            source_key=source.source_identity_key,
             user_id="user-123",
             duration_seconds=1800,
+            summary_id="22222222-2222-2222-2222-222222222222",
         )
         fetch_job_mock.assert_awaited_once_with(user_client, session_id)
+
+    async def test_cached_session_join_does_not_overwrite_or_charge_existing_job(self) -> None:
+        settings = cast(Settings, SimpleNamespace())
+        user_client = object()
+        admin_client = object()
+        session_id = "11111111-1111-1111-1111-111111111111"
+        source = NormalizedSource(
+            submitted_url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            canonical_url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            source_type="youtube",
+            source_identity_key="youtube:dQw4w9WgXcQ",
+            video_id="dQw4w9WgXcQ",
+        )
+        expected_job = {"id": session_id, "status": "running"}
+
+        with (
+            patch(
+                "fathom.application.briefings.sessions.create_or_reuse_job",
+                AsyncMock(
+                    return_value=JobCreateResolution(
+                        job={"id": session_id},
+                        resolution_type="joined_existing",
+                    )
+                ),
+            ),
+            patch(
+                "fathom.application.briefings.sessions.record_usage_for_job",
+                AsyncMock(),
+            ) as record_usage,
+            patch(
+                "fathom.application.briefings.sessions.fetch_job",
+                AsyncMock(return_value=expected_job),
+            ),
+        ):
+            resolution = await _create_ready_reused_session(
+                user_id="user-123",
+                source=source,
+                duration_seconds=1800,
+                summary_id="22222222-2222-2222-2222-222222222222",
+                user_client=user_client,
+                admin_client=admin_client,
+                settings=settings,
+            )
+
+        self.assertEqual(resolution.job, expected_job)
+        self.assertEqual(resolution.resolution_type, "joined_existing")
+        record_usage.assert_not_awaited()
 
 
 class DeleteBriefingSessionTests(unittest.IsolatedAsyncioTestCase):

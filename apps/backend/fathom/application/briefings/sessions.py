@@ -25,14 +25,13 @@ from fathom.core.errors import NotFoundError
 from fathom.core.logging import log_context
 from fathom.crud.supabase.job_events import record_job_event_best_effort
 from fathom.crud.supabase.jobs import (
+    JobCreateResolution,
     archive_job,
-    create_job,
+    create_or_reuse_job,
     fetch_active_job_for_source,
     fetch_job,
     fetch_reusable_job_for_source,
-    mark_server_job_succeeded,
     restore_job,
-    update_server_job_progress,
 )
 from fathom.crud.supabase.summaries import fetch_summary, fetch_summary_by_keys
 from fathom.crud.supabase.transcripts import (
@@ -75,7 +74,7 @@ async def create_briefing_session(
         active_job = await fetch_active_job_for_source(
             user_client,
             user_id=auth.user_id,
-            url=source.canonical_url,
+            source_key=source.source_identity_key,
         )
         if active_job:
             logger.info("briefing_session.reused_active", extra={"session_id": active_job["id"]})
@@ -90,7 +89,7 @@ async def create_briefing_session(
         completed_job = await fetch_reusable_job_for_source(
             user_client,
             user_id=auth.user_id,
-            url=source.canonical_url,
+            source_key=source.source_identity_key,
         )
         if completed_job:
             if str(completed_job.get("status") or "") == "deleted":
@@ -128,7 +127,7 @@ async def create_briefing_session(
 
         cached_summary = await _find_ready_cached_summary(admin_client, source)
         if cached_summary:
-            ready_job = await _create_ready_reused_session(
+            cached_resolution = await _create_ready_reused_session(
                 user_id=auth.user_id,
                 source=source,
                 duration_seconds=metadata.duration_seconds,
@@ -137,19 +136,29 @@ async def create_briefing_session(
                 admin_client=admin_client,
                 settings=settings,
             )
-            logger.info("briefing_session.reused_cached", extra={"session_id": ready_job["id"]})
-            await record_job_event_best_effort(
-                admin_client,
-                logger,
-                job_id=str(ready_job["id"]),
-                event_type="session_created",
-                stage="cached",
-                message="Ready session created from cached summary.",
-                metadata={
-                    "resolution_type": "reused_ready",
-                    "video_id": metadata.video_id,
-                    "duration_seconds": metadata.duration_seconds,
-                    "summary_id": str(cached_summary["id"]),
+            ready_job = cached_resolution.job
+            response_resolution: BriefingSessionResolution = cached_resolution.resolution_type
+            if cached_resolution.resolution_type == "new":
+                response_resolution = "reused_ready"
+                await record_job_event_best_effort(
+                    admin_client,
+                    logger,
+                    job_id=str(ready_job["id"]),
+                    event_type="session_created",
+                    stage="cached",
+                    message="Ready session created from cached summary.",
+                    metadata={
+                        "resolution_type": response_resolution,
+                        "video_id": metadata.video_id,
+                        "duration_seconds": metadata.duration_seconds,
+                        "summary_id": str(cached_summary["id"]),
+                    },
+                )
+            logger.info(
+                "briefing_session.reused_cached",
+                extra={
+                    "session_id": ready_job["id"],
+                    "resolution_type": response_resolution,
                 },
             )
             return await _build_session_snapshot(
@@ -157,36 +166,44 @@ async def create_briefing_session(
                 admin_client=admin_client,
                 job=ready_job,
                 source=source,
-                resolution_type="reused_ready",
+                resolution_type=response_resolution,
             )
 
-        created_job = await create_job(
+        job_resolution = await create_or_reuse_job(
             admin_client,
             url=source.canonical_url,
+            source_key=source.source_identity_key,
             user_id=auth.user_id,
             duration_seconds=metadata.duration_seconds,
         )
-        job = await fetch_job(user_client, str(created_job["id"]))
-        logger.info("briefing_session.created", extra={"session_id": job["id"]})
-        await record_job_event_best_effort(
-            admin_client,
-            logger,
-            job_id=str(job["id"]),
-            event_type="session_created",
-            stage="queued",
-            message="Briefing session created.",
-            metadata={
-                "resolution_type": "new",
-                "video_id": metadata.video_id,
-                "duration_seconds": metadata.duration_seconds,
+        job = await fetch_job(user_client, str(job_resolution.job["id"]))
+        logger.info(
+            "briefing_session.resolved",
+            extra={
+                "session_id": job["id"],
+                "resolution_type": job_resolution.resolution_type,
             },
         )
+        if job_resolution.resolution_type == "new":
+            await record_job_event_best_effort(
+                admin_client,
+                logger,
+                job_id=str(job["id"]),
+                event_type="session_created",
+                stage="queued",
+                message="Briefing session created.",
+                metadata={
+                    "resolution_type": "new",
+                    "video_id": metadata.video_id,
+                    "duration_seconds": metadata.duration_seconds,
+                },
+            )
         return await _build_session_snapshot(
             user_client=user_client,
             admin_client=admin_client,
             job=job,
             source=source,
-            resolution_type="new",
+            resolution_type=job_resolution.resolution_type,
         )
 
 
@@ -372,23 +389,20 @@ async def _create_ready_reused_session(
     user_client: Any,
     admin_client: Any,
     settings: Settings,
-) -> dict[str, Any]:
-    created_job = await create_job(
+) -> JobCreateResolution:
+    job_resolution = await create_or_reuse_job(
         admin_client,
         url=source.canonical_url,
+        source_key=source.source_identity_key,
         user_id=user_id,
         duration_seconds=duration_seconds,
-    )
-    session_id = str(created_job["id"])
-    await update_server_job_progress(
-        admin_client,
-        job_id=session_id,
-        stage="cached",
-        progress=100,
-        status_message="Using an existing briefing",
         summary_id=summary_id,
     )
-    await mark_server_job_succeeded(admin_client, job_id=session_id, summary_id=summary_id)
+    if job_resolution.resolution_type != "new":
+        job = await fetch_job(user_client, str(job_resolution.job["id"]))
+        return JobCreateResolution(job=job, resolution_type=job_resolution.resolution_type)
+
+    session_id = str(job_resolution.job["id"])
     try:
         await record_usage_for_job(
             user_id=user_id,
@@ -398,7 +412,8 @@ async def _create_ready_reused_session(
         )
     except Exception:
         logger.exception("briefing_session.usage_recording.failed", extra={"session_id": session_id})
-    return await fetch_job(user_client, session_id)
+    job = await fetch_job(user_client, session_id)
+    return JobCreateResolution(job=job, resolution_type="new")
 
 
 async def _find_ready_cached_summary(admin_client: Any, source: NormalizedSource) -> dict[str, Any] | None:
