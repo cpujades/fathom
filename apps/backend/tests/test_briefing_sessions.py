@@ -10,6 +10,7 @@ from fathom.api.deps.auth import AuthContext
 from fathom.application.briefings.contract import NormalizedSource
 from fathom.application.briefings.sessions import (
     _create_ready_reused_session,
+    _find_ready_cached_summary,
     _job_has_ready_summary,
     create_briefing_session,
     delete_briefing_session,
@@ -18,9 +19,58 @@ from fathom.core.config import Settings
 from fathom.core.errors import NotFoundError, UsageSettlementError
 from fathom.crud.supabase.jobs import JobCreateResolution
 from fathom.schemas.briefing_sessions import BriefingSessionCreateRequest
+from fathom.schemas.transcripts import TranscriptSegment
 
 
 class CreateBriefingSessionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_ready_cache_key_follows_transcript_evidence_availability(
+        self,
+    ) -> None:
+        source = NormalizedSource(
+            submitted_url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            canonical_url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            source_type="youtube",
+            source_identity_key="youtube:dQw4w9WgXcQ",
+            video_id="dQw4w9WgXcQ",
+        )
+        segment = TranscriptSegment(
+            segment_index=0,
+            start_seconds=0,
+            end_seconds=10,
+            text="Evidence.",
+        )
+
+        for segments, expected_prompt_key in (
+            ((segment,), "briefing-v5-evidence"),
+            ((), "briefing-v4"),
+        ):
+            with (
+                patch(
+                    "fathom.application.briefings.sessions.fetch_transcript_by_video_id",
+                    AsyncMock(return_value={"id": "11111111-1111-1111-1111-111111111111"}),
+                ),
+                patch(
+                    "fathom.application.briefings.sessions.fetch_transcript_segments",
+                    AsyncMock(return_value=segments),
+                ),
+                patch(
+                    "fathom.application.briefings.sessions.fetch_summary_by_keys",
+                    AsyncMock(
+                        return_value={
+                            "id": "22222222-2222-2222-2222-222222222222",
+                            "summary_markdown": "# Ready",
+                        }
+                    ),
+                ) as fetch_summary,
+            ):
+                result = await _find_ready_cached_summary(object(), source)
+
+            self.assertIsNotNone(result)
+            self.assertEqual(
+                fetch_summary.await_args.kwargs["prompt_key"],
+                expected_prompt_key,
+            )
+
     async def test_reusable_job_requires_explicit_ready_non_empty_summary(self) -> None:
         client = object()
         job = {

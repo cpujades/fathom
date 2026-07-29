@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -12,9 +13,16 @@ from openai import (
     AsyncOpenAI,
     RateLimitError,
 )
+from pydantic import ValidationError
 
 from fathom.core.config import DEFAULT_PROVIDER_SUMMARY_DEADLINE_SECONDS
-from fathom.core.constants import SYSTEM_PROMPT
+from fathom.core.constants import EVIDENCE_SYSTEM_PROMPT, SYSTEM_PROMPT
+from fathom.schemas.briefing_contract import (
+    BriefingContract,
+    BriefingContractError,
+    validate_briefing_evidence,
+)
+from fathom.schemas.transcripts import TranscriptSegment
 from fathom.services.provider_resilience import (
     CallableProviderAdapter,
     ProviderFailureKind,
@@ -46,6 +54,90 @@ class SummarizationError(ProviderOperationError):
             stage="summarizing",
             kind=kind,
             retry_after_seconds=retry_after_seconds,
+        )
+
+
+async def summarize_transcript_with_evidence(
+    segments: tuple[TranscriptSegment, ...],
+    api_key: str,
+    *,
+    deadline_seconds: float = DEFAULT_PROVIDER_SUMMARY_DEADLINE_SECONDS,
+) -> BriefingContract:
+    if not api_key:
+        raise SummarizationError("Missing OPENROUTER_API_KEY.")
+    if not segments:
+        raise SummarizationError("Timestamped transcript segments are required.")
+
+    client = AsyncOpenAI(
+        api_key=api_key,
+        base_url="https://openrouter.ai/api/v1",
+        max_retries=0,
+        timeout=600,
+        default_headers={
+            "X-Title": OPENROUTER_APP_NAME,
+        },
+    )
+    transcript_payload = json.dumps(
+        {
+            "segments": [
+                {
+                    "segment_index": segment.segment_index,
+                    "start_seconds": segment.start_seconds,
+                    "end_seconds": segment.end_seconds,
+                    "text": segment.text,
+                }
+                for segment in segments
+            ]
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+
+    async def operation() -> BriefingContract:
+        response = await client.chat.completions.create(
+            model=OPENROUTER_MODEL,
+            messages=[
+                {"role": "system", "content": EVIDENCE_SYSTEM_PROMPT},
+                {"role": "user", "content": transcript_payload},
+            ],
+            temperature=0,
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "evidence_backed_briefing",
+                    "strict": True,
+                    "schema": BriefingContract.model_json_schema(),
+                },
+            },
+        )
+
+        content: Any = response.choices[0].message.content if response.choices else None
+        if not isinstance(content, str) or not content.strip():
+            raise SummarizationError(
+                "Empty structured summary response.",
+                kind=ProviderFailureKind.TRANSIENT,
+            )
+        try:
+            contract = BriefingContract.model_validate_json(content)
+            validate_briefing_evidence(contract, segments)
+        except (ValidationError, BriefingContractError) as exc:
+            raise SummarizationError(
+                "OpenRouter returned an invalid evidence contract.",
+                kind=ProviderFailureKind.TRANSIENT,
+            ) from exc
+        return contract
+
+    adapter = CallableProviderAdapter(
+        provider="openrouter",
+        stage="summarizing",
+        operation=operation,
+        error_classifier=_classify_openrouter_error,
+        deadline_error_factory=_summary_deadline_error,
+    )
+    async with client:
+        return await call_with_resilience(
+            adapter,
+            RetryPolicy(deadline_seconds=deadline_seconds),
         )
 
 

@@ -169,6 +169,7 @@ class JobLeaseOrchestrationTests(unittest.IsolatedAsyncioTestCase):
                     return_value=SimpleNamespace(
                         transcript_id="44444444-4444-4444-4444-444444444444",
                         transcript_text="Transcript",
+                        segments=(),
                     )
                 ),
             ),
@@ -224,6 +225,7 @@ class JobLeaseOrchestrationTests(unittest.IsolatedAsyncioTestCase):
                     return_value=SimpleNamespace(
                         transcript_id="44444444-4444-4444-4444-444444444444",
                         transcript_text="Transcript",
+                        segments=(),
                     )
                 ),
             ),

@@ -6,8 +6,12 @@ import time
 from contextlib import suppress
 from dataclasses import dataclass
 
+from fathom.application.briefing_renderer import render_briefing
 from fathom.core.config import Settings
-from fathom.core.constants import SUMMARY_PROMPT_KEY_DEFAULT
+from fathom.core.constants import (
+    SUMMARY_PROMPT_KEY_DEFAULT,
+    SUMMARY_PROMPT_KEY_EVIDENCE,
+)
 from fathom.crud.supabase.job_events import record_job_event_best_effort
 from fathom.crud.supabase.jobs import JobLeaseLostError, update_job_progress
 from fathom.crud.supabase.summaries import (
@@ -18,7 +22,13 @@ from fathom.crud.supabase.summaries import (
     update_summary_markdown,
 )
 from fathom.orchestration.observability import elapsed_ms, log_stage, log_step
-from fathom.services.summarizer import OPENROUTER_MODEL, stream_summarize_transcript, summarize_transcript
+from fathom.schemas.transcripts import TranscriptSegment
+from fathom.services.summarizer import (
+    OPENROUTER_MODEL,
+    stream_summarize_transcript,
+    summarize_transcript,
+    summarize_transcript_with_evidence,
+)
 from supabase import AsyncClient
 
 logger = logging.getLogger(__name__)
@@ -47,10 +57,13 @@ async def resolve_summary(
     admin_client: AsyncClient,
     job_start: float,
     lease_token: str,
+    transcript_segments: tuple[TranscriptSegment, ...] = (),
 ) -> SummaryResolution:
+    prompt_key = SUMMARY_PROMPT_KEY_EVIDENCE if transcript_segments else SUMMARY_PROMPT_KEY_DEFAULT
     cached_summary = await _fetch_cached_summary(
         job_id=job_id,
         transcript_id=transcript_id,
+        prompt_key=prompt_key,
         admin_client=admin_client,
         job_start=job_start,
         lease_token=lease_token,
@@ -71,7 +84,7 @@ async def resolve_summary(
         job_id=job_id,
         generation_token=lease_token,
         transcript_id=transcript_id,
-        prompt_key=SUMMARY_PROMPT_KEY_DEFAULT,
+        prompt_key=prompt_key,
         summary_model=OPENROUTER_MODEL,
     )
     if preparation.resolution_type == "in_progress":
@@ -106,7 +119,7 @@ async def resolve_summary(
             job_id=job_id,
             generation_token=lease_token,
             transcript_id=transcript_id,
-            prompt_key=SUMMARY_PROMPT_KEY_DEFAULT,
+            prompt_key=prompt_key,
             summary_model=OPENROUTER_MODEL,
         )
 
@@ -115,6 +128,17 @@ async def resolve_summary(
         return await _use_cached_summary(
             job_id=job_id,
             summary_id=prepared_summary_id,
+            admin_client=admin_client,
+            job_start=job_start,
+            lease_token=lease_token,
+        )
+    if transcript_segments:
+        return await _create_evidence_summary(
+            job_id=job_id,
+            summary_id=prepared_summary_id,
+            transcript_id=transcript_id,
+            transcript_segments=transcript_segments,
+            settings=settings,
             admin_client=admin_client,
             job_start=job_start,
             lease_token=lease_token,
@@ -135,6 +159,7 @@ async def _fetch_cached_summary(
     *,
     job_id: str,
     transcript_id: str,
+    prompt_key: str,
     admin_client: AsyncClient,
     job_start: float,
     lease_token: str,
@@ -147,7 +172,7 @@ async def _fetch_cached_summary(
         stage="checking_cache",
         provider="openrouter",
         model=OPENROUTER_MODEL,
-        prompt_key=SUMMARY_PROMPT_KEY_DEFAULT,
+        prompt_key=prompt_key,
         transcript_id=transcript_id,
         level=logging.DEBUG,
     )
@@ -162,7 +187,7 @@ async def _fetch_cached_summary(
     cached_summary = await fetch_summary_by_keys(
         admin_client,
         transcript_id=transcript_id,
-        prompt_key=SUMMARY_PROMPT_KEY_DEFAULT,
+        prompt_key=prompt_key,
         summary_model=OPENROUTER_MODEL,
     )
     log_step(
@@ -310,6 +335,114 @@ async def _create_streaming_summary(
         markdown=markdown,
         cache_hit=False,
         flush_count=flush_count,
+    )
+
+
+async def _create_evidence_summary(
+    *,
+    job_id: str,
+    summary_id: str,
+    transcript_id: str,
+    transcript_segments: tuple[TranscriptSegment, ...],
+    settings: Settings,
+    admin_client: AsyncClient,
+    job_start: float,
+    lease_token: str,
+) -> SummaryResolution:
+    step_start = time.perf_counter()
+    transcript_chars = sum(len(segment.text) for segment in transcript_segments)
+    log_stage(
+        logger,
+        "worker.summary.started",
+        job_start=job_start,
+        stage="summarizing",
+        provider="openrouter",
+        model=OPENROUTER_MODEL,
+        prompt_key=SUMMARY_PROMPT_KEY_EVIDENCE,
+        summary_id=summary_id,
+        transcript_id=transcript_id,
+        transcript_chars=transcript_chars,
+        transcript_segments=len(transcript_segments),
+    )
+    await record_job_event_best_effort(
+        admin_client,
+        logger,
+        job_id=job_id,
+        event_type="summary_started",
+        stage="summarizing",
+        message="Evidence-backed summary provider started.",
+        metadata={
+            "provider": "openrouter",
+            "model": OPENROUTER_MODEL,
+            "prompt_key": SUMMARY_PROMPT_KEY_EVIDENCE,
+            "summary_id": summary_id,
+            "transcript_id": transcript_id,
+            "transcript_chars": transcript_chars,
+            "transcript_segments": len(transcript_segments),
+        },
+    )
+    await update_job_progress(
+        admin_client,
+        job_id=job_id,
+        lease_token=lease_token,
+        stage="summarizing",
+        progress=60,
+        status_message="Drafting your briefing",
+        summary_id=summary_id,
+    )
+
+    try:
+        contract = await summarize_transcript_with_evidence(
+            transcript_segments,
+            settings.openrouter_api_key,
+            deadline_seconds=settings.provider_summary_deadline_seconds,
+        )
+        markdown = render_briefing(contract, transcript_segments)
+        await update_summary_markdown(
+            admin_client,
+            summary_id=summary_id,
+            generation_token=lease_token,
+            summary_markdown=markdown,
+        )
+        await _record_first_markdown(
+            job_id=job_id,
+            summary_id=summary_id,
+            markdown_chars=len(markdown),
+            flush_count=1,
+            admin_client=admin_client,
+            job_start=job_start,
+        )
+        await mark_summary_ready(
+            admin_client,
+            summary_id=summary_id,
+            generation_token=lease_token,
+            summary_markdown=markdown,
+        )
+    except (Exception, asyncio.CancelledError):
+        with suppress(Exception):
+            await asyncio.shield(
+                mark_summary_failed(
+                    admin_client,
+                    summary_id=summary_id,
+                    generation_token=lease_token,
+                )
+            )
+        raise
+
+    await _record_summary_completed(
+        job_id=job_id,
+        summary_id=summary_id,
+        markdown=markdown,
+        flush_count=1,
+        fallback_used=False,
+        duration_ms=(time.perf_counter() - step_start) * 1000,
+        admin_client=admin_client,
+    )
+    return SummaryResolution(
+        summary_id=summary_id,
+        markdown=markdown,
+        cache_hit=False,
+        flush_count=1,
     )
 
 

@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 
 from fathom.application.usage import record_usage_for_job
 from fathom.core.config import Settings
-from fathom.core.constants import GROQ_MODEL, SUMMARY_PROMPT_KEY_DEFAULT
+from fathom.core.constants import GROQ_MODEL
 from fathom.core.logging import log_context
 from fathom.crud.supabase.job_events import record_job_event_best_effort
 from fathom.crud.supabase.jobs import mark_job_succeeded, update_job_progress
@@ -37,7 +37,6 @@ async def process_job(job: dict[str, object], settings: Settings, admin_client: 
                 "transcript_model": GROQ_MODEL,
                 "summary_provider": "openrouter",
                 "summary_model": OPENROUTER_MODEL,
-                "prompt_key": SUMMARY_PROMPT_KEY_DEFAULT,
             },
         )
         await update_job_progress(
@@ -70,6 +69,7 @@ async def process_job(job: dict[str, object], settings: Settings, admin_client: 
             requested_summary_id=requested_summary_id,
             transcript_id=transcript.transcript_id,
             transcript_text=transcript.transcript_text,
+            transcript_segments=transcript.segments,
             settings=settings,
             admin_client=admin_client,
             job_start=job_start,

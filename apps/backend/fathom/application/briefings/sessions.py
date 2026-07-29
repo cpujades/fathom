@@ -21,7 +21,10 @@ from fathom.application.briefings.contract import (
 from fathom.application.guards import validate_video_duration, validate_youtube_url
 from fathom.application.usage import ensure_usage_allowed, record_usage_for_job
 from fathom.core.config import Settings
-from fathom.core.constants import SUMMARY_PROMPT_KEY_DEFAULT
+from fathom.core.constants import (
+    SUMMARY_PROMPT_KEY_DEFAULT,
+    SUMMARY_PROMPT_KEY_EVIDENCE,
+)
 from fathom.core.errors import NotFoundError, UsageSettlementError
 from fathom.core.logging import log_context
 from fathom.crud.supabase.job_events import record_job_event_best_effort
@@ -42,6 +45,7 @@ from fathom.crud.supabase.transcripts import (
     fetch_transcript_by_hash,
     fetch_transcript_by_id,
     fetch_transcript_by_video_id,
+    fetch_transcript_segments,
 )
 from fathom.schemas.briefing_sessions import (
     BriefingSessionCreateRequest,
@@ -479,10 +483,16 @@ async def _find_ready_cached_summary(admin_client: Any, source: NormalizedSource
     if not transcript:
         return None
 
+    transcript_id = str(transcript["id"])
+    segments = await fetch_transcript_segments(
+        admin_client,
+        transcript_id=transcript_id,
+    )
+    prompt_key = SUMMARY_PROMPT_KEY_EVIDENCE if segments else SUMMARY_PROMPT_KEY_DEFAULT
     summary = await fetch_summary_by_keys(
         admin_client,
-        transcript_id=str(transcript["id"]),
-        prompt_key=SUMMARY_PROMPT_KEY_DEFAULT,
+        transcript_id=transcript_id,
+        prompt_key=prompt_key,
         summary_model=OPENROUTER_MODEL,
     )
     if not summary:
