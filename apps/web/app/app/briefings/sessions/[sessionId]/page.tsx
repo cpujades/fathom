@@ -237,7 +237,9 @@ export default function BriefingSessionPage() {
       lastEventIdRef.current = event.id;
       lastStreamActivityRef.current = Date.now();
       dispatchSession({ type: "stream_restored" });
-      if (event.event === "session.content_delta") {
+      if (event.event === "session.event") {
+        return;
+      } else if (event.event === "session.content_delta") {
         handleContentDelta(event.data as SessionContentDeltaPayload);
       } else if (event.event === "session.status") {
         handleStatusUpdate(event.data as SessionStatusPayload);

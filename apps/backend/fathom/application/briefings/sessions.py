@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
@@ -27,7 +27,11 @@ from fathom.core.constants import (
 )
 from fathom.core.errors import NotFoundError, UsageSettlementError
 from fathom.core.logging import log_context
-from fathom.crud.supabase.job_events import record_job_event_best_effort
+from fathom.crud.supabase.job_events import (
+    fetch_latest_job_event_sequence,
+    list_job_events_after,
+    record_job_event_best_effort,
+)
 from fathom.crud.supabase.jobs import (
     JobCreateResolution,
     JobLeaseLostError,
@@ -57,12 +61,15 @@ from fathom.services.summarizer import OPENROUTER_MODEL
 from fathom.services.supabase import (
     create_supabase_admin_client,
     create_supabase_user_client,
-    listen_for_notifications,
 )
 
 logger = logging.getLogger(__name__)
 
 KEEPALIVE_SECONDS = 15.0
+EVENT_POLL_SECONDS = 1.0
+SNAPSHOT_RECONCILE_SECONDS = 10.0
+EVENT_BATCH_LIMIT = 100
+MAX_REPLAY_EVENTS = 500
 GROQ_PROVIDER_MODEL = "groq:whisper-large-v3-turbo"
 
 
@@ -240,115 +247,13 @@ async def stream_briefing_session_events(
     settings: Settings,
     request: Request,
 ) -> StreamingResponse:
-    async def event_stream() -> AsyncIterator[str]:
-        user_client = await create_supabase_user_client(settings, auth.access_token)
-        admin_client = await create_supabase_admin_client(settings)
-        session_id_str = str(session_id)
-        with log_context(user_id=auth.user_id, session_id=session_id_str):
-            logger.info("briefing_session.stream.opened")
-        job = await fetch_job(user_client, session_id_str)
-        if str(job.get("status") or "") == "deleted":
-            raise NotFoundError("Briefing session not found.")
-        source = normalize_source(job["url"])
-        snapshot = await _build_session_snapshot(
-            user_client=user_client,
-            admin_client=admin_client,
-            job=job,
-            source=source,
-        )
-        yield "retry: 2000\n\n"
-        yield encode_sse_event(
-            event_type="session.snapshot",
-            event_id="1",
-            data=snapshot.model_dump(mode="json"),
-        )
-
-        if snapshot.state in {"ready", "failed"}:
-            with log_context(user_id=auth.user_id, session_id=session_id_str):
-                logger.info("briefing_session.stream.closed", extra={"state": snapshot.state})
-            return
-
-        current_signature = _snapshot_signature(snapshot)
-        current_markdown = snapshot.briefing_markdown or ""
-        event_counter = 2
-
-        async with listen_for_notifications(settings, "job_updates") as queue:
-            while True:
-                if await request.is_disconnected():
-                    with log_context(user_id=auth.user_id, session_id=session_id_str):
-                        logger.info("briefing_session.stream.disconnected")
-                    return
-
-                try:
-                    payload = await asyncio.wait_for(queue.get(), timeout=KEEPALIVE_SECONDS)
-                except TimeoutError:
-                    yield ": keepalive\n\n"
-                    continue
-
-                if str(payload.get("id")) != session_id_str:
-                    continue
-
-                refreshed_job = await fetch_job(user_client, session_id_str)
-                refreshed_source = normalize_source(refreshed_job["url"])
-                refreshed_snapshot = await _build_session_snapshot(
-                    user_client=user_client,
-                    admin_client=admin_client,
-                    job=refreshed_job,
-                    source=refreshed_source,
-                )
-                refreshed_markdown = refreshed_snapshot.briefing_markdown or ""
-                refreshed_signature = _snapshot_signature(refreshed_snapshot)
-                markdown_changed = refreshed_markdown != current_markdown
-                if refreshed_signature == current_signature and not markdown_changed:
-                    continue
-
-                if markdown_changed and refreshed_markdown.startswith(current_markdown):
-                    delta = refreshed_markdown[len(current_markdown) :]
-                    if delta:
-                        yield encode_sse_event(
-                            event_type="session.content_delta",
-                            event_id=str(event_counter),
-                            data=_build_content_delta_event(refreshed_snapshot, delta, len(refreshed_markdown)),
-                        )
-                        event_counter += 1
-                else:
-                    if refreshed_snapshot.state in {"ready", "failed"} or markdown_changed:
-                        event_type = "session.updated"
-                        if refreshed_snapshot.state == "ready":
-                            event_type = "session.ready"
-                        elif refreshed_snapshot.state == "failed":
-                            event_type = "session.failed"
-
-                        yield encode_sse_event(
-                            event_type=event_type,
-                            event_id=str(event_counter),
-                            data=refreshed_snapshot.model_dump(mode="json"),
-                        )
-                        event_counter += 1
-
-                if refreshed_signature != current_signature and refreshed_snapshot.state not in {"ready", "failed"}:
-                    yield encode_sse_event(
-                        event_type="session.status",
-                        event_id=str(event_counter),
-                        data=_build_status_event(refreshed_snapshot),
-                    )
-                    event_counter += 1
-
-                current_signature = refreshed_signature
-                current_markdown = refreshed_markdown
-
-                if refreshed_snapshot.state in {"ready", "failed"}:
-                    yield encode_sse_event(
-                        event_type="session.snapshot",
-                        event_id=str(event_counter),
-                        data=refreshed_snapshot.model_dump(mode="json"),
-                    )
-                    with log_context(user_id=auth.user_id, session_id=session_id_str):
-                        logger.info("briefing_session.stream.closed", extra={"state": refreshed_snapshot.state})
-                    return
-
     return StreamingResponse(
-        event_stream(),
+        _session_event_stream(
+            session_id=session_id,
+            auth=auth,
+            settings=settings,
+            request=request,
+        ),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -356,6 +261,231 @@ async def stream_briefing_session_events(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+async def _session_event_stream(
+    *,
+    session_id: UUID,
+    auth: AuthContext,
+    settings: Settings,
+    request: Request,
+) -> AsyncIterator[str]:
+    user_client = await create_supabase_user_client(settings, auth.access_token)
+    admin_client = await create_supabase_admin_client(settings)
+    session_id_str = str(session_id)
+    with log_context(user_id=auth.user_id, session_id=session_id_str):
+        logger.info("briefing_session.stream.opened")
+
+    job = await fetch_job(user_client, session_id_str)
+    if str(job.get("status") or "") == "deleted":
+        raise NotFoundError("Briefing session not found.")
+
+    latest_sequence = await fetch_latest_job_event_sequence(user_client, job_id=session_id_str)
+    requested_cursor = _parse_last_event_id(request.headers.get("last-event-id"))
+    cursor = latest_sequence if requested_cursor is None else min(requested_cursor, latest_sequence)
+
+    yield "retry: 2000\n\n"
+    if requested_cursor is not None:
+        replay_events, cursor = await _replay_session_events(
+            user_client=user_client,
+            session_id=session_id_str,
+            cursor=cursor,
+            latest_sequence=latest_sequence,
+        )
+        for replay_event in replay_events:
+            yield replay_event
+
+    snapshot = await _build_session_snapshot(
+        user_client=user_client,
+        admin_client=admin_client,
+        job=job,
+        source=normalize_source(job["url"]),
+    )
+    yield encode_sse_event(
+        event_type="session.snapshot",
+        event_id=str(cursor),
+        data=snapshot.model_dump(mode="json"),
+    )
+
+    if snapshot.state in {"ready", "failed"}:
+        _log_stream_closed(auth.user_id, session_id_str, snapshot.state)
+        return
+
+    current_signature = _snapshot_signature(snapshot)
+    current_markdown = snapshot.briefing_markdown or ""
+    seconds_since_snapshot = 0.0
+    seconds_since_keepalive = 0.0
+
+    while True:
+        if await request.is_disconnected():
+            with log_context(user_id=auth.user_id, session_id=session_id_str):
+                logger.info("briefing_session.stream.disconnected")
+            return
+
+        await asyncio.sleep(EVENT_POLL_SECONDS)
+        seconds_since_snapshot += EVENT_POLL_SECONDS
+        seconds_since_keepalive += EVENT_POLL_SECONDS
+        events = await list_job_events_after(
+            user_client,
+            job_id=session_id_str,
+            after_sequence_id=cursor,
+            limit=EVENT_BATCH_LIMIT,
+        )
+        for event in events:
+            sequence_id = _event_sequence_id(event)
+            if sequence_id is None:
+                continue
+            cursor = sequence_id
+            yield _encode_replayed_event(event, sequence_id)
+
+        if events or seconds_since_snapshot >= SNAPSHOT_RECONCILE_SECONDS:
+            latest_sequence = await fetch_latest_job_event_sequence(user_client, job_id=session_id_str)
+            cursor = max(cursor, latest_sequence)
+            refreshed_job = await fetch_job(user_client, session_id_str)
+            refreshed_snapshot = await _build_session_snapshot(
+                user_client=user_client,
+                admin_client=admin_client,
+                job=refreshed_job,
+                source=normalize_source(refreshed_job["url"]),
+            )
+            for encoded in _encode_snapshot_changes(
+                previous_signature=current_signature,
+                previous_markdown=current_markdown,
+                snapshot=refreshed_snapshot,
+                cursor=cursor,
+            ):
+                yield encoded
+
+            current_signature = _snapshot_signature(refreshed_snapshot)
+            current_markdown = refreshed_snapshot.briefing_markdown or ""
+            seconds_since_snapshot = 0.0
+            if refreshed_snapshot.state in {"ready", "failed"}:
+                _log_stream_closed(auth.user_id, session_id_str, refreshed_snapshot.state)
+                return
+
+        if seconds_since_keepalive >= KEEPALIVE_SECONDS:
+            yield ": keepalive\n\n"
+            seconds_since_keepalive = 0.0
+
+
+async def _replay_session_events(
+    *,
+    user_client: Any,
+    session_id: str,
+    cursor: int,
+    latest_sequence: int,
+) -> tuple[list[str], int]:
+    encoded_events: list[str] = []
+    replayed = 0
+    while cursor < latest_sequence and replayed < MAX_REPLAY_EVENTS:
+        previous_cursor = cursor
+        events = await list_job_events_after(
+            user_client,
+            job_id=session_id,
+            after_sequence_id=cursor,
+            limit=min(EVENT_BATCH_LIMIT, MAX_REPLAY_EVENTS - replayed),
+        )
+        if not events:
+            break
+        for event in events:
+            sequence_id = _event_sequence_id(event)
+            if sequence_id is None:
+                continue
+            cursor = sequence_id
+            replayed += 1
+            encoded_events.append(_encode_replayed_event(event, sequence_id))
+        if cursor == previous_cursor:
+            break
+
+    if cursor < latest_sequence:
+        logger.warning(
+            "briefing_session.stream.replay_truncated",
+            extra={
+                "session_id": session_id,
+                "replayed_events": replayed,
+                "latest_sequence_id": latest_sequence,
+            },
+        )
+        cursor = latest_sequence
+    return encoded_events, cursor
+
+
+def _encode_snapshot_changes(
+    *,
+    previous_signature: tuple[Any, ...],
+    previous_markdown: str,
+    snapshot: BriefingSessionResponse,
+    cursor: int,
+) -> Iterator[str]:
+    markdown = snapshot.briefing_markdown or ""
+    signature = _snapshot_signature(snapshot)
+    markdown_changed = markdown != previous_markdown
+
+    if markdown_changed and markdown.startswith(previous_markdown):
+        delta = markdown[len(previous_markdown) :]
+        if delta:
+            yield encode_sse_event(
+                event_type="session.content_delta",
+                event_id=str(cursor),
+                data=_build_content_delta_event(snapshot, delta, len(markdown)),
+            )
+    elif snapshot.state in {"ready", "failed"} or markdown_changed:
+        event_type = "session.updated"
+        if snapshot.state == "ready":
+            event_type = "session.ready"
+        elif snapshot.state == "failed":
+            event_type = "session.failed"
+        yield encode_sse_event(
+            event_type=event_type,
+            event_id=str(cursor),
+            data=snapshot.model_dump(mode="json"),
+        )
+
+    if signature != previous_signature and snapshot.state not in {"ready", "failed"}:
+        yield encode_sse_event(
+            event_type="session.status",
+            event_id=str(cursor),
+            data=_build_status_event(snapshot),
+        )
+
+    if snapshot.state in {"ready", "failed"}:
+        yield encode_sse_event(
+            event_type="session.snapshot",
+            event_id=str(cursor),
+            data=snapshot.model_dump(mode="json"),
+        )
+
+
+def _parse_last_event_id(value: str | None) -> int | None:
+    if value is None:
+        return None
+    try:
+        cursor = int(value)
+    except ValueError:
+        return None
+    return cursor if cursor >= 0 else None
+
+
+def _event_sequence_id(event: dict[str, Any]) -> int | None:
+    value = event.get("sequence_id")
+    return value if isinstance(value, int) and value > 0 else None
+
+
+def _encode_replayed_event(event: dict[str, Any], sequence_id: int) -> str:
+    return encode_sse_event(
+        event_type="session.event",
+        event_id=str(sequence_id),
+        data={
+            "event_type": event.get("event_type"),
+            "stage": event.get("stage"),
+            "created_at": event.get("created_at"),
+        },
+    )
+
+
+def _log_stream_closed(user_id: str, session_id: str, state: str) -> None:
+    with log_context(user_id=user_id, session_id=session_id):
+        logger.info("briefing_session.stream.closed", extra={"state": state})
 
 
 async def _build_session_snapshot(
