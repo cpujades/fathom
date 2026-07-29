@@ -148,7 +148,12 @@ async def _create_transcript(
             level=logging.DEBUG,
         )
         download_start = time.perf_counter()
-        download_result = await asyncio.to_thread(download_audio, url, tmp_dir)
+        download_result = await asyncio.to_thread(
+            download_audio,
+            url,
+            tmp_dir,
+            deadline_seconds=settings.source_download_deadline_seconds,
+        )
         download_duration_ms = (time.perf_counter() - download_start) * 1000
         log_step(
             logger,
@@ -174,12 +179,11 @@ async def _create_transcript(
         )
 
         object_key = f"groq-audio/{uuid.uuid4().hex}.{download_result.subtype or 'bin'}"
-        audio_bytes = await asyncio.to_thread(download_result.path.read_bytes)
         await upload_object(
             admin_client,
             bucket=SUPABASE_GROQ_BUCKET,
             object_key=object_key,
-            data=audio_bytes,
+            data=download_result.path,
             content_type=download_result.mime_type or "application/octet-stream",
         )
         try:

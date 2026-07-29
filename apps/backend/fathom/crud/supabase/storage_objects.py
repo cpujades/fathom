@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from storage3.exceptions import StorageApiError
 
 from fathom.core.errors import ConfigurationError, ExternalServiceError
@@ -38,7 +40,7 @@ async def upload_object(
     *,
     bucket: str,
     object_key: str,
-    data: bytes,
+    data: bytes | Path,
     content_type: str,
 ) -> None:
     if not bucket:
