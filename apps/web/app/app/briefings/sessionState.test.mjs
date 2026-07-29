@@ -127,3 +127,13 @@ test("stream loss and restore are explicit connection states", () => {
   assert.equal(restored.streamHealth, "live");
   assert.equal(restored.connectionNotice, null);
 });
+
+test("an initial snapshot failure becomes a recoverable load failure", () => {
+  const state = briefingSessionReducer(createInitialSessionUiState(), {
+    type: "snapshot_load_failed"
+  });
+
+  assert.equal(state.initialSnapshotLoaded, true);
+  assert.equal(state.phase, "load_failed");
+  assert.equal(state.session, null);
+});

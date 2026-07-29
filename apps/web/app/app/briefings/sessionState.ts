@@ -33,7 +33,14 @@ export type SessionStatusPayload = {
   error_message: string | null;
 };
 
-export type SessionUiPhase = "loading_session" | "processing" | "streaming" | "delivering" | "ready" | "failed";
+export type SessionUiPhase =
+  | "loading_session"
+  | "load_failed"
+  | "processing"
+  | "streaming"
+  | "delivering"
+  | "ready"
+  | "failed";
 export type StreamHealth = "live" | "reconnecting";
 
 export type SessionUiState = {
@@ -286,6 +293,9 @@ function withDerivedPhase(state: Omit<SessionUiState, "phase">): SessionUiState 
 function deriveSessionUiPhase(state: Omit<SessionUiState, "phase">): SessionUiPhase {
   if (!state.initialSnapshotLoaded) {
     return "loading_session";
+  }
+  if (!state.session) {
+    return "load_failed";
   }
   if (state.session?.state === "failed") {
     return "failed";

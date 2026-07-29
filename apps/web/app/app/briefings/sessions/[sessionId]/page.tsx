@@ -11,7 +11,7 @@ import { AppShellHeader } from "../../../../components/AppShellHeader";
 import { StreamingMarkdown } from "../../../../components/StreamingMarkdown";
 import { useAppShell } from "../../../../components/AppShellProvider";
 import chrome from "../../../../components/app-chrome.module.css";
-import { getApiErrorMessage } from "../../../../lib/apiErrors";
+import { getApiErrorCode, getApiErrorMessage } from "../../../../lib/apiErrors";
 import { getAccountLabel } from "../../../../lib/accountLabel";
 import { formatExactDuration } from "../../../../lib/format";
 import { logger } from "../../../../lib/logger";
@@ -30,6 +30,11 @@ import {
   type SessionContentDeltaPayload,
   type SessionStatusPayload
 } from "../../sessionState";
+import {
+  getFailurePresentation,
+  getFinalizationPresentation,
+  isCreditOrPaymentError
+} from "../../sessionPresentation";
 import styles from "../../session.module.css";
 
 const RECONNECT_BASE_DELAY_MS = 1000;
@@ -126,14 +131,6 @@ type TakeawayItem = {
 
 type BriefingSectionKind = "deepRead" | "standard";
 
-type FailurePresentation = {
-  actionHref: string;
-  actionLabel: string;
-  description: string;
-  detail: string;
-  title: string;
-};
-
 export default function BriefingSessionPage() {
   const router = useRouter();
   const params = useParams();
@@ -160,6 +157,8 @@ export default function BriefingSessionPage() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteConfirming, setDeleteConfirming] = useState(false);
   const [sessionLoadError, setSessionLoadError] = useState<string | null>(null);
+  const [sessionLoadErrorCode, setSessionLoadErrorCode] = useState<string | null>(null);
+  const [sessionLoadAttempt, setSessionLoadAttempt] = useState(0);
   const [actionError, setActionError] = useState<string | null>(null);
   const [readingProgress, setReadingProgress] = useState(0);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -197,6 +196,7 @@ export default function BriefingSessionPage() {
     setDeleteLoading(false);
     setDeleteConfirming(false);
     setSessionLoadError(null);
+    setSessionLoadErrorCode(null);
     setActionError(null);
 
     const prefetchedSnapshot = getCachedSessionSnapshot(sessionId);
@@ -211,6 +211,7 @@ export default function BriefingSessionPage() {
       terminalStateRef.current = terminalStateRef.current || isTerminalSessionState(snapshot.state);
       lastStreamActivityRef.current = Date.now();
       setSessionLoadError(null);
+      setSessionLoadErrorCode(null);
     };
 
     const handleStatusUpdate = (statusUpdate: SessionStatusPayload) => {
@@ -266,6 +267,7 @@ export default function BriefingSessionPage() {
         dispatchSession({ type: "snapshot_load_failed" });
         if (blocking) {
           setSessionLoadError(getApiErrorMessage(error, "Unable to fetch briefing session."));
+          setSessionLoadErrorCode(getApiErrorCode(error));
         } else {
           dispatchSession({
             type: "stream_lost",
@@ -438,7 +440,7 @@ export default function BriefingSessionPage() {
     return () => {
       abortController.abort();
     };
-  }, [accessToken, loading, router, sessionId, signInPath]);
+  }, [accessToken, loading, router, sessionId, sessionLoadAttempt, signInPath]);
 
   const handlePdfAction = async () => {
     if (!session?.briefing_id || !accessToken) {
@@ -532,8 +534,9 @@ export default function BriefingSessionPage() {
 
   const isReady = phase === "ready";
   const isFailed = phase === "failed";
+  const isLoadFailed = phase === "load_failed";
   const isStreaming = phase === "streaming";
-  const failurePresentation = getFailurePresentation(session, sessionLoadError);
+  const failurePresentation = getFailurePresentation(session, sessionLoadError, sessionLoadErrorCode);
   const rawMarkdown = streamedMarkdown || session?.briefing_markdown || "";
   const markdownToRender = removeGenericBriefingHeading(rawMarkdown);
   const parsedBriefing = useMemo(
@@ -556,25 +559,38 @@ export default function BriefingSessionPage() {
   const longRunningNotice = getLongRunningNotice(session?.state ?? null, elapsedSeconds);
   const headline = isReady
     ? parsedBriefing.title
-    : isFailed
+    : isFailed || isLoadFailed
       ? failurePresentation.title
       : hasMarkdown
         ? parsedBriefing.title
         : session?.source_title || "Opening briefing";
-  const subhead = isFailed ? failurePresentation.description : "";
+  const subhead = isFailed || isLoadFailed ? failurePresentation.description : "";
   const creditCtaMessage = session?.error_message ?? sessionLoadError;
-  const showCreditCta = failurePresentation.actionHref === "/app/billing#billing-offers" || Boolean(creditCtaMessage && isCreditError(creditCtaMessage));
+  const showCreditCta =
+    failurePresentation.actionHref === "/app/billing#billing-offers" ||
+    Boolean(creditCtaMessage && isCreditOrPaymentError(creditCtaMessage));
   const canShowReader = phase === "streaming" || phase === "ready" || phase === "failed";
-  const showLifecyclePanel = phase !== "ready" && phase !== "failed";
+  const showLifecyclePanel = phase !== "ready" && phase !== "failed" && phase !== "load_failed";
   const lifecycleStepIndex = getLifecycleStepIndex(session?.state ?? null, phase);
   const lifecycleKicker = phase === "loading_session" ? "Reader" : "Briefing in progress";
-  const lifecycleTitle = phase === "loading_session" ? "Opening reader" : stageLabel;
-  const lifecycleHint =
+  const defaultLifecycleTitle = phase === "loading_session" ? "Opening reader" : stageLabel;
+  const defaultLifecycleHint =
     phase === "loading_session"
       ? "A live reader is being prepared."
       : phaseHint;
+  const finalizationPresentation = getFinalizationPresentation(
+    session?.error_code,
+    defaultLifecycleTitle,
+    defaultLifecycleHint
+  );
+  const lifecycleTitle = finalizationPresentation.label;
+  const lifecycleHint = finalizationPresentation.hint;
   const lifecycleStatusLabel =
-    streamHealth === "reconnecting" ? "Reconnecting" : phase === "loading_session" ? "Opening" : "Live";
+    streamHealth === "reconnecting"
+      ? "Reconnecting"
+      : phase === "loading_session"
+        ? "Opening"
+        : finalizationPresentation.status;
   const primaryPdfActionLabel = pdfLoading
     ? session?.briefing_has_pdf
       ? "Opening PDF..."
@@ -587,8 +603,8 @@ export default function BriefingSessionPage() {
   const sourceLabel = session?.source_type === "youtube" ? "YouTube" : "Source";
   const sourceDurationLabel = session?.source_duration_seconds ? formatExactDuration(session.source_duration_seconds) : null;
   const hasTopActions = canShowReader && !isFailed;
-  const heroEyebrow = isFailed ? "Briefing failed" : !isReady ? stageLabel : "";
-  const showHeroTopline = Boolean(heroEyebrow || isFailed);
+  const heroEyebrow = isFailed ? "Briefing failed" : isLoadFailed ? "Reader unavailable" : !isReady ? stageLabel : "";
+  const showHeroTopline = Boolean(heroEyebrow || isFailed || isLoadFailed);
   const navigationSections = [
     parsedBriefing.summary ? { id: "briefing-summary", label: "Summary" } : null,
     parsedBriefing.takeaways ? { id: "briefing-takeaways", label: "Takeaways" } : null,
@@ -734,6 +750,7 @@ export default function BriefingSessionPage() {
                   {heroEyebrow ? <p className={chrome.heroEyebrow}>{heroEyebrow}</p> : null}
                   <div className={chrome.heroMeta}>
                     {isFailed ? <span className={chrome.statusPillDanger}>Failed</span> : null}
+                    {isLoadFailed ? <span className={chrome.statusPillWarning}>Unavailable</span> : null}
                   </div>
                 </div>
               ) : null}
@@ -746,6 +763,28 @@ export default function BriefingSessionPage() {
               {subhead ? <p className={styles.sessionDeck}>{subhead}</p> : null}
             </div>
           </div>
+
+          {isLoadFailed ? (
+            <div className={styles.errorCard} role="alert">
+              <p>{failurePresentation.detail}</p>
+              <div className={chrome.actionRow}>
+                <button
+                  className={chrome.primaryButton}
+                  type="button"
+                  onClick={() => {
+                    setSessionLoadError(null);
+                    setSessionLoadErrorCode(null);
+                    setSessionLoadAttempt((current) => current + 1);
+                  }}
+                >
+                  Try opening again
+                </button>
+                <Link className={chrome.secondaryButton} href={failurePresentation.actionHref}>
+                  {failurePresentation.actionLabel}
+                </Link>
+              </div>
+            </div>
+          ) : null}
 
           {showLifecyclePanel ? (
             <div className={styles.lifecyclePanel} aria-live="polite">
@@ -790,19 +829,19 @@ export default function BriefingSessionPage() {
               </div>
 
               {longRunningNotice ? (
-                <div className={styles.statusNoticeCard}>
+                <div className={styles.statusNoticeCard} role="status">
                   <p>{longRunningNotice}</p>
                 </div>
               ) : null}
 
               {connectionNotice ? (
-                <div className={styles.connectionCard}>
+                <div className={styles.connectionCard} role="status">
                   <p>{connectionNotice}</p>
                 </div>
               ) : null}
 
               {sessionLoadError ? (
-                <div className={styles.errorCard}>
+                <div className={styles.errorCard} role="alert">
                   <p>{sessionLoadError}</p>
                   {showCreditCta ? (
                     <div className={chrome.actionRow}>
@@ -844,7 +883,11 @@ export default function BriefingSessionPage() {
               </div>
             </div>
           ) : null}
-          {pdfError ? <p className={`${chrome.inlineStatus} ${chrome.inlineStatusError}`}>{pdfError}</p> : null}
+          {pdfError ? (
+            <p className={`${chrome.inlineStatus} ${chrome.inlineStatusError}`} role="alert">
+              {pdfError}
+            </p>
+          ) : null}
         </section>
 
         {canShowReader ? (
@@ -879,7 +922,7 @@ export default function BriefingSessionPage() {
 
             <article className={styles.briefingReader}>
               {connectionNotice && !showLifecyclePanel ? (
-                <div className={styles.connectionCard}>
+                <div className={styles.connectionCard} role="status">
                   <p>{connectionNotice}</p>
                 </div>
               ) : null}
@@ -1057,7 +1100,7 @@ export default function BriefingSessionPage() {
               </div>
 
               {isFailed ? (
-                <div className={styles.errorCard}>
+                <div className={styles.errorCard} role="alert">
                   <p>{failurePresentation.detail}</p>
                   {failurePresentation.actionHref ? (
                     <div className={chrome.actionRow}>
@@ -1069,7 +1112,7 @@ export default function BriefingSessionPage() {
                 </div>
               ) : null}
               {actionError ? (
-                <div className={styles.errorCard}>
+                <div className={styles.errorCard} role="alert">
                   <p>{actionError}</p>
                 </div>
               ) : null}
@@ -1183,11 +1226,6 @@ async function sleep(ms: number, signal: AbortSignal) {
 
     signal.addEventListener("abort", abort, { once: true });
   });
-}
-
-function isCreditError(message: string): boolean {
-  const normalized = message.toLowerCase();
-  return normalized.includes("insufficient credits") || normalized.includes("no remaining credits");
 }
 
 function removeGenericBriefingHeading(markdown: string): string {
@@ -1452,102 +1490,6 @@ function getLongRunningNotice(state: BriefingSessionResponse["state"] | null, el
   }
 
   return null;
-}
-
-function getFailurePresentation(
-  session: BriefingSessionResponse | null,
-  sessionLoadError: string | null
-): FailurePresentation {
-  const code = session?.error_code ?? "";
-  const rawMessage = session?.error_message ?? sessionLoadError ?? "";
-  const normalizedMessage = rawMessage.toLowerCase();
-
-  if (isCreditError(rawMessage)) {
-    return {
-      actionHref: "/app/billing#billing-offers",
-      actionLabel: "Get more listening time",
-      title: "More listening time needed",
-      description: "This source needs more minutes than are currently available.",
-      detail: "Add more listening time, then start the briefing again."
-    };
-  }
-
-  if (
-    code === "invalid_request" ||
-    code === "invalid_job_payload" ||
-    code === "source_download_failed" ||
-    normalizedMessage.includes("unsupported") ||
-    normalizedMessage.includes("no audio streams") ||
-    normalizedMessage.includes("youtube downloader") ||
-    normalizedMessage.includes("download audio")
-  ) {
-    return {
-      actionHref: "/app",
-      actionLabel: "Try another source",
-      title: "Source not supported",
-      description: "Talven could not read usable audio from this link.",
-      detail: "Try a public YouTube or podcast URL. Private, unavailable, or audio-free sources cannot be briefed yet."
-    };
-  }
-
-  if (
-    code === "transcription_failed" ||
-    normalizedMessage.includes("groq") ||
-    normalizedMessage.includes("transcript") ||
-    normalizedMessage.includes("transcription") ||
-    normalizedMessage.includes("empty transcript")
-  ) {
-    return {
-      actionHref: "/app",
-      actionLabel: "Start another briefing",
-      title: "Transcript failed",
-      description: "The source opened, but the audio could not be transcribed.",
-      detail: "This is usually caused by unavailable audio, provider trouble, or an empty transcript. Try again in a moment or use another source."
-    };
-  }
-
-  if (
-    code === "summary_failed" ||
-    normalizedMessage.includes("openrouter") ||
-    normalizedMessage.includes("summary") ||
-    normalizedMessage.includes("summar")
-  ) {
-    return {
-      actionHref: "/app",
-      actionLabel: "Start another briefing",
-      title: "Briefing failed",
-      description: "The transcript was available, but the written briefing could not be completed.",
-      detail: "The summarizer did not return a usable briefing. Try again in a moment; if it repeats, this source may need a shorter or cleaner input."
-    };
-  }
-
-  if (code === "max_attempts_exceeded") {
-    return {
-      actionHref: "/app",
-      actionLabel: "Start another briefing",
-      title: "Briefing took too long",
-      description: "Talven retried the job but could not finish it.",
-      detail: "This can happen with provider timeouts or unusually difficult sources. Try again later or use another source."
-    };
-  }
-
-  if (code === "configuration_error") {
-    return {
-      actionHref: "/app",
-      actionLabel: "Back to workspace",
-      title: "Service configuration issue",
-      description: "Talven could not complete this briefing because a required service is unavailable.",
-      detail: "This needs an operator fix. The source was not the problem."
-    };
-  }
-
-  return {
-    actionHref: "/app",
-    actionLabel: "Start another briefing",
-    title: "Briefing stopped",
-    description: "Something interrupted the run before the final briefing was delivered.",
-    detail: rawMessage || "The briefing could not be completed. Try again in a moment or use another source."
-  };
 }
 
 function getLifecycleStepIndex(

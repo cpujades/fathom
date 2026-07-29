@@ -140,6 +140,7 @@ export default function BriefingsPage() {
   const [confirmDeleteSessionId, setConfirmDeleteSessionId] = useState<string | null>(null);
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
   const [openingSessionId, setOpeningSessionId] = useState<string | null>(null);
+  const [libraryNotice, setLibraryNotice] = useState<string | null>(null);
 
   const deferredSearch = useDeferredValue(searchInput.trim());
   const activeBriefingCount = useMemo(
@@ -315,6 +316,7 @@ export default function BriefingsPage() {
     }
 
     setDeletingSessionId(entry.session_id);
+    setLibraryNotice(null);
     try {
       const api = createApiClient(accessToken);
       const { error: deleteError } = await api.DELETE("/briefing-sessions/{session_id}", {
@@ -343,6 +345,7 @@ export default function BriefingsPage() {
       });
       setConfirmDeleteSessionId(null);
       setError(null);
+      setLibraryNotice("Briefing removed from your library.");
     } catch (err) {
       setError(getApiErrorMessage(err, "Unable to remove this briefing from history."));
     } finally {
@@ -412,8 +415,16 @@ export default function BriefingsPage() {
             </label>
           </div>
 
+          {libraryNotice ? (
+            <p className={chrome.inlineStatus} role="status">
+              {libraryNotice}
+            </p>
+          ) : null}
+
           {loading && briefings.items.length === 0 ? (
-            <p className={chrome.emptyState}>Loading your briefing library…</p>
+            <p className={chrome.emptyState} role="status">
+              Loading your briefing library…
+            </p>
           ) : briefings.items.length === 0 ? (
             <p className={chrome.emptyState}>{helperText}</p>
           ) : (
@@ -559,7 +570,11 @@ export default function BriefingsPage() {
             </div>
           ) : null}
 
-          {error ? <p className={`${chrome.inlineStatus} ${chrome.inlineStatusError}`}>{error}</p> : null}
+          {error ? (
+            <p className={`${chrome.inlineStatus} ${chrome.inlineStatusError}`} role="alert">
+              {error}
+            </p>
+          ) : null}
         </section>
       </main>
     </div>
