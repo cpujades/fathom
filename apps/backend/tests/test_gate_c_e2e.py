@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gc
 import os
 import pathlib
 import re
@@ -7,6 +8,7 @@ import secrets
 import time
 import unittest
 import uuid
+import warnings
 from collections.abc import AsyncGenerator
 from typing import Any, cast
 from unittest.mock import AsyncMock, patch
@@ -14,7 +16,6 @@ from unittest.mock import AsyncMock, patch
 import asyncpg
 import httpx
 from starlette.requests import Request
-from supabase_auth.types import SignInWithEmailAndPasswordCredentials
 
 from fathom.api.deps.auth import AuthContext
 from fathom.application.briefings import sessions as session_application
@@ -31,10 +32,9 @@ from fathom.schemas.transcripts import TranscriptionResult, TranscriptSegment
 from fathom.services.downloader import DownloadResult, VideoMetadata
 from fathom.services.provider_resilience import ProviderFailureKind
 from fathom.services.summarizer import SummarizationError
-from fathom.services.supabase import create_supabase_admin_client
+from fathom.services.supabase import close_supabase_client, create_supabase_admin_client
 from fathom.services.transcriber import TranscriptionError
 from supabase import AsyncClient as SupabaseAsyncClient
-from supabase import create_async_client
 
 REQUIRED_GATE_C_ENV = (
     "FATHOM_GATE_C_SUPABASE_URL",
@@ -52,6 +52,9 @@ SSE_ID_PATTERN = re.compile(r"^id: (\d+)$", re.MULTILINE)
 )
 class AuthenticatedGateCE2ETests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
+        self.warning_context = warnings.catch_warnings(record=True)
+        self.caught_warnings = self.warning_context.__enter__()
+        warnings.simplefilter("always", ResourceWarning)
         self.run_id = uuid.uuid4().hex
         self.user_id: str | None = None
         self.plan_id = str(uuid.uuid4())
@@ -110,10 +113,19 @@ class AuthenticatedGateCE2ETests(unittest.IsolatedAsyncioTestCase):
             )
         except Exception:
             await self._cleanup()
+            self.warning_context.__exit__(None, None, None)
             raise
 
     async def asyncTearDown(self) -> None:
-        await self._cleanup()
+        try:
+            await self._cleanup()
+            gc.collect()
+            resource_warnings = [
+                str(caught.message) for caught in self.caught_warnings if issubclass(caught.category, ResourceWarning)
+            ]
+            self.assertEqual(resource_warnings, [])
+        finally:
+            self.warning_context.__exit__(None, None, None)
 
     async def test_authenticated_product_and_recovery_journeys(self) -> None:
         api = self._api()
@@ -413,20 +425,24 @@ class AuthenticatedGateCE2ETests(unittest.IsolatedAsyncioTestCase):
             self.fail("Supabase Auth did not return the ephemeral user.")
         self.user_id = str(created.user.id)
 
-        public_client = await create_async_client(
-            self.settings.supabase_url,
-            self.settings.supabase_publishable_key,
-        )
-        signed_in = await public_client.auth.sign_in_with_password(
-            SignInWithEmailAndPasswordCredentials(
-                email=email,
-                password=password,
+        async with httpx.AsyncClient(timeout=20) as auth_client:
+            signed_in = await auth_client.post(
+                f"{self.settings.supabase_url.rstrip('/')}/auth/v1/token",
+                params={"grant_type": "password"},
+                headers={
+                    "apikey": self.settings.supabase_publishable_key,
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "email": email,
+                    "password": password,
+                },
             )
-        )
-        session = signed_in.session
-        if session is None:
+        signed_in.raise_for_status()
+        access_token = signed_in.json().get("access_token")
+        if not isinstance(access_token, str) or not access_token:
             raise AssertionError("Supabase Auth did not return an ephemeral session.")
-        return session.access_token
+        return access_token
 
     async def _cleanup(self) -> None:
         first_error: Exception | None = None
@@ -449,6 +465,12 @@ class AuthenticatedGateCE2ETests(unittest.IsolatedAsyncioTestCase):
         try:
             if self.admin_client is not None and self.user_id is not None:
                 await self.admin_client.auth.admin.delete_user(self.user_id)
+        except Exception as exc:
+            first_error = first_error or exc
+
+        try:
+            if self.admin_client is not None:
+                await close_supabase_client(self.admin_client)
         except Exception as exc:
             first_error = first_error or exc
 

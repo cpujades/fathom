@@ -32,7 +32,11 @@ from fathom.services.provider_resilience import (
     RetryPolicy,
     compute_retry_delay,
 )
-from fathom.services.supabase import create_supabase_admin_client, listen_for_notifications
+from fathom.services.supabase import (
+    create_supabase_admin_client,
+    listen_for_notifications,
+    managed_supabase_client,
+)
 from supabase import AsyncClient
 
 logger = logging.getLogger(__name__)
@@ -431,7 +435,16 @@ async def _run_loop(
     if shutdown_event is None:
         shutdown_event = asyncio.Event()
 
-    admin_client = await create_supabase_admin_client(settings)
+    async with managed_supabase_client(await create_supabase_admin_client(settings)) as admin_client:
+        await _run_loop_with_client(settings, shutdown_event=shutdown_event, admin_client=admin_client)
+
+
+async def _run_loop_with_client(
+    settings: Settings,
+    *,
+    shutdown_event: asyncio.Event,
+    admin_client: AsyncClient,
+) -> None:
     max_concurrent_jobs = max(1, settings.worker_max_concurrent_jobs)
     notify_timeout_seconds = WORKER_JOB_NOTIFY_TIMEOUT_SECONDS
     running_tasks: set[asyncio.Task[None]] = set()

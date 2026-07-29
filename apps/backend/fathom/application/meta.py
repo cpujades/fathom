@@ -9,7 +9,11 @@ from fathom.core.config import Settings
 from fathom.core.errors import ConfigurationError, NotReadyError
 from fathom.schemas.meta import HealthResponse, ReadyResponse, StatusResponse
 from fathom.services import polar
-from fathom.services.supabase import create_postgres_connection, create_supabase_admin_client
+from fathom.services.supabase import (
+    create_postgres_connection,
+    create_supabase_admin_client,
+    managed_supabase_client,
+)
 
 _START_TIME = time.monotonic()
 
@@ -100,10 +104,10 @@ async def _postgres_connection(settings: Settings):
 
 async def _check_postgrest(settings: Settings) -> None:
     try:
-        client = await create_supabase_admin_client(settings)
-        await client.table("jobs").select("id,status,lease_expires_at,usage_settlement_required").limit(1).execute()
-        await client.table("summaries").select("id,status,generation_job_id,status_updated_at").limit(1).execute()
-        await client.table("job_events").select("id,job_id,event_type,created_at").limit(1).execute()
+        async with managed_supabase_client(await create_supabase_admin_client(settings)) as client:
+            await client.table("jobs").select("id,status,lease_expires_at,usage_settlement_required").limit(1).execute()
+            await client.table("summaries").select("id,status,generation_job_id,status_updated_at").limit(1).execute()
+            await client.table("job_events").select("id,job_id,event_type,created_at").limit(1).execute()
     except Exception as exc:
         logger.warning(
             "api.ready.failed",

@@ -20,7 +20,7 @@ from fathom.application.diagnostics.schemas import (
 from fathom.core.config import get_settings
 from fathom.core.errors import NotFoundError
 from fathom.crud.supabase.job_events import list_job_events
-from fathom.services.supabase import create_supabase_admin_client
+from fathom.services.supabase import create_supabase_admin_client, managed_supabase_client
 from fathom.services.supabase.helpers import first_row, raise_for_postgrest_error
 from supabase import AsyncClient
 
@@ -260,8 +260,8 @@ def main() -> None:
 
 async def _fetch_from_environment(session_id: str) -> JobTimeline:
     settings = get_settings()
-    admin_client = await create_supabase_admin_client(settings)
-    return await fetch_job_timeline(admin_client, session_id=session_id)
+    async with managed_supabase_client(await create_supabase_admin_client(settings)) as admin_client:
+        return await fetch_job_timeline(admin_client, session_id=session_id)
 
 
 if __name__ == "__main__":

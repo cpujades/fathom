@@ -99,10 +99,10 @@ async def list_plans(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> list[PlanResponse]:
     from fathom.crud.supabase.billing import fetch_active_plans
-    from fathom.services.supabase import create_supabase_admin_client
+    from fathom.services.supabase import create_supabase_admin_client, managed_supabase_client
 
-    admin_client = await create_supabase_admin_client(settings)
-    plans = await fetch_active_plans(admin_client)
+    async with managed_supabase_client(await create_supabase_admin_client(settings)) as admin_client:
+        plans = await fetch_active_plans(admin_client)
     return [
         PlanResponse(
             plan_id=plan["id"],

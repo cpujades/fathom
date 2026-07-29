@@ -27,7 +27,7 @@ from fathom.crud.supabase.billing import (
 from fathom.crud.supabase.jobs import fetch_jobs_by_ids
 from fathom.crud.supabase.summaries import fetch_summaries_by_ids
 from fathom.crud.supabase.transcripts import fetch_transcripts_by_ids
-from fathom.services.supabase import create_supabase_admin_client
+from fathom.services.supabase import create_supabase_admin_client, managed_supabase_client
 
 logger = logging.getLogger(__name__)
 
@@ -269,7 +269,12 @@ async def get_usage_snapshot(
     admin_client: Any | None = None,
 ) -> UsageSnapshot:
     if admin_client is None:
-        admin_client = await create_supabase_admin_client(settings)
+        async with managed_supabase_client(await create_supabase_admin_client(settings)) as owned_client:
+            return await get_usage_snapshot(
+                user_id,
+                settings,
+                admin_client=owned_client,
+            )
 
     entitlement = await fetch_entitlement(admin_client, user_id)
     if not entitlement:
@@ -314,7 +319,11 @@ async def get_usage_snapshot(
 
 
 async def get_usage_overview(user_id: str, settings: Settings) -> UsageOverview:
-    admin_client = await create_supabase_admin_client(settings)
+    async with managed_supabase_client(await create_supabase_admin_client(settings)) as admin_client:
+        return await _get_usage_overview(user_id, settings, admin_client)
+
+
+async def _get_usage_overview(user_id: str, settings: Settings, admin_client: Any) -> UsageOverview:
     entitlement = await fetch_entitlement(admin_client, user_id)
     if not entitlement:
         entitlement = await _ensure_free_entitlement(admin_client, user_id, settings)
@@ -341,7 +350,11 @@ async def get_usage_overview(user_id: str, settings: Settings) -> UsageOverview:
 
 
 async def get_usage_history(user_id: str, settings: Settings, limit: int = 50) -> list[dict[str, Any]]:
-    admin_client = await create_supabase_admin_client(settings)
+    async with managed_supabase_client(await create_supabase_admin_client(settings)) as admin_client:
+        return await _get_usage_history(user_id, admin_client, limit=limit)
+
+
+async def _get_usage_history(user_id: str, admin_client: Any, *, limit: int) -> list[dict[str, Any]]:
     raw_entries = await fetch_usage_history(admin_client, user_id=user_id, limit=max(limit * 3, limit))
     entries = _collapse_usage_entries(raw_entries, limit=limit)
     job_ids = [str(entry.get("job_id")) for entry in entries if entry.get("job_id")]

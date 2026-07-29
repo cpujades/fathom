@@ -35,7 +35,7 @@ from fathom.crud.supabase.billing import (
     upsert_subscription_entitlement_state,
 )
 from fathom.services import polar
-from fathom.services.supabase import create_supabase_admin_client
+from fathom.services.supabase import create_supabase_admin_client, managed_supabase_client
 
 logger = logging.getLogger(__name__)
 
@@ -57,35 +57,35 @@ async def handle_polar_webhook(payload: bytes, headers: Mapping[str, str], setti
 
     event_id, event_type, data = extract_event_fields(event, headers)
     with log_context(provider_event_id=event_id, provider_event_type=event_type):
-        admin_client = await create_supabase_admin_client(settings)
-        event_at = _extract_event_time(event, data, headers)
-        resource_type, resource_id, normalized_payload = _normalize_event_payload(event_type, data)
-        result = await apply_polar_webhook_transaction(
-            admin_client,
-            event_id=event_id,
-            event_type=event_type,
-            event_at=event_at,
-            resource_type=resource_type,
-            resource_id=resource_id,
-            payload=normalized_payload,
-            debt_cap_seconds=settings.billing_debt_cap_seconds,
-        )
-        resolution_type = str(result.get("resolution_type") or "")
-        outcome = str(result.get("outcome") or "")
-        if resolution_type == "failed":
-            logger.error(
-                "billing.webhook.transaction_failed",
-                extra={"resolution_type": resolution_type, "outcome": outcome},
+        async with managed_supabase_client(await create_supabase_admin_client(settings)) as admin_client:
+            event_at = _extract_event_time(event, data, headers)
+            resource_type, resource_id, normalized_payload = _normalize_event_payload(event_type, data)
+            result = await apply_polar_webhook_transaction(
+                admin_client,
+                event_id=event_id,
+                event_type=event_type,
+                event_at=event_at,
+                resource_type=resource_type,
+                resource_id=resource_id,
+                payload=normalized_payload,
+                debt_cap_seconds=settings.billing_debt_cap_seconds,
             )
-            raise ExternalServiceError("Polar webhook processing failed.")
+            resolution_type = str(result.get("resolution_type") or "")
+            outcome = str(result.get("outcome") or "")
+            if resolution_type == "failed":
+                logger.error(
+                    "billing.webhook.transaction_failed",
+                    extra={"resolution_type": resolution_type, "outcome": outcome},
+                )
+                raise ExternalServiceError("Polar webhook processing failed.")
 
-        logger.info(
-            "billing.webhook.resolved",
-            extra={
-                "resolution_type": resolution_type,
-                "outcome": outcome,
-            },
-        )
+            logger.info(
+                "billing.webhook.resolved",
+                extra={
+                    "resolution_type": resolution_type,
+                    "outcome": outcome,
+                },
+            )
 
 
 def _extract_event_time(

@@ -27,7 +27,11 @@ from fathom.schemas.briefings import (
     BriefingSourceFilter,
 )
 from fathom.services.pdf import markdown_to_pdf_bytes
-from fathom.services.supabase import create_supabase_admin_client, create_supabase_user_client
+from fathom.services.supabase import (
+    create_supabase_admin_client,
+    create_supabase_user_client,
+    managed_supabase_client,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -38,26 +42,28 @@ BRIEFINGS_SCAN_BATCH_SIZE = 200
 async def get_briefing(briefing_id: UUID, auth: AuthContext, settings: Settings) -> BriefingResponse:
     briefing_id_str = str(briefing_id)
     with log_context(user_id=auth.user_id, briefing_id=briefing_id_str):
-        user_client = await create_supabase_user_client(settings, auth.access_token)
-        summary = await fetch_summary(user_client, briefing_id_str)
-        _require_ready_summary(summary)
-        object_key = summary.get("pdf_object_key")
-        has_pdf = isinstance(object_key, str) and bool(object_key)
-        logger.info("briefing.fetched", extra={"has_pdf": has_pdf})
-        if not has_pdf:
-            return BriefingResponse(
-                briefing_id=summary["id"],
-                markdown=summary["summary_markdown"],
-                pdf_url=None,
-            )
+        async with managed_supabase_client(
+            await create_supabase_user_client(settings, auth.access_token)
+        ) as user_client:
+            summary = await fetch_summary(user_client, briefing_id_str)
+            _require_ready_summary(summary)
+            object_key = summary.get("pdf_object_key")
+            has_pdf = isinstance(object_key, str) and bool(object_key)
+            logger.info("briefing.fetched", extra={"has_pdf": has_pdf})
+            if not has_pdf:
+                return BriefingResponse(
+                    briefing_id=summary["id"],
+                    markdown=summary["summary_markdown"],
+                    pdf_url=None,
+                )
 
-        admin_client = await create_supabase_admin_client(settings)
-        pdf_url = await create_pdf_signed_url(
-            admin_client,
-            SUPABASE_PDF_BUCKET,
-            object_key,
-            SIGNED_URL_TTL_SECONDS,
-        )
+        async with managed_supabase_client(await create_supabase_admin_client(settings)) as admin_client:
+            pdf_url = await create_pdf_signed_url(
+                admin_client,
+                SUPABASE_PDF_BUCKET,
+                object_key,
+                SIGNED_URL_TTL_SECONDS,
+            )
         logger.info("briefing_pdf.signed_url.issued")
         return BriefingResponse(
             briefing_id=summary["id"],
@@ -69,60 +75,70 @@ async def get_briefing(briefing_id: UUID, auth: AuthContext, settings: Settings)
 async def create_briefing_pdf(briefing_id: UUID, auth: AuthContext, settings: Settings) -> BriefingPdfResponse:
     briefing_id_str = str(briefing_id)
     with log_context(user_id=auth.user_id, briefing_id=briefing_id_str):
-        user_client = await create_supabase_user_client(settings, auth.access_token)
-        summary = await fetch_summary(user_client, briefing_id_str)
-        _require_ready_summary(summary)
+        async with managed_supabase_client(
+            await create_supabase_user_client(settings, auth.access_token)
+        ) as user_client:
+            summary = await fetch_summary(user_client, briefing_id_str)
+            _require_ready_summary(summary)
+        async with managed_supabase_client(await create_supabase_admin_client(settings)) as admin_client:
+            return await _create_briefing_pdf(briefing_id, briefing_id_str, summary, admin_client)
 
-        admin_client = await create_supabase_admin_client(settings)
-        existing_object_key = summary.get("pdf_object_key")
-        if isinstance(existing_object_key, str) and existing_object_key:
-            logger.info("briefing_pdf.cache_hit")
-            pdf_url = await create_pdf_signed_url(
-                admin_client,
-                SUPABASE_PDF_BUCKET,
-                existing_object_key,
-                SIGNED_URL_TTL_SECONDS,
-            )
-            if not pdf_url:
-                raise ExternalServiceError("Signed PDF URL was not returned.")
-            return BriefingPdfResponse(briefing_id=summary["id"], pdf_url=pdf_url)
 
-        markdown = summary.get("summary_markdown")
-        if not isinstance(markdown, str) or not markdown.strip():
-            raise ExternalServiceError("Briefing markdown is missing; cannot generate PDF.")
-
-        user_id = summary.get("user_id")
-        if not isinstance(user_id, str) or not user_id:
-            raise ExternalServiceError("Briefing user id is missing; cannot generate PDF.")
-
-        logger.info("briefing_pdf.generation.started")
-        pdf_bytes = await asyncio.to_thread(markdown_to_pdf_bytes, markdown)
-        transcript = await fetch_transcript_by_id(admin_client, summary["transcript_id"])
-        video_id = transcript.get("video_id")
-        if not isinstance(video_id, str) or not video_id:
-            video_id = "unknown-video"
-
-        object_key = f"{user_id}/{video_id}/{briefing_id}.pdf"
-        await upload_pdf(
-            admin_client,
-            bucket=SUPABASE_PDF_BUCKET,
-            object_key=object_key,
-            pdf_bytes=pdf_bytes,
-        )
-        await update_summary_pdf_key(admin_client, summary_id=briefing_id_str, pdf_object_key=object_key)
-        logger.info("briefing_pdf.uploaded", extra={"object_key": object_key})
-
+async def _create_briefing_pdf(
+    briefing_id: UUID,
+    briefing_id_str: str,
+    summary: dict[str, Any],
+    admin_client: Any,
+) -> BriefingPdfResponse:
+    existing_object_key = summary.get("pdf_object_key")
+    if isinstance(existing_object_key, str) and existing_object_key:
+        logger.info("briefing_pdf.cache_hit")
         pdf_url = await create_pdf_signed_url(
             admin_client,
             SUPABASE_PDF_BUCKET,
-            object_key,
+            existing_object_key,
             SIGNED_URL_TTL_SECONDS,
         )
         if not pdf_url:
             raise ExternalServiceError("Signed PDF URL was not returned.")
-
-        logger.info("briefing_pdf.signed_url.issued")
         return BriefingPdfResponse(briefing_id=summary["id"], pdf_url=pdf_url)
+
+    markdown = summary.get("summary_markdown")
+    if not isinstance(markdown, str) or not markdown.strip():
+        raise ExternalServiceError("Briefing markdown is missing; cannot generate PDF.")
+
+    user_id = summary.get("user_id")
+    if not isinstance(user_id, str) or not user_id:
+        raise ExternalServiceError("Briefing user id is missing; cannot generate PDF.")
+
+    logger.info("briefing_pdf.generation.started")
+    pdf_bytes = await asyncio.to_thread(markdown_to_pdf_bytes, markdown)
+    transcript = await fetch_transcript_by_id(admin_client, summary["transcript_id"])
+    video_id = transcript.get("video_id")
+    if not isinstance(video_id, str) or not video_id:
+        video_id = "unknown-video"
+
+    object_key = f"{user_id}/{video_id}/{briefing_id}.pdf"
+    await upload_pdf(
+        admin_client,
+        bucket=SUPABASE_PDF_BUCKET,
+        object_key=object_key,
+        pdf_bytes=pdf_bytes,
+    )
+    await update_summary_pdf_key(admin_client, summary_id=briefing_id_str, pdf_object_key=object_key)
+    logger.info("briefing_pdf.uploaded", extra={"object_key": object_key})
+
+    pdf_url = await create_pdf_signed_url(
+        admin_client,
+        SUPABASE_PDF_BUCKET,
+        object_key,
+        SIGNED_URL_TTL_SECONDS,
+    )
+    if not pdf_url:
+        raise ExternalServiceError("Signed PDF URL was not returned.")
+
+    logger.info("briefing_pdf.signed_url.issued")
+    return BriefingPdfResponse(briefing_id=summary["id"], pdf_url=pdf_url)
 
 
 def _require_ready_summary(summary: dict[str, Any]) -> None:
@@ -141,7 +157,28 @@ async def list_briefings_for_user(
     sort: BriefingListSort = "newest",
     source_type: BriefingSourceFilter = "all",
 ) -> BriefingListResponse:
-    admin_client = await create_supabase_admin_client(settings)
+    async with managed_supabase_client(await create_supabase_admin_client(settings)) as admin_client:
+        return await _list_briefings_for_user(
+            admin_client=admin_client,
+            user_id=user_id,
+            limit=limit,
+            offset=offset,
+            query=query,
+            sort=sort,
+            source_type=source_type,
+        )
+
+
+async def _list_briefings_for_user(
+    *,
+    admin_client: Any,
+    user_id: str,
+    limit: int,
+    offset: int,
+    query: str | None,
+    sort: BriefingListSort,
+    source_type: BriefingSourceFilter,
+) -> BriefingListResponse:
     normalized_query = _normalize_query(query)
     sort_desc = sort == "newest"
 

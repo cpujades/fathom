@@ -61,6 +61,7 @@ from fathom.services.summarizer import OPENROUTER_MODEL
 from fathom.services.supabase import (
     create_supabase_admin_client,
     create_supabase_user_client,
+    managed_supabase_client,
 )
 
 logger = logging.getLogger(__name__)
@@ -78,13 +79,25 @@ async def create_briefing_session(
     auth: AuthContext,
     settings: Settings,
 ) -> BriefingSessionResponse:
+    async with (
+        managed_supabase_client(await create_supabase_user_client(settings, auth.access_token)) as user_client,
+        managed_supabase_client(await create_supabase_admin_client(settings)) as admin_client,
+    ):
+        return await _create_briefing_session(request, auth, settings, user_client, admin_client)
+
+
+async def _create_briefing_session(
+    request: BriefingSessionCreateRequest,
+    auth: AuthContext,
+    settings: Settings,
+    user_client: Any,
+    admin_client: Any,
+) -> BriefingSessionResponse:
     submitted_url = str(request.url)
     with log_context(user_id=auth.user_id):
         logger.info("briefing_session.create.started")
         validate_youtube_url(submitted_url)
         source = normalize_source(submitted_url)
-        user_client = await create_supabase_user_client(settings, auth.access_token)
-        admin_client = await create_supabase_admin_client(settings)
 
         active_job = await fetch_active_job_for_source(
             user_client,
@@ -231,14 +244,24 @@ async def create_briefing_session(
 async def get_briefing_session(session_id: UUID, auth: AuthContext, settings: Settings) -> BriefingSessionResponse:
     session_id_str = str(session_id)
     with log_context(user_id=auth.user_id, session_id=session_id_str):
-        user_client = await create_supabase_user_client(settings, auth.access_token)
-        admin_client = await create_supabase_admin_client(settings)
-        job = await fetch_job(user_client, session_id_str)
-        if str(job.get("status") or "") == "deleted":
-            raise NotFoundError("Briefing session not found.")
-        source = normalize_source(job["url"])
-        logger.info("briefing_session.fetched", extra={"state": job.get("stage"), "status": job.get("status")})
-        return await _build_session_snapshot(user_client=user_client, admin_client=admin_client, job=job, source=source)
+        async with (
+            managed_supabase_client(await create_supabase_user_client(settings, auth.access_token)) as user_client,
+            managed_supabase_client(await create_supabase_admin_client(settings)) as admin_client,
+        ):
+            job = await fetch_job(user_client, session_id_str)
+            if str(job.get("status") or "") == "deleted":
+                raise NotFoundError("Briefing session not found.")
+            source = normalize_source(job["url"])
+            logger.info(
+                "briefing_session.fetched",
+                extra={"state": job.get("stage"), "status": job.get("status")},
+            )
+            return await _build_session_snapshot(
+                user_client=user_client,
+                admin_client=admin_client,
+                job=job,
+                source=source,
+            )
 
 
 async def stream_briefing_session_events(
@@ -270,8 +293,28 @@ async def _session_event_stream(
     settings: Settings,
     request: Request,
 ) -> AsyncIterator[str]:
-    user_client = await create_supabase_user_client(settings, auth.access_token)
-    admin_client = await create_supabase_admin_client(settings)
+    async with (
+        managed_supabase_client(await create_supabase_user_client(settings, auth.access_token)) as user_client,
+        managed_supabase_client(await create_supabase_admin_client(settings)) as admin_client,
+    ):
+        async for event in _session_event_stream_with_clients(
+            session_id=session_id,
+            auth=auth,
+            request=request,
+            user_client=user_client,
+            admin_client=admin_client,
+        ):
+            yield event
+
+
+async def _session_event_stream_with_clients(
+    *,
+    session_id: UUID,
+    auth: AuthContext,
+    request: Request,
+    user_client: Any,
+    admin_client: Any,
+) -> AsyncIterator[str]:
     session_id_str = str(session_id)
     with log_context(user_id=auth.user_id, session_id=session_id_str):
         logger.info("briefing_session.stream.opened")
@@ -668,14 +711,16 @@ def _snapshot_signature(snapshot: BriefingSessionResponse) -> tuple[Any, ...]:
 async def delete_briefing_session(session_id: UUID, auth: AuthContext, settings: Settings) -> None:
     session_id_str = str(session_id)
     with log_context(user_id=auth.user_id, session_id=session_id_str):
-        user_client = await create_supabase_user_client(settings, auth.access_token)
-        job = await fetch_job(user_client, session_id_str)
-        if str(job.get("status") or "") == "deleted":
-            return
-        if not job.get("summary_id"):
-            raise NotFoundError("Briefing session not found.")
-        admin_client = await create_supabase_admin_client(settings)
-        await archive_job(admin_client, job_id=session_id_str)
+        async with managed_supabase_client(
+            await create_supabase_user_client(settings, auth.access_token)
+        ) as user_client:
+            job = await fetch_job(user_client, session_id_str)
+            if str(job.get("status") or "") == "deleted":
+                return
+            if not job.get("summary_id"):
+                raise NotFoundError("Briefing session not found.")
+        async with managed_supabase_client(await create_supabase_admin_client(settings)) as admin_client:
+            await archive_job(admin_client, job_id=session_id_str)
 
 
 def _build_content_delta_event(
