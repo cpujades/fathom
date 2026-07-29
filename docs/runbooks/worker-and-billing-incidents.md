@@ -1,27 +1,102 @@
 # Worker And Billing Incidents
 
+## Start with a bounded snapshot
+
+From the repository root, with the backend environment configured:
+
+```bash
+PYTHONPATH=apps/backend ./.venv/bin/python \
+  -m fathom.application.diagnostics.operability \
+  --stale-minutes 5 \
+  --sample-limit 20
+```
+
+This command opens a read-only database transaction and returns counts plus at
+most 20 job, summary, or provider-event IDs. It never returns account IDs,
+source URLs, transcript text, summary Markdown, credentials, or provider
+payloads. Raising either bound above its documented maximum is rejected.
+
+For one affected session, inspect its privacy-safe lifecycle:
+
+```bash
+PYTHONPATH=apps/backend ./.venv/bin/python \
+  -m fathom.application.diagnostics.job_timeline SESSION_UUID
+```
+
+Capture the snapshot, the API `X-Request-Id`, and the relevant job, summary, or
+provider-event ID in the incident notes. Never paste lease/generation tokens,
+authorization headers, raw webhooks, transcripts, or briefing content.
+
 ## Jobs stop progressing
 
 1. Check `GET /meta/ready`.
-2. Check worker logs.
-   - Startup should log `Starting worker loop`.
-   - Repeated listener failures should log `job_created listener failed, reconnecting`.
-   - Stale recovery should log `worker stale-job sweep complete`.
-3. Confirm the worker process is actually running on the platform and has restart-on-failure enabled.
+2. Run the bounded operability snapshot above.
+3. Check worker logs for `worker.started`, `worker.job_listener.ready`,
+   `worker.stale_job_sweep.completed`, lease-loss events, and the affected
+   `job_id`.
+4. Confirm exactly one intended worker pool is running.
+5. Do not update a job row manually. Allow the expired lease to fence the old
+   worker and let one normal worker sweep requeue it. Run the snapshot again
+   after one sweep interval to prove convergence.
 
 ## Refund stays `refund_pending`
 
-1. Check worker logs for `billing maintenance pass`.
-2. Inspect the corresponding `billing_orders` row and the latest `billing_webhook_events` row for that Polar order.
-3. Compare the local order state against the provider order in Polar.
+1. Check the bounded webhook counts and provider-event IDs.
+2. Check worker logs for `billing.maintenance.completed`.
+3. Inspect the corresponding `billing_orders` row and the latest
+   `billing_webhook_events` row for that Polar order.
+4. Compare the local order state against the provider order in Polar.
    - If Polar already shows a refunded amount, the next maintenance pass should converge the local row.
 
 ## Subscription state looks wrong
 
 1. Check whether the relevant Polar webhook was delivered and processed.
-2. Check worker logs for `billing maintenance pass`.
+2. Check worker logs for `billing.maintenance.completed`.
 3. Compare the local entitlement state with the latest Polar subscription state.
 4. If webhook delivery was delayed or duplicated, rely on reconciliation rather than manual local edits.
+
+## Webhook replay
+
+1. Record the provider event ID and current operability snapshot.
+2. Prove duplicate/reordered delivery locally without a provider call:
+
+   ```bash
+   PYTHONPATH=apps/backend ./.venv/bin/python -m unittest \
+     apps.backend.tests.test_billing_webhooks \
+     apps.backend.tests.test_polar_webhook_integration
+   ```
+
+   The integration test is skipped when the local database role-test
+   environment is not configured.
+3. In staging, redeliver only the exact provider event from Polar. Do not build
+   a new payload, edit the stored normalized facts, or reuse a signature.
+4. Confirm `billing.webhook.resolved` for the same `provider_event_id`, then
+   rerun the bounded snapshot. `already_processed` is a successful idempotent
+   replay; a persistent `failed`/`deferred` result needs investigation.
+
+## Settlement mismatch
+
+1. `terminal_jobs_missing_settlement` should converge through the normal
+   billing maintenance pass, which requeues the job into visible finalization.
+2. A non-zero `settlement_balance_mismatches` count is an invariant violation,
+   not a routine retry. Stop manual repair, preserve the IDs and logs, and
+   investigate the settlement and linked ledger rows in a read-only
+   transaction.
+3. Never delete a settlement, change credit lots, flip
+   `usage_settlement_required`, or manufacture ledger rows.
+
+## One-pass reconciliation discipline
+
+Use the existing worker recovery loop as the only repair path:
+
+1. Save a before snapshot.
+2. Run one intended worker for one stale-job sweep and one billing-maintenance
+   interval.
+3. Stop or leave that worker running normally; do not launch repeated manual
+   maintenance loops.
+4. Save an after snapshot and compare counts and IDs.
+5. Escalate non-convergent or invariant-mismatch cases. The diagnostic commands
+   themselves are intentionally read-only.
 
 ## API vs worker vs provider
 
