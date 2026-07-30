@@ -194,7 +194,7 @@ const landingContent: LandingContent = {
     points: [
       {
         title: "Briefing-first format",
-        text: "New briefings follow the same disciplined structure so they read fast and stay usable."
+        text: "Briefings follow the same disciplined structure so they read fast and stay usable."
       },
       {
         title: "Timestamp traceability",

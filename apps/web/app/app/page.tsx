@@ -48,7 +48,7 @@ export default function AppHome() {
     }
 
     if (!url.trim()) {
-      setError("Paste a valid podcast or YouTube URL to start a briefing.");
+      setError("Paste a valid public YouTube URL to start a briefing.");
       return;
     }
 
@@ -112,8 +112,8 @@ export default function AppHome() {
                     className={`${chrome.input} ${styles.commandInput}`}
                     id="briefing-source-url"
                     type="url"
-                    placeholder="Paste a YouTube or podcast URL"
-                    aria-label="Podcast or YouTube URL"
+                    placeholder="Paste a public YouTube URL"
+                    aria-label="Public YouTube URL"
                     aria-describedby={error ? "briefing-source-error" : undefined}
                     aria-invalid={error ? true : undefined}
                     value={url}

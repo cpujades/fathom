@@ -21,7 +21,7 @@ type CreatePhase = "idle" | "checking" | "creating" | "opening" | "error";
 const PHASE_COPY: Record<CreatePhase, { description: string; status: string; title: string }> = {
   idle: {
     title: "Paste a source",
-    description: "Start with a public YouTube or podcast URL.",
+    description: "Start with a public YouTube URL.",
     status: "Ready"
   },
   checking: {
@@ -41,7 +41,7 @@ const PHASE_COPY: Record<CreatePhase, { description: string; status: string; tit
   },
   error: {
     title: "Needs a better source",
-    description: "Try a public YouTube or podcast URL.",
+    description: "Try a public YouTube URL.",
     status: "Review"
   }
 };
@@ -79,7 +79,7 @@ function BriefingCreatePageContent() {
       const normalizedUrl = normalizeSourceUrl(rawUrl);
       if (!normalizedUrl) {
         setPhase("error");
-        setError("Paste a full YouTube or podcast URL beginning with http:// or https://.");
+        setError("Paste a full public YouTube URL beginning with http:// or https://.");
         return;
       }
 
@@ -146,7 +146,7 @@ function BriefingCreatePageContent() {
     const nextUrl = draftUrl.trim();
     if (!nextUrl) {
       setPhase("error");
-      setError("Paste a valid podcast or YouTube URL to start a briefing.");
+      setError("Paste a valid public YouTube URL to start a briefing.");
       return;
     }
 
@@ -211,7 +211,7 @@ function BriefingCreatePageContent() {
                   {error}
                 </p>
                 <label className={chrome.fieldStack}>
-                  <span className={chrome.fieldLabel}>Podcast or YouTube URL</span>
+                  <span className={chrome.fieldLabel}>Public YouTube URL</span>
                   <input
                     className={chrome.input}
                     type="url"

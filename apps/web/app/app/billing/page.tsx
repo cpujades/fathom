@@ -20,6 +20,7 @@ import { formatDate, formatDuration } from "../../lib/format";
 import { getApiErrorMessage } from "../../lib/apiErrors";
 import { getAccountLabel } from "../../lib/accountLabel";
 import { getCachedBillingSnapshot, hasFreshBillingCache, loadBillingSnapshot } from "../../lib/appDataCache";
+import { resolveRequestedPlan } from "./billingIntent";
 
 type PlanGroup = {
   key: "subscription" | "pack";
@@ -151,6 +152,8 @@ function BillingPageContent() {
   const { accessToken, loading: shellLoading, remainingSeconds, setRemainingSeconds, signOut, user } = useAppShell();
   const checkoutStatus = searchParams.get("checkout");
   const customerSessionToken = searchParams.get("customer_session_token");
+  const requestedIntent = searchParams.get("intent");
+  const requestedPlanCode = searchParams.get("plan");
   const cachedBillingSnapshot = getCachedBillingSnapshot();
 
   const [plans, setPlans] = useState<PlanResponse[]>(cachedBillingSnapshot?.plansData ?? []);
@@ -169,6 +172,7 @@ function BillingPageContent() {
   const [error, setError] = useState<string | null>(null);
 
   const checkoutStartRef = useRef<number | null>(null);
+  const focusedPlanRef = useRef<string | null>(null);
   const refundPollRef = useRef<number | null>(null);
 
   const loadBilling = useCallback(
@@ -291,6 +295,38 @@ function BillingPageContent() {
       }
     ];
   }, [plans]);
+
+  const requestedPlan = useMemo(
+    () => resolveRequestedPlan(plans, requestedIntent, requestedPlanCode),
+    [plans, requestedIntent, requestedPlanCode]
+  );
+
+  useEffect(() => {
+    if (!requestedPlan) {
+      return;
+    }
+    setOfferMode(requestedPlan.plan_type === "pack" ? "pack" : "subscription");
+  }, [requestedPlan]);
+
+  useEffect(() => {
+    if (!requestedPlan || focusedPlanRef.current === requestedPlan.plan_id) {
+      return;
+    }
+
+    const expectedMode = requestedPlan.plan_type === "pack" ? "pack" : "subscription";
+    if (offerMode !== expectedMode) {
+      return;
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      const planCard = document.getElementById(`billing-plan-${requestedPlan.plan_id}`);
+      planCard?.focus({ preventScroll: true });
+      planCard?.scrollIntoView({ behavior: "smooth", block: "center" });
+      focusedPlanRef.current = requestedPlan.plan_id;
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, [offerMode, requestedPlan]);
 
   const activePackCount = useMemo(() => {
     return (account?.packs ?? []).filter((pack) => pack.remaining_seconds > 0 && pack.status !== "refunded").length;
@@ -714,6 +750,15 @@ function BillingPageContent() {
           </section>
         ) : null}
 
+        {requestedPlan ? (
+          <section className={`${chrome.notice} ${styles.pageColumn} ${chrome.noticeInfo}`} role="status">
+            <h2 className={chrome.noticeTitle}>{requestedPlan.name} is ready to review</h2>
+            <p className={chrome.noticeText}>
+              Your choice stayed with you after sign-in. Review the details below before opening secure checkout.
+            </p>
+          </section>
+        ) : null}
+
         <section className={`${chrome.surface} ${styles.pageColumn} ${styles.accessSection}`}>
           <div className={chrome.surfaceHeader}>
             <div>
@@ -803,14 +848,24 @@ function BillingPageContent() {
                   account?.subscription.status === "active" &&
                   account.subscription.plan_name === plan.name;
                 const planBadge = getPlanBadge(plan, visiblePlanGroup.key);
+                const isRequestedPlan = requestedPlan?.plan_id === plan.plan_id;
 
                 return (
-                  <article className={styles.planCard} key={plan.plan_id}>
+                  <article
+                    className={`${styles.planCard} ${isRequestedPlan ? styles.planCardSelected : ""}`}
+                    id={`billing-plan-${plan.plan_id}`}
+                    key={plan.plan_id}
+                    tabIndex={isRequestedPlan ? -1 : undefined}
+                  >
                     <div className={styles.planCardBody}>
                       <div>
                         <div className={styles.planHeading}>
                           <p className={styles.planName}>{plan.name}</p>
-                          {planBadge ? <span className={styles.planBadge}>{planBadge}</span> : null}
+                          {isRequestedPlan ? (
+                            <span className={styles.planBadge}>Selected</span>
+                          ) : planBadge ? (
+                            <span className={styles.planBadge}>{planBadge}</span>
+                          ) : null}
                         </div>
                         <p className={styles.planPrice}>{formatPrice(plan.amount_cents, plan.currency, plan.billing_interval)}</p>
                       </div>
