@@ -18,6 +18,7 @@ class SummaryGenerationLostError(RuntimeError):
 
 
 SummaryPreparationType = Literal["created", "ready", "in_progress", "taken_over"]
+PdfPreparationType = Literal["ready", "in_progress", "acquired"]
 
 
 @dataclass(frozen=True)
@@ -26,10 +27,17 @@ class SummaryPreparation:
     resolution_type: SummaryPreparationType
 
 
+@dataclass(frozen=True)
+class PdfPreparation:
+    resolution_type: PdfPreparationType
+    pdf_object_key: str | None
+
+
 def _summary_select_query(client: AsyncClient) -> Any:
     """Return the base summaries select query with the fields we need."""
     return client.table("summaries").select(
-        "id,user_id,transcript_id,summary_markdown,pdf_object_key,status,status_updated_at,ready_at,failed_at"
+        "id,user_id,transcript_id,summary_markdown,pdf_object_key,pdf_cache_version,"
+        "status,status_updated_at,ready_at,failed_at"
     )
 
 
@@ -129,25 +137,82 @@ async def prepare_summary(
     return SummaryPreparation(summary=dict(summary), resolution_type=resolution_type)
 
 
-async def update_summary_pdf_key(
+async def prepare_summary_pdf(
     client: AsyncClient,
     *,
     summary_id: str,
-    pdf_object_key: str,
-) -> dict[str, Any]:
-    """Update the PDF object key for a summary."""
+    cache_version: int,
+    generation_token: str,
+) -> PdfPreparation:
     try:
-        response = (
-            await client.table("summaries")
-            .update({"pdf_object_key": pdf_object_key})
-            .eq("id", summary_id)
-            .eq("status", "ready")
-            .execute()
-        )
+        response = await client.rpc(
+            "prepare_summary_pdf",
+            {
+                "p_summary_id": summary_id,
+                "p_cache_version": cache_version,
+                "p_generation_token": generation_token,
+            },
+        ).execute()
     except APIError as exc:
-        raise_for_postgrest_error(exc, "Failed to update summary PDF key.")
+        raise_for_postgrest_error(exc, "Failed to prepare summary PDF generation.")
 
-    return first_row(response.data, error_message="Failed to update summary PDF key.")
+    data = response.data
+    if not isinstance(data, Mapping):
+        raise ExternalServiceError("Supabase returned an unexpected PDF preparation shape.")
+    resolution_type = data.get("resolution_type")
+    object_key = data.get("pdf_object_key")
+    if resolution_type not in {"ready", "in_progress", "acquired"}:
+        raise ExternalServiceError("Supabase returned an unexpected PDF preparation shape.")
+    if object_key is not None and not isinstance(object_key, str):
+        raise ExternalServiceError("Supabase returned an unexpected PDF preparation shape.")
+    if resolution_type == "ready" and not object_key:
+        raise ExternalServiceError("Supabase returned an unexpected PDF preparation shape.")
+    return PdfPreparation(
+        resolution_type=resolution_type,
+        pdf_object_key=object_key,
+    )
+
+
+async def complete_summary_pdf(
+    client: AsyncClient,
+    *,
+    summary_id: str,
+    cache_version: int,
+    generation_token: str,
+    pdf_object_key: str,
+) -> bool:
+    try:
+        response = await client.rpc(
+            "complete_summary_pdf",
+            {
+                "p_summary_id": summary_id,
+                "p_cache_version": cache_version,
+                "p_generation_token": generation_token,
+                "p_pdf_object_key": pdf_object_key,
+            },
+        ).execute()
+    except APIError as exc:
+        raise_for_postgrest_error(exc, "Failed to complete summary PDF generation.")
+    return response.data is True
+
+
+async def fail_summary_pdf(
+    client: AsyncClient,
+    *,
+    summary_id: str,
+    generation_token: str,
+) -> bool:
+    try:
+        response = await client.rpc(
+            "fail_summary_pdf",
+            {
+                "p_summary_id": summary_id,
+                "p_generation_token": generation_token,
+            },
+        ).execute()
+    except APIError as exc:
+        raise_for_postgrest_error(exc, "Failed to release summary PDF generation.")
+    return response.data is True
 
 
 async def update_summary_markdown(

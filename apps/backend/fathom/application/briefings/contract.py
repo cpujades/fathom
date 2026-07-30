@@ -15,6 +15,7 @@ from fathom.schemas.briefing_sessions import (
     BriefingSessionState,
     BriefingSourceType,
 )
+from fathom.services.pdf import is_current_pdf_cache
 from fathom.services.youtube import extract_youtube_video_id
 
 UUID_ADAPTER = TypeAdapter(UUID)
@@ -97,7 +98,13 @@ def build_briefing_session_snapshot(
         error_code=job.get("error_code"),
         error_message=job.get("error_message"),
         briefing_markdown=summary.get("summary_markdown") if summary else None,
-        briefing_has_pdf=bool(summary and summary.get("pdf_object_key")),
+        briefing_has_pdf=bool(
+            summary
+            and is_current_pdf_cache(
+                summary.get("pdf_object_key"),
+                summary.get("pdf_cache_version"),
+            )
+        ),
     )
 
 
