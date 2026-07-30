@@ -67,12 +67,12 @@ select ok(
   'authenticated users cannot create jobs through the server command'
 );
 select ok(
-  has_function_privilege(
+  not has_function_privilege(
     'service_role',
     'public.create_or_reuse_job(uuid,text,text,integer,uuid)',
     'execute'
   ),
-  'service role can create jobs through the server command'
+  'service role cannot call settlement-exempt compatibility creation directly'
 );
 select ok(
   not has_function_privilege(

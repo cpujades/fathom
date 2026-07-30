@@ -2,7 +2,7 @@ begin;
 
 set local search_path = extensions, public, pg_catalog;
 
-select plan(6);
+select plan(10);
 
 select is(
   (
@@ -83,6 +83,51 @@ select is(
   (select count(*) from storage.objects where bucket_id = 'fathom_groq'),
   0::bigint,
   'authenticated clients cannot list temporary audio objects'
+);
+
+select throws_ok(
+  $$
+    insert into storage.objects (id, bucket_id, name, owner, metadata)
+    values (
+      'b1000000-0000-0000-0000-000000000003',
+      'fathom',
+      'a2000000-0000-0000-0000-000000000001/proof/attack.pdf',
+      'a2000000-0000-0000-0000-000000000001',
+      '{}'::jsonb
+    )
+  $$,
+  '42501',
+  null,
+  'authenticated clients cannot upload directly to Talven storage'
+);
+select lives_ok(
+  $$
+    update storage.objects
+    set name = 'a2000000-0000-0000-0000-000000000001/proof/changed.pdf'
+    where id = 'b1000000-0000-0000-0000-000000000001'
+  $$,
+  'an authenticated update is safely filtered by storage RLS'
+);
+select lives_ok(
+  $$
+    delete from storage.objects
+    where id = 'b1000000-0000-0000-0000-000000000001'
+  $$,
+  'an authenticated delete is safely filtered by storage RLS'
+);
+
+reset role;
+select is(
+  (
+    select count(*)
+    from storage.objects
+    where id in (
+      'b1000000-0000-0000-0000-000000000001',
+      'b1000000-0000-0000-0000-000000000002'
+    )
+  ),
+  2::bigint,
+  'denied browser operations leave server-owned objects unchanged'
 );
 
 select * from finish();

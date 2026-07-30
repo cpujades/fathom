@@ -13,8 +13,8 @@ select ok(
   'authenticated users cannot claim jobs'
 );
 select ok(
-  has_function_privilege('service_role', 'public.claim_next_job(interval)', 'execute'),
-  'service role can claim jobs'
+  not has_function_privilege('service_role', 'public.claim_next_job(interval)', 'execute'),
+  'service role cannot call the settlement-exempt compatibility claim directly'
 );
 select ok(
   not has_function_privilege('anon', 'public.claim_next_settled_job(interval)', 'execute'),

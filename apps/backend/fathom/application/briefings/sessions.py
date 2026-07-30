@@ -554,6 +554,9 @@ async def _fetch_summary_and_transcript_for_job(
     admin_client: Any,
     job: dict[str, Any],
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    if str(job.get("status") or "") not in {"succeeded", "deleted"}:
+        return None, None
+
     summary_id = job.get("summary_id")
     if not summary_id:
         return None, None

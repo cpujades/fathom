@@ -10,6 +10,7 @@ from fathom.api.deps.auth import AuthContext
 from fathom.application.briefings.contract import NormalizedSource
 from fathom.application.briefings.sessions import (
     _create_ready_reused_session,
+    _fetch_summary_and_transcript_for_job,
     _find_ready_cached_summary,
     _job_has_ready_summary,
     create_briefing_session,
@@ -23,6 +24,32 @@ from fathom.schemas.transcripts import TranscriptSegment
 
 
 class CreateBriefingSessionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_does_not_expose_summary_before_job_settlement_succeeds(self) -> None:
+        with (
+            patch(
+                "fathom.application.briefings.sessions.fetch_summary",
+                AsyncMock(),
+            ) as fetch_summary_mock,
+            patch(
+                "fathom.application.briefings.sessions.fetch_transcript_by_id",
+                AsyncMock(),
+            ) as fetch_transcript_mock,
+        ):
+            summary, transcript = await _fetch_summary_and_transcript_for_job(
+                object(),
+                object(),
+                {
+                    "status": "running",
+                    "stage": "finalizing",
+                    "summary_id": "22222222-2222-2222-2222-222222222222",
+                },
+            )
+
+        self.assertIsNone(summary)
+        self.assertIsNone(transcript)
+        fetch_summary_mock.assert_not_awaited()
+        fetch_transcript_mock.assert_not_awaited()
+
     async def test_ready_cache_key_follows_transcript_evidence_availability(
         self,
     ) -> None:
