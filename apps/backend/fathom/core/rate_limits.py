@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from ipaddress import ip_address, ip_network
 
 import asyncpg
 from fastapi import Request
@@ -21,18 +22,43 @@ class RateLimitRule:
     limit_per_minute: int
 
 
-def _get_rate_limit_ip(request: Request, *, trust_proxy_headers: bool) -> str:
+def _get_rate_limit_ip(
+    request: Request,
+    *,
+    trust_proxy_headers: bool,
+    trusted_proxy_networks: tuple[str, ...] = (),
+) -> str:
     client_host = request.client.host if request.client else ""
-    if not trust_proxy_headers:
+    if not trust_proxy_headers or not _is_trusted_proxy(client_host, trusted_proxy_networks):
         return client_host or "unknown"
 
     forwarded_for = request.headers.get("x-forwarded-for") or ""
     forwarded_ip = forwarded_for.split(",")[0].strip()
-    return forwarded_ip or client_host or "unknown"
+    try:
+        return str(ip_address(forwarded_ip))
+    except ValueError:
+        return client_host or "unknown"
 
 
-def _get_rate_limit_subject(request: Request, *, trust_proxy_headers: bool) -> str:
-    ip = _get_rate_limit_ip(request, trust_proxy_headers=trust_proxy_headers)
+def _is_trusted_proxy(client_host: str, trusted_proxy_networks: tuple[str, ...]) -> bool:
+    try:
+        client_ip = ip_address(client_host)
+    except ValueError:
+        return False
+    return any(client_ip in ip_network(network, strict=False) for network in trusted_proxy_networks)
+
+
+def _get_rate_limit_subject(
+    request: Request,
+    *,
+    trust_proxy_headers: bool,
+    trusted_proxy_networks: tuple[str, ...] = (),
+) -> str:
+    ip = _get_rate_limit_ip(
+        request,
+        trust_proxy_headers=trust_proxy_headers,
+        trusted_proxy_networks=trusted_proxy_networks,
+    )
     return f"ip:{ip}"
 
 
@@ -123,7 +149,12 @@ async def maybe_enforce_rate_limit(request: Request, rate_limit: int) -> None:
         raise ExternalServiceError("Rate limiting is enabled, but the Postgres pool is not available.")
 
     trust_proxy_headers = bool(getattr(request.app.state, "trust_proxy_headers", False))
-    subject = _get_rate_limit_subject(request, trust_proxy_headers=trust_proxy_headers)
+    trusted_proxy_networks = tuple(getattr(request.app.state, "trusted_proxy_networks", ()))
+    subject = _get_rate_limit_subject(
+        request,
+        trust_proxy_headers=trust_proxy_headers,
+        trusted_proxy_networks=trusted_proxy_networks,
+    )
     count = await _check_rate_limit(
         pool,
         subject=subject,

@@ -29,14 +29,22 @@ class RateLimitIpResolutionTests(unittest.TestCase):
     def test_uses_forwarded_for_when_proxy_headers_are_trusted(self) -> None:
         request = _request(client_host="10.0.0.5", forwarded_for="203.0.113.9, 10.0.0.5")
 
-        ip = _get_rate_limit_ip(request, trust_proxy_headers=True)
+        ip = _get_rate_limit_ip(
+            request,
+            trust_proxy_headers=True,
+            trusted_proxy_networks=("10.0.0.0/8",),
+        )
 
         self.assertEqual(ip, "203.0.113.9")
 
     def test_falls_back_to_client_host_when_forwarded_header_is_missing(self) -> None:
         request = _request(client_host="10.0.0.5")
 
-        ip = _get_rate_limit_ip(request, trust_proxy_headers=True)
+        ip = _get_rate_limit_ip(
+            request,
+            trust_proxy_headers=True,
+            trusted_proxy_networks=("10.0.0.0/8",),
+        )
 
         self.assertEqual(ip, "10.0.0.5")
 
@@ -46,6 +54,28 @@ class RateLimitIpResolutionTests(unittest.TestCase):
         ip = _get_rate_limit_ip(request, trust_proxy_headers=False)
 
         self.assertEqual(ip, "unknown")
+
+    def test_ignores_spoofed_forwarded_header_from_untrusted_peer(self) -> None:
+        request = _request(client_host="198.51.100.8", forwarded_for="203.0.113.9")
+
+        ip = _get_rate_limit_ip(
+            request,
+            trust_proxy_headers=True,
+            trusted_proxy_networks=("10.0.0.0/8",),
+        )
+
+        self.assertEqual(ip, "198.51.100.8")
+
+    def test_ignores_invalid_forwarded_address_from_trusted_peer(self) -> None:
+        request = _request(client_host="10.0.0.5", forwarded_for="not-an-ip")
+
+        ip = _get_rate_limit_ip(
+            request,
+            trust_proxy_headers=True,
+            trusted_proxy_networks=("10.0.0.0/8",),
+        )
+
+        self.assertEqual(ip, "10.0.0.5")
 
 
 if __name__ == "__main__":

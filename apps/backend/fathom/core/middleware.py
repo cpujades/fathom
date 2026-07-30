@@ -17,6 +17,16 @@ from fathom.core.rate_limits import maybe_enforce_rate_limit
 MAX_REQUEST_BYTES = 64_000  # 64 KB
 logger = logging.getLogger(__name__)
 
+_API_CONTENT_SECURITY_POLICY = "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+_LOCAL_DOCS_CONTENT_SECURITY_POLICY = (
+    "default-src 'none'; "
+    "script-src 'self' https://cdn.jsdelivr.net; "
+    "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+    "img-src 'self' data: https://fastapi.tiangolo.com; "
+    "base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+)
+_LOCAL_DOC_PATHS = frozenset({"/docs", "/redoc", "/openapi.json"})
+
 
 async def _enforce_request_size(request: Request) -> None:
     content_length = request.headers.get("content-length")
@@ -52,6 +62,11 @@ async def log_requests(request: Request, call_next: RequestResponseEndpoint) -> 
         try:
             response = await call_next(request)
             response.headers["X-Request-Id"] = request_id
+            apply_security_headers(
+                response,
+                path=request.url.path,
+                strict_transport_security=bool(getattr(request.app.state, "strict_transport_security", False)),
+            )
             return response
         except Exception:
             duration_ms = (time.perf_counter() - started_at) * 1000
@@ -86,3 +101,22 @@ async def log_requests(request: Request, call_next: RequestResponseEndpoint) -> 
                         "error_type": getattr(request.state, "error_type", None),
                     },
                 )
+
+
+def apply_security_headers(
+    response: Response,
+    *,
+    path: str,
+    strict_transport_security: bool,
+) -> None:
+    response.headers["Content-Security-Policy"] = (
+        _LOCAL_DOCS_CONTENT_SECURITY_POLICY
+        if path in _LOCAL_DOC_PATHS and not strict_transport_security
+        else _API_CONTENT_SECURITY_POLICY
+    )
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Permissions-Policy"] = "camera=(), geolocation=(), microphone=(), payment=(), usb=()"
+    if strict_transport_security:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"

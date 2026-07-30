@@ -73,7 +73,7 @@ async def health_status() -> HealthResponse:
 
 
 def _is_strict_runtime_env(settings: Settings) -> bool:
-    return (settings.app_env or "local").strip().lower() not in {"local", "test"}
+    return getattr(settings, "app_env", "local") in {"staging", "production"}
 
 
 def _require_supabase_config(settings: Settings) -> None:

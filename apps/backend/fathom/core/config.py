@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from ipaddress import ip_address, ip_network
+from typing import Literal, Self
+from urllib.parse import urlsplit
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_BILLING_DEBT_CAP_SECONDS = 600
@@ -51,14 +54,26 @@ class Settings(BaseSettings):
     # ---------------------------------------------------------------------------
     # Environment config (optional)
     # ---------------------------------------------------------------------------
-    app_env: str = Field(default="local", validation_alias="APP_ENV")
+    app_env: Literal["local", "test", "staging", "production"] = Field(
+        default="local",
+        validation_alias="APP_ENV",
+    )
 
     # ---------------------------------------------------------------------------
     # Deployment config (optional)
     # ---------------------------------------------------------------------------
     cors_allow_origins: list[str] = Field(default_factory=list, validation_alias="CORS_ALLOW_ORIGINS")
-    rate_limit: int = Field(default=0, validation_alias="RATE_LIMIT")  # requests/min, 0 = disabled
+    rate_limit: int = Field(
+        default=0,
+        validation_alias="RATE_LIMIT",
+        ge=0,
+        le=100_000,
+    )  # requests/min, 0 = disabled locally only
     trust_proxy_headers: bool = Field(default=False, validation_alias="TRUST_PROXY_HEADERS")
+    trusted_proxy_networks: list[str] = Field(
+        default_factory=list,
+        validation_alias="TRUSTED_PROXY_NETWORKS",
+    )
     polar_access_token: str | None = Field(default=None, validation_alias="POLAR_ACCESS_TOKEN")
     polar_webhook_secret: str | None = Field(default=None, validation_alias="POLAR_WEBHOOK_SECRET")
     polar_success_url: str | None = Field(default=None, validation_alias="POLAR_SUCCESS_URL")
@@ -117,7 +132,7 @@ class Settings(BaseSettings):
             return value.strip()
         return value
 
-    @field_validator("cors_allow_origins", mode="before")
+    @field_validator("cors_allow_origins", "trusted_proxy_networks", mode="before")
     @classmethod
     def _parse_list(cls, value: object) -> object:
         if value is None:
@@ -126,6 +141,82 @@ class Settings(BaseSettings):
             items = [item.strip() for item in value.split(",")]
             return [item for item in items if item]
         return value
+
+    @field_validator("cors_allow_origins")
+    @classmethod
+    def _validate_cors_origins(cls, origins: list[str]) -> list[str]:
+        normalized: list[str] = []
+        for origin in origins:
+            parsed = urlsplit(origin)
+            if (
+                origin == "*"
+                or "*" in origin
+                or parsed.scheme not in {"http", "https"}
+                or not parsed.hostname
+                or parsed.username is not None
+                or parsed.password is not None
+                or parsed.query
+                or parsed.fragment
+                or parsed.path not in {"", "/"}
+            ):
+                raise ValueError(
+                    "CORS_ALLOW_ORIGINS entries must be exact http(s) origins without wildcards, credentials, or paths."
+                )
+            normalized_origin = f"{parsed.scheme}://{parsed.netloc}".rstrip("/")
+            if normalized_origin not in normalized:
+                normalized.append(normalized_origin)
+        return normalized
+
+    @field_validator("trusted_proxy_networks")
+    @classmethod
+    def _validate_proxy_networks(cls, networks: list[str]) -> list[str]:
+        normalized: list[str] = []
+        for network in networks:
+            try:
+                parsed = ip_network(network, strict=False)
+            except ValueError as exc:
+                raise ValueError("TRUSTED_PROXY_NETWORKS entries must be IP addresses or CIDR networks.") from exc
+            normalized_network = str(parsed)
+            if normalized_network not in normalized:
+                normalized.append(normalized_network)
+        return normalized
+
+    @model_validator(mode="after")
+    def _validate_runtime_security(self) -> Self:
+        has_proxy_networks = bool(self.trusted_proxy_networks)
+        if self.trust_proxy_headers != has_proxy_networks:
+            raise ValueError("TRUST_PROXY_HEADERS and TRUSTED_PROXY_NETWORKS must be enabled or disabled together.")
+
+        if not self.is_strict_runtime:
+            return self
+
+        if self.rate_limit <= 0:
+            raise ValueError("RATE_LIMIT must be greater than zero when APP_ENV is staging or production.")
+        if not self.cors_allow_origins:
+            raise ValueError("CORS_ALLOW_ORIGINS is required when APP_ENV is staging or production.")
+
+        for origin in self.cors_allow_origins:
+            parsed = urlsplit(origin)
+            if parsed.scheme != "https":
+                raise ValueError("CORS_ALLOW_ORIGINS must use https when APP_ENV is staging or production.")
+            hostname = parsed.hostname or ""
+            if _is_loopback_hostname(hostname):
+                raise ValueError("Loopback CORS origins are not allowed in staging or production.")
+
+        return self
+
+    @property
+    def is_strict_runtime(self) -> bool:
+        return self.app_env in {"staging", "production"}
+
+
+def _is_loopback_hostname(hostname: str) -> bool:
+    if hostname == "localhost" or hostname.endswith(".localhost"):
+        return True
+    try:
+        return ip_address(hostname).is_loopback
+    except ValueError:
+        return False
 
 
 @lru_cache(maxsize=1)

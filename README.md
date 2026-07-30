@@ -82,6 +82,7 @@ Optional backend runtime variables:
 - `CORS_ALLOW_ORIGINS`
 - `RATE_LIMIT`
 - `TRUST_PROXY_HEADERS`
+- `TRUSTED_PROXY_NETWORKS`
 - `POLAR_CHECKOUT_RETURN_URL`
 - `POLAR_SERVER`
 - `WORKER_SHUTDOWN_GRACE_SECONDS`
@@ -89,7 +90,11 @@ Optional backend runtime variables:
 - `PROVIDER_TRANSCRIPTION_DEADLINE_SECONDS`
 - `PROVIDER_SUMMARY_DEADLINE_SECONDS`
 
-`APP_ENV` defaults to `local`. Set `APP_ENV=production` for hosted API and worker deployments so readiness checks use the stricter production path.
+`APP_ENV` accepts `local`, `test`, `staging`, or `production` and defaults to
+`local`. Hosted modes fail closed unless rate limiting and exact HTTPS CORS
+origins are configured. If proxy headers are enabled, set
+`TRUSTED_PROXY_NETWORKS` to the ingress IPs or CIDR ranges; forwarded client
+addresses are ignored for every other peer.
 
 Optional backend logging variables:
 
