@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import json
 import unittest
 from types import SimpleNamespace
 from typing import cast
+from unittest.mock import AsyncMock, patch
 
 from fastapi import Request
+from starlette.responses import PlainTextResponse
 
+from fathom.core.errors import RateLimitError
+from fathom.core.middleware import MAX_REQUEST_BYTES, log_requests
 from fathom.core.rate_limits import _get_rate_limit_ip
 
 
@@ -16,6 +21,39 @@ def _request(*, client_host: str | None, forwarded_for: str | None = None) -> Re
 
     client = SimpleNamespace(host=client_host) if client_host is not None else None
     return cast(Request, SimpleNamespace(headers=headers, client=client))
+
+
+def _http_request(*, body: bytes = b"", rate_limit: int = 0) -> Request:
+    delivered = False
+
+    async def receive() -> dict[str, object]:
+        nonlocal delivered
+        if delivered:
+            return {"type": "http.disconnect"}
+        delivered = True
+        return {"type": "http.request", "body": body, "more_body": False}
+
+    headers = [(b"content-length", str(len(body)).encode("ascii"))]
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "https",
+        "path": "/briefing-sessions",
+        "raw_path": b"/briefing-sessions",
+        "query_string": b"",
+        "headers": headers,
+        "client": ("203.0.113.10", 1234),
+        "server": ("api.example.com", 443),
+        "app": SimpleNamespace(
+            state=SimpleNamespace(
+                rate_limit=rate_limit,
+                strict_transport_security=True,
+            )
+        ),
+    }
+    return Request(scope, receive)
 
 
 class RateLimitIpResolutionTests(unittest.TestCase):
@@ -76,6 +114,56 @@ class RateLimitIpResolutionTests(unittest.TestCase):
         )
 
         self.assertEqual(ip, "10.0.0.5")
+
+
+class RequestMiddlewareTests(unittest.IsolatedAsyncioTestCase):
+    async def test_oversized_request_returns_safe_413_response(self) -> None:
+        request = _http_request(body=b"x" * (MAX_REQUEST_BYTES + 1))
+        call_next = AsyncMock(return_value=PlainTextResponse("unreachable"))
+
+        response = await log_requests(request, call_next)
+
+        self.assertEqual(response.status_code, 413)
+        self.assertEqual(
+            json.loads(response.body),
+            {
+                "error": {
+                    "code": "request_too_large",
+                    "message": "Request body too large.",
+                }
+            },
+        )
+        self.assertTrue(response.headers["x-request-id"])
+        self.assertEqual(response.headers["x-frame-options"], "DENY")
+        self.assertIn("max-age=31536000", response.headers["strict-transport-security"])
+        call_next.assert_not_awaited()
+
+    async def test_rate_limit_error_returns_safe_429_response(self) -> None:
+        request = _http_request(rate_limit=60)
+        call_next = AsyncMock(return_value=PlainTextResponse("unreachable"))
+
+        with patch(
+            "fathom.core.middleware.maybe_enforce_rate_limit",
+            AsyncMock(side_effect=RateLimitError("Too many requests.")),
+        ):
+            response = await log_requests(request, call_next)
+
+        self.assertEqual(response.status_code, 429)
+        self.assertEqual(
+            json.loads(response.body),
+            {
+                "error": {
+                    "code": "rate_limit_exceeded",
+                    "message": "Too many requests.",
+                }
+            },
+        )
+        self.assertTrue(response.headers["x-request-id"])
+        self.assertEqual(
+            response.headers["content-security-policy"],
+            "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+        )
+        call_next.assert_not_awaited()
 
 
 if __name__ == "__main__":
