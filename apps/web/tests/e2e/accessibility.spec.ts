@@ -29,6 +29,18 @@ test("skip navigation is the first keyboard stop", async ({ page }) => {
   await expect(page).toHaveURL(/#main-content$/);
 });
 
+test("public routes return baseline browser security headers", async ({ request }) => {
+  const response = await request.get("/");
+  const headers = response.headers();
+
+  expect(headers["content-security-policy"]).toContain("frame-ancestors 'none'");
+  expect(headers["content-security-policy"]).not.toContain("connect-src *");
+  expect(headers["permissions-policy"]).toContain("camera=()");
+  expect(headers["referrer-policy"]).toBe("strict-origin-when-cross-origin");
+  expect(headers["x-content-type-options"]).toBe("nosniff");
+  expect(headers["x-frame-options"]).toBe("DENY");
+});
+
 test("core public routes do not hide horizontal overflow on a narrow viewport", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 800 });
 
