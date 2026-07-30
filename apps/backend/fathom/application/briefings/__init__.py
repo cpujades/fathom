@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 from collections.abc import Sequence
 from typing import Any
@@ -26,7 +25,7 @@ from fathom.schemas.briefings import (
     BriefingResponse,
     BriefingSourceFilter,
 )
-from fathom.services.pdf import markdown_to_pdf_bytes
+from fathom.services.pdf import render_markdown_pdf_bytes
 from fathom.services.supabase import (
     create_supabase_admin_client,
     create_supabase_user_client,
@@ -112,7 +111,7 @@ async def _create_briefing_pdf(
         raise ExternalServiceError("Briefing user id is missing; cannot generate PDF.")
 
     logger.info("briefing_pdf.generation.started")
-    pdf_bytes = await asyncio.to_thread(markdown_to_pdf_bytes, markdown)
+    pdf_bytes = await render_markdown_pdf_bytes(markdown)
     transcript = await fetch_transcript_by_id(admin_client, summary["transcript_id"])
     video_id = transcript.get("video_id")
     if not isinstance(video_id, str) or not video_id:

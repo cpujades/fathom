@@ -109,14 +109,14 @@ class BriefingLibraryTests(unittest.IsolatedAsyncioTestCase):
                 "fathom.application.briefings.create_supabase_admin_client",
                 AsyncMock(),
             ) as create_admin_client,
-            patch("fathom.application.briefings.markdown_to_pdf_bytes") as render_pdf,
+            patch("fathom.application.briefings.render_markdown_pdf_bytes", AsyncMock()) as render_pdf,
             patch("fathom.application.briefings.upload_pdf", AsyncMock()) as upload_pdf,
         ):
             with self.assertRaises(NotReadyError):
                 await create_briefing_pdf(briefing_id, auth, settings)
 
         create_admin_client.assert_not_awaited()
-        render_pdf.assert_not_called()
+        render_pdf.assert_not_awaited()
         upload_pdf.assert_not_awaited()
 
     async def test_lists_briefings_from_jobs_with_enriched_metadata(self) -> None:
