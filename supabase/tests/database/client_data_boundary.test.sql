@@ -273,7 +273,7 @@ insert into public.summaries (
 values (
   'c2000000-0000-0000-0000-000000000001',
   'c1000000-0000-0000-0000-000000000001',
-  'briefing-v5-evidence',
+  'briefing-v6-evidence-links',
   'openrouter:test',
   '# Settled briefing',
   'c3000000-0000-0000-0000-000000000001',

@@ -58,6 +58,7 @@ async def resolve_summary(
     job_start: float,
     lease_token: str,
     transcript_segments: tuple[TranscriptSegment, ...] = (),
+    source_video_id: str | None = None,
 ) -> SummaryResolution:
     prompt_key = SUMMARY_PROMPT_KEY_EVIDENCE if transcript_segments else SUMMARY_PROMPT_KEY_DEFAULT
     cached_summary = await _fetch_cached_summary(
@@ -138,6 +139,7 @@ async def resolve_summary(
             summary_id=prepared_summary_id,
             transcript_id=transcript_id,
             transcript_segments=transcript_segments,
+            source_video_id=source_video_id,
             settings=settings,
             admin_client=admin_client,
             job_start=job_start,
@@ -344,6 +346,7 @@ async def _create_evidence_summary(
     summary_id: str,
     transcript_id: str,
     transcript_segments: tuple[TranscriptSegment, ...],
+    source_video_id: str | None,
     settings: Settings,
     admin_client: AsyncClient,
     job_start: float,
@@ -397,7 +400,11 @@ async def _create_evidence_summary(
             settings.openrouter_api_key,
             deadline_seconds=settings.provider_summary_deadline_seconds,
         )
-        markdown = render_briefing(contract, transcript_segments)
+        markdown = render_briefing(
+            contract,
+            transcript_segments,
+            source_video_id=source_video_id,
+        )
         await update_summary_markdown(
             admin_client,
             summary_id=summary_id,

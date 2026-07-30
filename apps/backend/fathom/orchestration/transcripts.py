@@ -36,6 +36,7 @@ class TranscriptResolution:
     transcript_text: str
     source_key: str
     segments: tuple[TranscriptSegment, ...] = ()
+    video_id: str | None = None
 
 
 async def resolve_transcript(
@@ -135,6 +136,7 @@ async def _cached_resolution(
         transcript_text=transcript_text,
         source_key=str(video_id or url_hash),
         segments=segments,
+        video_id=str(video_id) if video_id else None,
     )
 
 
@@ -284,6 +286,7 @@ async def _create_transcript(
         transcript_text=transcript_text,
         source_key=str(video_id or url_hash),
         segments=segments,
+        video_id=str(video_id) if video_id else None,
     )
 
 

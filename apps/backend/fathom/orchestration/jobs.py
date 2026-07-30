@@ -70,6 +70,7 @@ async def process_job(job: dict[str, object], settings: Settings, admin_client: 
             transcript_id=transcript.transcript_id,
             transcript_text=transcript.transcript_text,
             transcript_segments=transcript.segments,
+            source_video_id=getattr(transcript, "video_id", None),
             settings=settings,
             admin_client=admin_client,
             job_start=job_start,

@@ -43,7 +43,7 @@ SYSTEM_PROMPT = (
     "- If timestamps are missing, do not fabricate them."
 )
 SUMMARY_PROMPT_KEY_DEFAULT = "briefing-v4"
-SUMMARY_PROMPT_KEY_EVIDENCE = "briefing-v5-evidence"
+SUMMARY_PROMPT_KEY_EVIDENCE = "briefing-v6-evidence-links"
 
 EVIDENCE_SYSTEM_PROMPT = (
     "You are a senior analyst producing an evidence-backed briefing from timestamped transcript "

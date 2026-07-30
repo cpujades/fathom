@@ -194,6 +194,21 @@ The conclusion ties success to measured value. [01:15–1:02:05]
             with self.assertRaises(BriefingContractError):
                 render_briefing(contract, _segments())
 
+    def test_renderer_links_evidence_to_the_source_timestamp(self) -> None:
+        contract = BriefingContract.model_validate(_contract_payload())
+
+        markdown = render_briefing(
+            contract,
+            _segments(),
+            source_video_id="AbC_123-xYz",
+        )
+
+        self.assertIn(
+            "[00:05–01:15](https://www.youtube.com/watch?v=AbC_123-xYz&t=5s)",
+            markdown,
+        )
+        self.assertNotIn("https://www.youtube.com", contract.model_dump_json())
+
 
 class StructuredSummaryProviderTests(unittest.IsolatedAsyncioTestCase):
     async def test_provider_uses_strict_schema_and_untrusted_segment_payload(self) -> None:

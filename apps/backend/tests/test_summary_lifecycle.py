@@ -88,11 +88,11 @@ class SummaryLifecycleOrchestrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result, expected)
         self.assertEqual(
             fetch_cached.await_args.kwargs["prompt_key"],
-            "briefing-v5-evidence",
+            "briefing-v6-evidence-links",
         )
         self.assertEqual(
             prepare.await_args.kwargs["prompt_key"],
-            "briefing-v5-evidence",
+            "briefing-v6-evidence-links",
         )
         create_evidence.assert_awaited_once()
         create_streaming.assert_not_awaited()
@@ -339,13 +339,15 @@ class SummaryLifecycleOrchestrationTests(unittest.IsolatedAsyncioTestCase):
         )
         contract = cast(BriefingContract, object())
         order: list[str] = []
+        rendered_video_ids: list[str | None] = []
 
         async def generate(*_: Any, **__: Any) -> BriefingContract:
             order.append("generate")
             return contract
 
-        def render(*_: Any, **__: Any) -> str:
+        def render(*_: Any, **kwargs: Any) -> str:
             order.append("render")
+            rendered_video_ids.append(kwargs.get("source_video_id"))
             return "# Evidence\n"
 
         async def update(*_: Any, **__: Any) -> None:
@@ -396,6 +398,7 @@ class SummaryLifecycleOrchestrationTests(unittest.IsolatedAsyncioTestCase):
                 summary_id="11111111-1111-1111-1111-111111111111",
                 transcript_id="55555555-5555-5555-5555-555555555555",
                 transcript_segments=segments,
+                source_video_id="source-video",
                 settings=settings,
                 admin_client=admin_client,
                 job_start=0,
@@ -403,6 +406,7 @@ class SummaryLifecycleOrchestrationTests(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertEqual(order, ["generate", "render", "draft", "ready", "event"])
+        self.assertEqual(rendered_video_ids, ["source-video"])
         self.assertEqual(result.markdown, "# Evidence\n")
         self.assertEqual(result.flush_count, 1)
 
