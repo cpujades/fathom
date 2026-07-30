@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   buildMarkdownFilename,
+  getDeliveryFailurePresentation,
   getFailurePresentation,
   getFinalizationPresentation,
   isCreditOrPaymentError
@@ -72,6 +73,15 @@ test("missing and unreadable sessions offer deliberate route recovery", () => {
   assert.equal(missing.title, "Briefing not found");
   assert.equal(unavailable.title, "Could not open this briefing");
   assert.match(unavailable.detail, /try opening it again/i);
+});
+
+test("ready delivery recovery explains that retrying is safe", () => {
+  const deliveryFailure = getDeliveryFailurePresentation();
+
+  assert.equal(deliveryFailure.title, "Your briefing is ready");
+  assert.match(deliveryFailure.detail, /will not start a new briefing/i);
+  assert.match(deliveryFailure.detail, /use more listening time/i);
+  assert.equal(deliveryFailure.actionHref, "/app/briefings");
 });
 
 test("structured API error codes remain available to route recovery", () => {

@@ -79,7 +79,7 @@ export function getFailurePresentation(
       actionLabel: "Try another source",
       title: "Source not supported",
       description: "Talven could not read usable audio from this link.",
-      detail: "Try a public YouTube or podcast URL. Private, unavailable, or audio-free sources cannot be briefed yet."
+      detail: "Try a public YouTube URL. Private, unavailable, or audio-free videos cannot be briefed yet."
     };
   }
 
@@ -161,6 +161,16 @@ export function getFailurePresentation(
     detail: sessionLoadError
       ? "Check your connection and try opening it again."
       : "Try again in a moment or use another source."
+  };
+}
+
+export function getDeliveryFailurePresentation(): FailurePresentation {
+  return {
+    actionHref: "/app/briefings",
+    actionLabel: "Back to briefings",
+    title: "Your briefing is ready",
+    description: "Talven saved the finished briefing, but this reader could not load the text.",
+    detail: "Try loading it again. This will not start a new briefing or use more listening time."
   };
 }
 

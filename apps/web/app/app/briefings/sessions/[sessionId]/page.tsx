@@ -32,6 +32,7 @@ import {
 } from "../../sessionState";
 import {
   buildMarkdownFilename,
+  getDeliveryFailurePresentation,
   getFailurePresentation,
   getFinalizationPresentation,
   isCreditOrPaymentError
@@ -540,8 +541,11 @@ export default function BriefingSessionPage() {
   const isReady = phase === "ready";
   const isFailed = phase === "failed";
   const isLoadFailed = phase === "load_failed";
+  const isDeliveryFailed = phase === "delivery_failed";
   const isStreaming = phase === "streaming";
-  const failurePresentation = getFailurePresentation(session, sessionLoadError, sessionLoadErrorCode);
+  const failurePresentation = isDeliveryFailed
+    ? getDeliveryFailurePresentation()
+    : getFailurePresentation(session, sessionLoadError, sessionLoadErrorCode);
   const rawMarkdown = streamedMarkdown || session?.briefing_markdown || "";
   const markdownToRender = removeGenericBriefingHeading(rawMarkdown);
   const parsedBriefing = useMemo(
@@ -564,18 +568,19 @@ export default function BriefingSessionPage() {
   const longRunningNotice = getLongRunningNotice(session?.state ?? null, elapsedSeconds);
   const headline = isReady
     ? parsedBriefing.title
-    : isFailed || isLoadFailed
+    : isFailed || isLoadFailed || isDeliveryFailed
       ? failurePresentation.title
       : hasMarkdown
         ? parsedBriefing.title
         : session?.source_title || "Opening briefing";
-  const subhead = isFailed || isLoadFailed ? failurePresentation.description : "";
+  const subhead = isFailed || isLoadFailed || isDeliveryFailed ? failurePresentation.description : "";
   const creditCtaMessage = session?.error_message ?? sessionLoadError;
   const showCreditCta =
     failurePresentation.actionHref === "/app/billing#billing-offers" ||
     Boolean(creditCtaMessage && isCreditOrPaymentError(creditCtaMessage));
   const canShowReader = phase === "streaming" || phase === "ready" || phase === "failed";
-  const showLifecyclePanel = phase !== "ready" && phase !== "failed" && phase !== "load_failed";
+  const showLifecyclePanel =
+    phase !== "ready" && phase !== "failed" && phase !== "load_failed" && phase !== "delivery_failed";
   const lifecycleStepIndex = getLifecycleStepIndex(session?.state ?? null, phase);
   const lifecycleKicker = phase === "loading_session" ? "Reader" : "Briefing in progress";
   const defaultLifecycleTitle = phase === "loading_session" ? "Opening reader" : stageLabel;
@@ -608,8 +613,14 @@ export default function BriefingSessionPage() {
   const sourceLabel = session?.source_type === "youtube" ? "YouTube" : "Source";
   const sourceDurationLabel = session?.source_duration_seconds ? formatExactDuration(session.source_duration_seconds) : null;
   const hasTopActions = canShowReader && !isFailed;
-  const heroEyebrow = isFailed ? "Briefing failed" : isLoadFailed ? "Reader unavailable" : !isReady ? stageLabel : "";
-  const showHeroTopline = Boolean(heroEyebrow || isFailed || isLoadFailed);
+  const heroEyebrow = isFailed
+    ? "Briefing failed"
+    : isLoadFailed || isDeliveryFailed
+      ? "Reader unavailable"
+      : !isReady
+        ? stageLabel
+        : "";
+  const showHeroTopline = Boolean(heroEyebrow || isFailed || isLoadFailed || isDeliveryFailed);
   const navigationSections = [
     parsedBriefing.summary ? { id: "briefing-summary", label: "Summary" } : null,
     parsedBriefing.takeaways ? { id: "briefing-takeaways", label: "Takeaways" } : null,
@@ -666,11 +677,17 @@ export default function BriefingSessionPage() {
           session_id: sessionId,
           attempt: attempts
         });
+        if (attempts >= READY_MARKDOWN_RECONCILE_ATTEMPTS) {
+          dispatchSession({ type: "delivery_failed" });
+        }
         return;
       }
 
       if (data) {
         dispatchSession({ type: "snapshot", snapshot: data });
+      }
+      if (!data?.briefing_markdown?.trim() && attempts >= READY_MARKDOWN_RECONCILE_ATTEMPTS) {
+        dispatchSession({ type: "delivery_failed" });
       }
     };
 
@@ -689,7 +706,7 @@ export default function BriefingSessionPage() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [accessToken, phase, sessionId]);
+  }, [accessToken, phase, sessionId, sessionLoadAttempt]);
 
   useEffect(() => {
     if (phase !== "ready" || !session?.session_id || refreshedUsageSessionRef.current === session.session_id) {
@@ -795,7 +812,9 @@ export default function BriefingSessionPage() {
                   {heroEyebrow ? <p className={chrome.heroEyebrow}>{heroEyebrow}</p> : null}
                   <div className={chrome.heroMeta}>
                     {isFailed ? <span className={chrome.statusPillDanger}>Failed</span> : null}
-                    {isLoadFailed ? <span className={chrome.statusPillWarning}>Unavailable</span> : null}
+                    {isLoadFailed || isDeliveryFailed ? (
+                      <span className={chrome.statusPillWarning}>Unavailable</span>
+                    ) : null}
                   </div>
                 </div>
               ) : null}
@@ -809,7 +828,7 @@ export default function BriefingSessionPage() {
             </div>
           </div>
 
-          {isLoadFailed ? (
+          {isLoadFailed || isDeliveryFailed ? (
             <div className={styles.errorCard} role="alert">
               <p>{failurePresentation.detail}</p>
               <div className={chrome.actionRow}>
@@ -819,10 +838,11 @@ export default function BriefingSessionPage() {
                   onClick={() => {
                     setSessionLoadError(null);
                     setSessionLoadErrorCode(null);
+                    dispatchSession({ type: "delivery_retry" });
                     setSessionLoadAttempt((current) => current + 1);
                   }}
                 >
-                  Try opening again
+                  {isDeliveryFailed ? "Load briefing again" : "Try opening again"}
                 </button>
                 <Link className={chrome.secondaryButton} href={failurePresentation.actionHref}>
                   {failurePresentation.actionLabel}
