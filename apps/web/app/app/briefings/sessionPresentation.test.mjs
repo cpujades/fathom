@@ -79,8 +79,8 @@ test("ready delivery recovery explains that retrying is safe", () => {
   const deliveryFailure = getDeliveryFailurePresentation();
 
   assert.equal(deliveryFailure.title, "Your briefing is ready");
-  assert.match(deliveryFailure.detail, /will not start a new briefing/i);
-  assert.match(deliveryFailure.detail, /use more listening time/i);
+  assert.match(deliveryFailure.detail, /will not create another briefing/i);
+  assert.match(deliveryFailure.detail, /use more video time/i);
   assert.equal(deliveryFailure.actionHref, "/app/briefings");
 });
 
