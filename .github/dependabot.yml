@@ -7,9 +7,15 @@ updates:
     schedule:
       interval: "weekly"
     groups:
-      npm:
+      npm-minor-patch:
         patterns:
           - "*"
+        # Review lint-rule changes independently from routine package updates.
+        exclude-patterns:
+          - "eslint-config-next"
+        update-types:
+          - "minor"
+          - "patch"
 
   # Keep Python dependencies and the uv lockfile current.
   - package-ecosystem: "uv"
@@ -17,9 +23,33 @@ updates:
     schedule:
       interval: "weekly"
     groups:
-      uv:
+      uv-runtime-minor-patch:
         patterns:
-          - "*"
+          - "fastapi"
+          - "uvicorn"
+          - "python-dotenv"
+          - "openai"
+          - "markdown"
+          - "weasyprint"
+          - "pydantic"
+          - "supabase"
+          - "pyjwt"
+          - "pydantic-settings"
+          - "asyncpg"
+          - "debugpy"
+          - "groq"
+          - "pytubefix"
+        update-types:
+          - "minor"
+          - "patch"
+      uv-development-minor-patch:
+        # Keep the experimental pre-1.0 ty checker in its own PR.
+        patterns:
+          - "ruff"
+          - "pre-commit"
+        update-types:
+          - "minor"
+          - "patch"
 
   # Keep GitHub Actions used by workflows up to date.
   - package-ecosystem: "github-actions"
