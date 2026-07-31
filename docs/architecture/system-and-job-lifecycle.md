@@ -28,6 +28,38 @@ The browser never talks directly to Groq, OpenRouter, or Polar. It has limited
 read-only access to three RLS-protected database tables, but normal product
 requests still go through the API.
 
+## Why there are 14 application tables
+
+The 14 tables are the final public application schema after migrations; the
+old Stripe customer table is removed. They do not include Supabase's internal
+Auth or Storage tables. The schema separates records that have different
+owners, lifecycles, security rules, and audit requirements instead of putting
+unrelated mutable data into one large row.
+
+| Table | Purpose |
+| --- | --- |
+| `jobs` | One user's briefing session, queue state, progress, lease, result link, and archive state |
+| `transcripts` | Reusable normalized source text and transcription identity |
+| `transcript_segments` | Immutable timestamp ranges used as summary evidence |
+| `summaries` | Reusable briefing content and its pending/ready/failed generation ownership |
+| `job_events` | Durable progress history for disconnect and replay recovery |
+| `plans` | Subscription and pack product definitions |
+| `entitlements` | Current per-user subscription, balance, debt, and blocking snapshot |
+| `credit_lots` | Individual subscription-cycle and pack grants, consumption, expiry, and refund state |
+| `usage_ledger` | Immutable credit and debt movements for audit and reconciliation |
+| `usage_settlements` | The unique, atomic final charge for one successful job |
+| `billing_orders` | Polar purchases, refunds, and order lifecycle |
+| `billing_webhook_events` | Provider-event deduplication, ordering, replay, and diagnostics |
+| `polar_customers` | The private mapping between a Talven user and Polar customer state |
+| `api_rate_limit_buckets` | Short-lived per-client/per-scope request counters |
+
+For example, `entitlements` is the fast account balance shown now, while
+`usage_ledger` is the unchangeable history explaining how it became that
+balance. Combining them would make either reads slow or billing history easy
+to overwrite. Similarly, user-owned `jobs` are separate from reusable
+`transcripts` and `summaries` so two users may benefit from the same processed
+source without gaining access to each other's sessions or billing records.
+
 ## User request flow
 
 1. The browser sends a public YouTube URL to `POST /briefing-sessions`.
@@ -101,6 +133,11 @@ the job, summary, or billing records after worker B owns it.
 No application can force a process to exit cleanly after `SIGKILL`, machine
 loss, or a container runtime failure. Renewable leases are the recovery
 mechanism for exactly those cases.
+
+Normal shutdown, cancellation, lease loss, retry, and stale-job recovery emit
+structured lifecycle logs with correlation and job identifiers. A process
+that is forcibly killed cannot emit a final log; the expired lease and later
+reclaim are the observable evidence from the surviving database and worker.
 
 ## Retries and deadlines
 

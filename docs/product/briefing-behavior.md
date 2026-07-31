@@ -39,6 +39,11 @@ Archive is a library state, not deletion of the shared source work. Restoring
 changes the user's job from archived back to successful and reuses the same
 summary.
 
+Talven does not currently expose permanent briefing or account-data erasure to
+the user. That is a separate privacy and retention decision because shared
+derived work and billing/audit records cannot all follow the same deletion
+rule.
+
 ## Two different users submitting at the same moment
 
 Current behavior is safe but not maximally efficient:
@@ -134,6 +139,9 @@ per-chunk retry, timestamp offsetting, ordered merge, and progress/cost tests.
 See [Long-audio and transcription decision](../decisions/long-audio-and-transcription.md).
 
 ## Deliberately deferred
+
+The full rationale, revisit triggers, and minimum safe future designs live in
+the [deferred work register](../decisions/deferred-work.md).
 
 - User cancellation of running jobs: requires clear charging and remote-call
   semantics; Redis is not required, but a durable cancellation state and

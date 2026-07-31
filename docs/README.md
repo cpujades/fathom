@@ -15,6 +15,12 @@ from the repository:
 - [Long-audio and transcription decision](./decisions/long-audio-and-transcription.md):
   the current YouTube-to-Groq pipeline, the reason for the two-hour pilot limit,
   provider options, and the safe path to longer videos.
+- [Deferred work register](./decisions/deferred-work.md): accepted product and
+  technical deferrals, why they are not pilot blockers, and their revisit
+  triggers.
+- [Pre-production review register](./decisions/pre-production-review-register.md):
+  product decisions and operational evidence still required before an
+  invite-only pilot or paid public launch.
 - [Briefing quality evaluation](./quality/briefing-evaluation.md): deterministic
   and opt-in paid evaluation.
 - [Worker and billing incidents](./runbooks/worker-and-billing-incidents.md):
