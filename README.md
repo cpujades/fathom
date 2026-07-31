@@ -192,6 +192,9 @@ PYTHONPATH=apps/backend ./.venv/bin/python -m unittest discover -s apps/backend/
 The backend suite includes deterministic, offline briefing-quality fixtures. See
 [Briefing quality evaluation](./docs/quality/briefing-evaluation.md) for the checks and fixture rules.
 
+For a durable product and architecture map, start with the
+[Talven documentation index](./docs/README.md).
+
 ### Frontend
 
 ```bash
