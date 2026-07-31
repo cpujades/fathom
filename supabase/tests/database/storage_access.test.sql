@@ -108,12 +108,14 @@ select lives_ok(
   $$,
   'an authenticated update is safely filtered by storage RLS'
 );
-select lives_ok(
+select throws_ok(
   $$
     delete from storage.objects
     where id = 'b1000000-0000-0000-0000-000000000001'
   $$,
-  'an authenticated delete is safely filtered by storage RLS'
+  '42501',
+  null,
+  'authenticated clients cannot delete directly from Talven storage'
 );
 
 reset role;
