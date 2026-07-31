@@ -44,7 +44,7 @@ async def _postgres_with_missing_schema(_settings: SimpleNamespace):
     connection = AsyncMock()
     connection.fetchval.return_value = 1
     connection.fetchrow.return_value = {
-        name: name != "settle_job_usage_function" for name in _REQUIRED_DATABASE_OBJECTS
+        name: name != "prepare_summary_pdf_function" for name in _REQUIRED_DATABASE_OBJECTS
     }
     yield connection
 
@@ -67,6 +67,11 @@ class ReadinessTests(unittest.IsolatedAsyncioTestCase):
             result = await readiness_status(_settings())
 
         self.assertEqual(result.status, "ok")
+        selected_tables = [call.args[0] for call in admin_client.table.call_args_list]
+        self.assertEqual(
+            selected_tables,
+            ["jobs", "summaries", "job_events", "transcript_segments"],
+        )
 
     async def test_readiness_fails_when_billing_is_not_configured(self) -> None:
         admin_client = _admin_client()

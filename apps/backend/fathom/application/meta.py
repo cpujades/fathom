@@ -23,12 +23,17 @@ _REQUIRED_DATABASE_OBJECTS = (
     "jobs_table",
     "summaries_table",
     "job_events_table",
+    "transcript_segments_table",
     "usage_settlements_table",
     "billing_webhook_events_table",
     "create_or_reuse_settled_job_function",
     "claim_next_settled_job_function",
     "renew_job_lease_function",
     "prepare_summary_function",
+    "create_transcript_with_segments_function",
+    "prepare_summary_pdf_function",
+    "complete_summary_pdf_function",
+    "fail_summary_pdf_function",
     "settle_job_usage_function",
     "apply_polar_webhook_event_function",
 )
@@ -38,6 +43,7 @@ select
   to_regclass('public.jobs') is not null as jobs_table,
   to_regclass('public.summaries') is not null as summaries_table,
   to_regclass('public.job_events') is not null as job_events_table,
+  to_regclass('public.transcript_segments') is not null as transcript_segments_table,
   to_regclass('public.usage_settlements') is not null as usage_settlements_table,
   to_regclass('public.billing_webhook_events') is not null as billing_webhook_events_table,
   exists (
@@ -56,6 +62,22 @@ select
     select 1 from pg_proc join pg_namespace on pg_namespace.oid = pg_proc.pronamespace
     where pg_namespace.nspname = 'public' and pg_proc.proname = 'prepare_summary'
   ) as prepare_summary_function,
+  exists (
+    select 1 from pg_proc join pg_namespace on pg_namespace.oid = pg_proc.pronamespace
+    where pg_namespace.nspname = 'public' and pg_proc.proname = 'create_transcript_with_segments'
+  ) as create_transcript_with_segments_function,
+  exists (
+    select 1 from pg_proc join pg_namespace on pg_namespace.oid = pg_proc.pronamespace
+    where pg_namespace.nspname = 'public' and pg_proc.proname = 'prepare_summary_pdf'
+  ) as prepare_summary_pdf_function,
+  exists (
+    select 1 from pg_proc join pg_namespace on pg_namespace.oid = pg_proc.pronamespace
+    where pg_namespace.nspname = 'public' and pg_proc.proname = 'complete_summary_pdf'
+  ) as complete_summary_pdf_function,
+  exists (
+    select 1 from pg_proc join pg_namespace on pg_namespace.oid = pg_proc.pronamespace
+    where pg_namespace.nspname = 'public' and pg_proc.proname = 'fail_summary_pdf'
+  ) as fail_summary_pdf_function,
   exists (
     select 1 from pg_proc join pg_namespace on pg_namespace.oid = pg_proc.pronamespace
     where pg_namespace.nspname = 'public' and pg_proc.proname = 'settle_job_usage'
@@ -106,8 +128,19 @@ async def _check_postgrest(settings: Settings) -> None:
     try:
         async with managed_supabase_client(await create_supabase_admin_client(settings)) as client:
             await client.table("jobs").select("id,status,lease_expires_at,usage_settlement_required").limit(1).execute()
-            await client.table("summaries").select("id,status,generation_job_id,status_updated_at").limit(1).execute()
-            await client.table("job_events").select("id,job_id,event_type,created_at").limit(1).execute()
+            await (
+                client.table("summaries")
+                .select("id,status,generation_job_id,status_updated_at,pdf_cache_version,pdf_generation_token")
+                .limit(1)
+                .execute()
+            )
+            await client.table("job_events").select("id,sequence_id,job_id,event_type,created_at").limit(1).execute()
+            await (
+                client.table("transcript_segments")
+                .select("transcript_id,segment_index,start_seconds,end_seconds")
+                .limit(1)
+                .execute()
+            )
     except Exception as exc:
         logger.warning(
             "api.ready.failed",
