@@ -7,9 +7,15 @@ updates:
     schedule:
       interval: "weekly"
     groups:
-      npm:
+      npm-minor-patch:
         patterns:
           - "*"
+        # Review lint-rule changes independently from routine package updates.
+        exclude-patterns:
+          - "eslint-config-next"
+        update-types:
+          - "minor"
+          - "patch"
 
   # Keep Python dependencies and the uv lockfile current.
   - package-ecosystem: "uv"
@@ -17,9 +23,15 @@ updates:
     schedule:
       interval: "weekly"
     groups:
-      uv:
+      uv-minor-patch:
         patterns:
           - "*"
+        # Keep the experimental pre-1.0 ty checker in its own PR.
+        exclude-patterns:
+          - "ty"
+        update-types:
+          - "minor"
+          - "patch"
 
   # Keep GitHub Actions used by workflows up to date.
   - package-ecosystem: "github-actions"
