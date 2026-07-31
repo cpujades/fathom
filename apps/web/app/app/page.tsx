@@ -66,8 +66,8 @@ export default function AppHome() {
   const workspaceTitle = loading
     ? "Loading your desk..."
     : firstName
-      ? `What podcast is worth exploring, ${firstName}?`
-      : "What podcast is worth exploring?";
+      ? `What is worth understanding, ${firstName}?`
+      : "What is worth understanding?";
   const quotaLabel = useMemo(() => {
     if (remainingSeconds === null) {
       return "Checking";
@@ -129,7 +129,7 @@ export default function AppHome() {
                   >
                     {submitting ? "Starting..." : "Start briefing"}
                   </button>
-                  <div className={styles.quotaBadge} aria-label={`${quotaLabel} listening time available`}>
+                  <div className={styles.quotaBadge} aria-label={`${quotaLabel} video time available`}>
                     <span
                       className={styles.quotaRing}
                       style={{ "--quota-percent": `${quotaPercent}%` } as React.CSSProperties}

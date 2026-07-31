@@ -232,7 +232,7 @@ function BriefingCreatePageContent() {
                 {isCreditOrPaymentError(error) ? (
                   <div className={chrome.actionRow}>
                     <Link className={chrome.primaryButton} href="/app/billing#billing-offers">
-                      Get more listening time
+                      Get more video time
                     </Link>
                   </div>
                 ) : null}

@@ -48,10 +48,10 @@ export function getFailurePresentation(
   if (isCreditOrPaymentError(rawMessage)) {
     return {
       actionHref: "/app/billing#billing-offers",
-      actionLabel: "Get more listening time",
-      title: "More listening time needed",
+      actionLabel: "Get more video time",
+      title: "More video time needed",
       description: "This source needs more minutes than are currently available.",
-      detail: "Add more listening time, then start the briefing again."
+      detail: "Add more video time, then start the briefing again."
     };
   }
 
@@ -170,7 +170,7 @@ export function getDeliveryFailurePresentation(): FailurePresentation {
     actionLabel: "Back to briefings",
     title: "Your briefing is ready",
     description: "Talven saved the finished briefing, but this reader could not load the text.",
-    detail: "Try loading it again. This will not start a new briefing or use more listening time."
+    detail: "Try loading it again. This will not create another briefing or use more video time."
   };
 }
 

@@ -7,8 +7,8 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://talven.ai"),
-  title: "Talven | Private Podcast Briefings",
-  description: "Turn long podcast episodes into clear, timestamped briefings built for private advantage.",
+  title: "Talven | Private YouTube Briefings",
+  description: "Turn long-form YouTube videos into clear, timestamped briefings built for private advantage.",
   applicationName: "Talven",
   alternates: {
     canonical: "/"
@@ -18,8 +18,8 @@ export const metadata: Metadata = {
     shortcut: "/favicon.svg"
   },
   openGraph: {
-    title: "Talven | Private Podcast Briefings",
-    description: "Paste a YouTube podcast URL and get a concise, timestamped briefing.",
+    title: "Talven | Private YouTube Briefings",
+    description: "Paste a public YouTube URL and get a concise, timestamped briefing.",
     url: "/",
     siteName: "Talven",
     type: "website",
@@ -28,14 +28,14 @@ export const metadata: Metadata = {
         url: "/opengraph-image",
         width: 1200,
         height: 630,
-        alt: "Talven private podcast briefings"
+        alt: "Talven private YouTube briefings"
       }
     ]
   },
   twitter: {
     card: "summary_large_image",
-    title: "Talven | Private Podcast Briefings",
-    description: "Convert long podcast episodes into fast, readable briefings with source moments attached.",
+    title: "Talven | Private YouTube Briefings",
+    description: "Convert long-form YouTube videos into fast, readable briefings with source moments attached.",
     images: ["/opengraph-image"]
   }
 };

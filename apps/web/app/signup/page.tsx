@@ -170,10 +170,12 @@ export default function SignUpPage() {
             Talven
           </div>
           <h1 className={styles.panelTitle}>Create your account</h1>
-          <p className={styles.panelText}>Turn long-form audio into concise, actionable briefings built for private advantage.</p>
+          <p className={styles.panelText}>
+            Turn long-form YouTube videos into concise, actionable briefings built for private advantage.
+          </p>
           <ul className={styles.panelList}>
             <li>Begin with included monthly usage</li>
-            <li>Upgrade or top up when listening expands</li>
+            <li>Upgrade or top up when your video use expands</li>
             <li>Track usage and exports in one workspace</li>
           </ul>
           <p className={styles.panelFooter}>Already have an account? Sign in and continue where you left off.</p>

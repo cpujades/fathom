@@ -69,7 +69,7 @@ class CreateBriefingSessionTests(unittest.IsolatedAsyncioTestCase):
 
         for segments, expected_prompt_key in (
             ((segment,), "briefing-v6-evidence-links"),
-            ((), "briefing-v4"),
+            ((), "briefing-v5-youtube"),
         ):
             with (
                 patch(

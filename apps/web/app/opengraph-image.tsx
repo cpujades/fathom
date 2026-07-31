@@ -1,6 +1,6 @@
 import { ImageResponse } from "next/og";
 
-export const alt = "Talven private podcast briefings";
+export const alt = "Talven private YouTube briefings";
 export const size = {
   width: 1200,
   height: 630
@@ -54,7 +54,7 @@ export default function Image() {
             </div>
             <div style={{ display: "flex", flexDirection: "column" }}>
               <span style={{ fontSize: 18, color: "#667267", letterSpacing: 2.4, textTransform: "uppercase" }}>
-                Private podcast briefings
+                Private YouTube briefings
               </span>
               <span style={{ fontSize: 34, fontWeight: 800 }}>Talven</span>
             </div>
@@ -74,7 +74,7 @@ export default function Image() {
               Extract the signal. Keep the edge.
             </h1>
             <p style={{ margin: 0, maxWidth: 760, color: "#435247", fontSize: 30, lineHeight: 1.35 }}>
-              Turn long podcast conversations into clear, source-linked briefings ready to read, verify, and reuse.
+              Turn long-form YouTube videos into clear, source-linked briefings ready to read, verify, and reuse.
             </p>
           </div>
 

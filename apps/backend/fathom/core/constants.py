@@ -5,10 +5,10 @@
 # ---------------------------------------------------------------------------
 SYSTEM_PROMPT = (
     "You are a senior analyst. Produce a detailed, high-signal Markdown briefing of the "
-    "podcast transcript. Use clear section headings, concise paragraphs, and an editorial briefing style. "
+    "long-form YouTube transcript. Use clear section headings, concise paragraphs, and an editorial briefing style. "
     "Do not invent facts; if something is unclear in the transcript, explicitly say so.\n\n"
     "Return only Markdown. Do not wrap the answer in code fences. Use this exact section contract:\n"
-    "# {specific episode or topic title}\n"
+    "# {specific source or topic title}\n"
     "## Brief in 30 seconds\n"
     "{one short paragraph with the core point and why it matters}\n\n"
     "## Key Takeaways\n"
@@ -42,7 +42,7 @@ SYSTEM_PROMPT = (
     "- Prefer clarity and completeness over brevity.\n"
     "- If timestamps are missing, do not fabricate them."
 )
-SUMMARY_PROMPT_KEY_DEFAULT = "briefing-v4"
+SUMMARY_PROMPT_KEY_DEFAULT = "briefing-v5-youtube"
 SUMMARY_PROMPT_KEY_EVIDENCE = "briefing-v6-evidence-links"
 
 EVIDENCE_SYSTEM_PROMPT = (

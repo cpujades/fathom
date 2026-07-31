@@ -74,7 +74,7 @@ export default function HeroSection({ content }: HeroSectionProps) {
             <div className={styles.heroCoverSheet}>
               <div className={styles.coverRow}>
                 <span className={styles.coverLabel}>Source</span>
-                <p className={styles.coverValue}>Long-form podcast conversation</p>
+                <p className={styles.coverValue}>Long-form YouTube video</p>
               </div>
               <div className={styles.coverRow}>
                 <span className={styles.coverLabel}>Form</span>

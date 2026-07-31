@@ -284,7 +284,7 @@ function BillingPageContent() {
       {
         key: "subscription",
         label: "Monthly subscriptions",
-        description: "Best for steady listening and recurring briefing volume.",
+        description: "Best for steady use and recurring briefing volume.",
         plans: subscriptions
       },
       {
@@ -382,7 +382,7 @@ function BillingPageContent() {
       return `Current plan renews ${formatDate(account.subscription.period_end)}.`;
     }
 
-    return "Add more listening time whenever you need it.";
+    return "Add more video time whenever you need it.";
   }, [
     usage?.pack_remaining_seconds,
     usage?.pack_expires_at,
@@ -667,7 +667,7 @@ function BillingPageContent() {
           <div>
             <p className={chrome.heroEyebrow}>Billing</p>
             <h1 className={chrome.heroTitle}>Your access</h1>
-            <p className={chrome.heroText}>See what listening time you have now, then add more when you need it.</p>
+            <p className={chrome.heroText}>See how much video time you have now, then add more when you need it.</p>
           </div>
           <div className={chrome.heroActions}>
             {canManageBilling ? (
@@ -676,7 +676,7 @@ function BillingPageContent() {
               </button>
             ) : (
               <a className={chrome.primaryButton} href="#billing-offers">
-                Get more listening time
+                Get more video time
               </a>
             )}
             <Link className={chrome.secondaryButton} href="/app">
@@ -694,7 +694,7 @@ function BillingPageContent() {
             <h2 className={chrome.noticeTitle}>Purchase status</h2>
             <p className={chrome.noticeText}>
               {purchaseSync.status === "syncing"
-                ? "Payment received. We are updating your listening balance now."
+                ? "Payment received. We are updating your video-time balance now."
                 : purchaseSync.status === "synced"
                   ? `${purchaseSync.orderLabel ?? "Your purchase"} is confirmed and your access is updated below.`
                   : "Payment succeeded, but provider confirmation is taking longer than expected. You do not need to pay again."}
@@ -771,13 +771,13 @@ function BillingPageContent() {
           {usage && quotaAvailablePercent !== null ? (
             <div className={styles.accessMeter}>
               <div className={styles.accessMeterHeader}>
-                <span>Listening balance</span>
+                <span>Video-time balance</span>
                 <span>{quotaAvailablePercent}% available</span>
               </div>
               <div
                 className={styles.accessMeterTrack}
                 role="progressbar"
-                aria-label="Available listening time"
+                aria-label="Available video time"
                 aria-valuemin={0}
                 aria-valuemax={100}
                 aria-valuenow={quotaAvailablePercent}
@@ -816,8 +816,10 @@ function BillingPageContent() {
         <section className={`${chrome.surface} ${styles.pageColumn} ${styles.offerSection}`} id="billing-offers">
           <div className={chrome.surfaceHeader}>
             <div>
-              <h2 className={chrome.surfaceTitle}>Get more listening time</h2>
-              <p className={chrome.surfaceText}>Choose a monthly subscription or add a one-time reserve when your listening expands.</p>
+              <h2 className={chrome.surfaceTitle}>Get more video time</h2>
+              <p className={chrome.surfaceText}>
+                Choose a monthly subscription or add a one-time reserve when your use grows.
+              </p>
             </div>
           </div>
 

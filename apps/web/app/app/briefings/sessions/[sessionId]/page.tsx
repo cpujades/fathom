@@ -911,7 +911,7 @@ export default function BriefingSessionPage() {
                   {showCreditCta ? (
                     <div className={chrome.actionRow}>
                       <Link className={chrome.primaryButton} href="/app/billing#billing-offers">
-                        Get more listening time
+                        Get more video time
                       </Link>
                     </div>
                   ) : null}
@@ -948,7 +948,7 @@ export default function BriefingSessionPage() {
                   </a>
                 ) : null}
                 <Link className={`${styles.textActionLink} ${styles.newBriefingLink}`} href="/app">
-                  New briefing
+                  Start another briefing
                 </Link>
               </div>
             </div>
@@ -1135,7 +1135,7 @@ export default function BriefingSessionPage() {
                   Back to briefings
                 </Link>
                 <Link className={styles.textActionLink} href="/app">
-                  New briefing
+                  Start another briefing
                 </Link>
                 {isReady && !deleteConfirming ? (
                   <button
@@ -1225,7 +1225,7 @@ export default function BriefingSessionPage() {
                   Back to briefings
                 </Link>
                 <Link className={styles.textActionLink} href="/app">
-                  New briefing
+                  Start another briefing
                 </Link>
               </div>
               {isReady && !deleteConfirming ? (
