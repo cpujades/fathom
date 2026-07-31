@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 
 from fathom.api.deps.auth import AuthContext
 from fathom.application.billing.parsing import as_str, parse_dt
@@ -18,7 +19,7 @@ from fathom.schemas.billing import (
     PackBillingState,
     SubscriptionBillingState,
 )
-from fathom.services.supabase import create_supabase_admin_client
+from fathom.services.supabase import create_supabase_admin_client, managed_supabase_client
 
 
 async def get_billing_account(
@@ -26,7 +27,11 @@ async def get_billing_account(
     auth: AuthContext,
     settings: Settings,
 ) -> BillingAccountResponse:
-    admin_client = await create_supabase_admin_client(settings)
+    async with managed_supabase_client(await create_supabase_admin_client(settings)) as admin_client:
+        return await _get_billing_account(admin_client, auth)
+
+
+async def _get_billing_account(admin_client: Any, auth: AuthContext) -> BillingAccountResponse:
     entitlement = await fetch_entitlement(admin_client, auth.user_id)
     orders = await list_billing_orders_for_user(admin_client, user_id=auth.user_id, limit=50)
 

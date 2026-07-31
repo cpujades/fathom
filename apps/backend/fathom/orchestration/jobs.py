@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 
 from fathom.application.usage import record_usage_for_job
 from fathom.core.config import Settings
-from fathom.core.constants import GROQ_MODEL, SUMMARY_PROMPT_KEY_DEFAULT
+from fathom.core.constants import GROQ_MODEL
 from fathom.core.logging import log_context
 from fathom.crud.supabase.job_events import record_job_event_best_effort
 from fathom.crud.supabase.jobs import mark_job_succeeded, update_job_progress
@@ -24,10 +24,11 @@ async def process_job(job: dict[str, object], settings: Settings, admin_client: 
     job_id = str(job["id"])
     url = str(job["url"])
     user_id = str(job["user_id"])
+    lease_token = str(job["lease_token"])
     requested_summary_id = str(uuid.uuid4())
     job_start = time.perf_counter()
 
-    with log_context(job_id=job_id, user_id=user_id, summary_id=requested_summary_id):
+    with log_context(job_id=job_id, summary_id=requested_summary_id):
         logger.info(
             "worker.job.started",
             extra={
@@ -36,12 +37,12 @@ async def process_job(job: dict[str, object], settings: Settings, admin_client: 
                 "transcript_model": GROQ_MODEL,
                 "summary_provider": "openrouter",
                 "summary_model": OPENROUTER_MODEL,
-                "prompt_key": SUMMARY_PROMPT_KEY_DEFAULT,
             },
         )
         await update_job_progress(
             admin_client,
             job_id=job_id,
+            lease_token=lease_token,
             stage="warming",
             progress=10,
             status_message="Warming up the studio",
@@ -49,6 +50,7 @@ async def process_job(job: dict[str, object], settings: Settings, admin_client: 
         await update_job_progress(
             admin_client,
             job_id=job_id,
+            lease_token=lease_token,
             stage="transcribing",
             progress=30,
             status_message="Transcribing the audio",
@@ -67,9 +69,12 @@ async def process_job(job: dict[str, object], settings: Settings, admin_client: 
             requested_summary_id=requested_summary_id,
             transcript_id=transcript.transcript_id,
             transcript_text=transcript.transcript_text,
+            transcript_segments=transcript.segments,
+            source_video_id=getattr(transcript, "video_id", None),
             settings=settings,
             admin_client=admin_client,
             job_start=job_start,
+            lease_token=lease_token,
         )
 
         if not summary.cache_hit:
@@ -79,9 +84,17 @@ async def process_job(job: dict[str, object], settings: Settings, admin_client: 
                 markdown=summary.markdown,
                 admin_client=admin_client,
                 job_start=job_start,
+                lease_token=lease_token,
             )
 
-        await _record_usage(job=job, user_id=user_id, job_id=job_id, settings=settings)
+        await _record_usage(
+            job=job,
+            user_id=user_id,
+            job_id=job_id,
+            lease_token=lease_token,
+            settings=settings,
+            admin_client=admin_client,
+        )
         await _record_job_completed(
             job_id=job_id,
             summary_id=summary.summary_id,
@@ -90,6 +103,12 @@ async def process_job(job: dict[str, object], settings: Settings, admin_client: 
             flush_count=summary.flush_count,
             admin_client=admin_client,
             job_start=job_start,
+        )
+        await mark_job_succeeded(
+            admin_client,
+            job_id=job_id,
+            summary_id=summary.summary_id,
+            lease_token=lease_token,
         )
 
 
@@ -100,6 +119,7 @@ async def _finalize_new_summary(
     markdown: str,
     admin_client: AsyncClient,
     job_start: float,
+    lease_token: str,
 ) -> None:
     log_stage(
         logger,
@@ -113,33 +133,31 @@ async def _finalize_new_summary(
     await update_job_progress(
         admin_client,
         job_id=job_id,
+        lease_token=lease_token,
         stage="finalizing",
         progress=96,
         status_message="Finalizing your briefing",
         summary_id=summary_id,
     )
-    await update_job_progress(
-        admin_client,
+
+
+async def _record_usage(
+    *,
+    job: dict[str, object],
+    user_id: str,
+    job_id: str,
+    lease_token: str,
+    settings: Settings,
+    admin_client: AsyncClient,
+) -> None:
+    await record_usage_for_job(
+        user_id=user_id,
         job_id=job_id,
-        stage="completed",
-        progress=100,
-        status_message="Summary ready",
-        summary_id=summary_id,
+        lease_token=lease_token,
+        duration_seconds=_duration_seconds(job.get("duration_seconds")),
+        settings=settings,
+        admin_client=admin_client,
     )
-    with log_context(summary_id=summary_id):
-        await mark_job_succeeded(admin_client, job_id=job_id, summary_id=summary_id)
-
-
-async def _record_usage(*, job: dict[str, object], user_id: str, job_id: str, settings: Settings) -> None:
-    try:
-        await record_usage_for_job(
-            user_id=user_id,
-            job_id=job_id,
-            duration_seconds=_duration_seconds(job.get("duration_seconds")),
-            settings=settings,
-        )
-    except Exception:
-        logger.exception("worker.usage_recording.failed", extra={"job_id": job_id})
 
 
 def _duration_seconds(value: object) -> int | None:

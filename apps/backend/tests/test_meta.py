@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from fathom.application.meta import readiness_status, status_snapshot
+from fathom.application.meta import _REQUIRED_DATABASE_OBJECTS, readiness_status, status_snapshot
 from fathom.core.errors import NotReadyError
 
 
@@ -35,6 +35,17 @@ def _settings(**overrides: object) -> SimpleNamespace:
 async def _postgres_ok(_settings: SimpleNamespace):
     connection = AsyncMock()
     connection.fetchval.return_value = 1
+    connection.fetchrow.return_value = {name: True for name in _REQUIRED_DATABASE_OBJECTS}
+    yield connection
+
+
+@asynccontextmanager
+async def _postgres_with_missing_schema(_settings: SimpleNamespace):
+    connection = AsyncMock()
+    connection.fetchval.return_value = 1
+    connection.fetchrow.return_value = {
+        name: name != "prepare_summary_pdf_function" for name in _REQUIRED_DATABASE_OBJECTS
+    }
     yield connection
 
 
@@ -56,6 +67,11 @@ class ReadinessTests(unittest.IsolatedAsyncioTestCase):
             result = await readiness_status(_settings())
 
         self.assertEqual(result.status, "ok")
+        selected_tables = [call.args[0] for call in admin_client.table.call_args_list]
+        self.assertEqual(
+            selected_tables,
+            ["jobs", "summaries", "job_events", "transcript_segments"],
+        )
 
     async def test_readiness_fails_when_billing_is_not_configured(self) -> None:
         admin_client = _admin_client()
@@ -87,6 +103,31 @@ class ReadinessTests(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertEqual(result.status, "ok")
+
+    async def test_readiness_fails_when_required_schema_capability_is_missing(self) -> None:
+        admin_client = _admin_client()
+
+        with (
+            patch("fathom.application.meta.create_supabase_admin_client", AsyncMock(return_value=admin_client)),
+            patch("fathom.application.meta.create_postgres_connection", _postgres_with_missing_schema),
+        ):
+            with self.assertRaises(NotReadyError) as ctx:
+                await readiness_status(_settings())
+
+        self.assertEqual(ctx.exception.detail, "Database schema is incomplete.")
+
+    async def test_readiness_converts_non_postgrest_api_failures_to_not_ready(self) -> None:
+        with (
+            patch(
+                "fathom.application.meta.create_supabase_admin_client",
+                AsyncMock(side_effect=OSError("network unavailable")),
+            ),
+            patch("fathom.application.meta.create_postgres_connection", _postgres_ok),
+        ):
+            with self.assertRaises(NotReadyError) as ctx:
+                await readiness_status(_settings())
+
+        self.assertEqual(ctx.exception.detail, "Supabase is not reachable.")
 
     async def test_status_snapshot_returns_version_and_uptime(self) -> None:
         result = await status_snapshot()

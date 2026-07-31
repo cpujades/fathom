@@ -8,10 +8,11 @@ import json
 import re
 from collections.abc import Mapping
 from datetime import UTC, datetime
+from email.message import Message
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.parse import urljoin
-from urllib.request import Request, urlopen
+from urllib.parse import quote, urljoin, urlsplit
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from fathom.core.config import Settings
 from fathom.core.errors import ConfigurationError, ExternalServiceError, InvalidRequestError
@@ -21,6 +22,10 @@ WEBHOOK_SECRET_PREFIXES = ("whsec_", "polar_whs_", "polar_whsec_")
 WEBHOOK_ID_HEADERS = ("webhook-id", "svix-id")
 WEBHOOK_TIMESTAMP_HEADERS = ("webhook-timestamp", "svix-timestamp")
 WEBHOOK_SIGNATURE_HEADERS = ("webhook-signature", "svix-signature")
+POLAR_REQUEST_TIMEOUT_SECONDS = 30
+MAX_POLAR_RESPONSE_BYTES = 1 * 1024 * 1024
+MAX_POLAR_ERROR_BYTES = 64 * 1024
+MAX_POLAR_REDIRECTS = 2
 
 
 class PolarInvalidRequestError(InvalidRequestError):
@@ -60,16 +65,80 @@ def get_polar_portal_return_url(settings: Settings) -> str:
 
 
 def _get_api_base_url(settings: Settings) -> str:
-    server = (settings.polar_server or "sandbox").strip().lower()
+    configured_server = (settings.polar_server or "sandbox").strip()
+    server_name = configured_server.lower()
 
-    if server == "sandbox":
+    if server_name == "sandbox":
         return "https://sandbox-api.polar.sh"
-    if server == "production":
+    if server_name == "production":
         return "https://api.polar.sh"
-    if server.startswith("http://") or server.startswith("https://"):
-        return server.rstrip("/")
 
-    raise ConfigurationError("POLAR_SERVER must be 'sandbox', 'production', or an absolute HTTPS URL.")
+    parsed = urlsplit(configured_server)
+    if (
+        parsed.scheme != "https"
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ConfigurationError(
+            "POLAR_SERVER must be 'sandbox', 'production', or an absolute HTTPS URL "
+            "without credentials, query, or fragment."
+        )
+    return configured_server.rstrip("/")
+
+
+class _NoRedirectHandler(HTTPRedirectHandler):
+    """Return redirects to the caller so bearer credentials never move implicitly."""
+
+    def redirect_request(
+        self,
+        req: Request,
+        fp: Any,
+        code: int,
+        msg: str,
+        headers: Message,
+        newurl: str,
+    ) -> None:
+        del req, fp, code, msg, headers, newurl
+        return None
+
+
+def _open_without_redirects(request: Request, *, timeout: int) -> Any:
+    return build_opener(_NoRedirectHandler()).open(request, timeout=timeout)
+
+
+def _read_bounded_response(response: Any, *, max_bytes: int) -> str:
+    raw = response.read(max_bytes + 1)
+    if len(raw) > max_bytes:
+        raise ExternalServiceError("Polar returned an oversized response.")
+    return raw.decode("utf-8", errors="replace")
+
+
+def _origin(url: str) -> tuple[str, str, int | None]:
+    parsed = urlsplit(url)
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise ExternalServiceError("Polar returned an invalid redirect URL.") from exc
+    if port is None:
+        port = 443 if parsed.scheme.lower() == "https" else 80
+    return parsed.scheme.lower(), (parsed.hostname or "").lower(), port
+
+
+def _resolve_safe_redirect(current_url: str, location: str) -> str:
+    redirected_url = urljoin(current_url, location)
+    if _origin(redirected_url) != _origin(current_url):
+        raise ExternalServiceError("Polar request was redirected to an untrusted origin.")
+    return redirected_url
+
+
+def _require_https_destination(url: str, *, label: str) -> str:
+    parsed = urlsplit(url)
+    if parsed.scheme != "https" or not parsed.hostname or parsed.username is not None or parsed.password is not None:
+        raise ExternalServiceError(f"Polar returned an invalid {label} URL.")
+    return url
 
 
 def _extract_error_message(raw: str) -> str:
@@ -112,23 +181,28 @@ def _polar_request(
 
     raw = ""
     current_url = url
-    max_redirects = 2
-    for _ in range(max_redirects + 1):
+    for _ in range(MAX_POLAR_REDIRECTS + 1):
         request = Request(url=current_url, method=method.upper(), data=data, headers=headers)
         try:
-            with urlopen(request, timeout=30) as response:
-                raw = response.read().decode("utf-8")
+            with _open_without_redirects(
+                request,
+                timeout=POLAR_REQUEST_TIMEOUT_SECONDS,
+            ) as response:
+                raw = _read_bounded_response(
+                    response,
+                    max_bytes=MAX_POLAR_RESPONSE_BYTES,
+                )
                 break
         except HTTPError as exc:
             # Polar may redirect /v1/resource -> /v1/resource/ with 307/308.
             if exc.code in {307, 308}:
                 location = exc.headers.get("Location")
                 if location:
-                    current_url = urljoin(current_url, location)
+                    current_url = _resolve_safe_redirect(current_url, location)
                     continue
                 raise ExternalServiceError(f"Polar request redirect ({exc.code}) missing Location header.") from exc
 
-            raw_error = exc.read().decode("utf-8", errors="replace")
+            raw_error = _read_bounded_response(exc, max_bytes=MAX_POLAR_ERROR_BYTES)
             message = _extract_error_message(raw_error)
             if 400 <= exc.code < 500:
                 raise PolarInvalidRequestError(
@@ -183,7 +257,7 @@ async def create_checkout_session(
     if not isinstance(checkout_url, str) or not checkout_url:
         raise ExternalServiceError("Polar checkout URL was not returned.")
 
-    return checkout_url
+    return _require_https_destination(checkout_url, label="checkout")
 
 
 async def create_customer_portal_session(
@@ -207,7 +281,7 @@ async def create_customer_portal_session(
     if not isinstance(portal_url, str) or not portal_url:
         raise ExternalServiceError("Polar customer portal URL was not returned.")
 
-    return portal_url
+    return _require_https_destination(portal_url, label="customer portal")
 
 
 async def create_order_refund(
@@ -241,7 +315,7 @@ async def get_order(
         _polar_request,
         settings,
         method="GET",
-        path=f"/v1/orders/{order_id}",
+        path=f"/v1/orders/{quote(order_id, safe='')}",
     )
 
 
@@ -254,7 +328,7 @@ async def get_subscription(
         _polar_request,
         settings,
         method="GET",
-        path=f"/v1/subscriptions/{subscription_id}",
+        path=f"/v1/subscriptions/{quote(subscription_id, safe='')}",
     )
 
 

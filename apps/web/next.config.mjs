@@ -1,3 +1,5 @@
+import { buildSecurityHeaders } from "./app/lib/securityHeaders.mjs";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -10,6 +12,14 @@ const nextConfig = {
         hostname: "i.ytimg.com"
       }
     ]
+  },
+  async headers() {
+    return [
+      {
+        source: "/(.*)",
+        headers: buildSecurityHeaders(process.env)
+      }
+    ];
   }
 };
 

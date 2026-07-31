@@ -33,11 +33,20 @@ export type SessionStatusPayload = {
   error_message: string | null;
 };
 
-export type SessionUiPhase = "loading_session" | "processing" | "streaming" | "delivering" | "ready" | "failed";
+export type SessionUiPhase =
+  | "loading_session"
+  | "load_failed"
+  | "processing"
+  | "streaming"
+  | "delivering"
+  | "delivery_failed"
+  | "ready"
+  | "failed";
 export type StreamHealth = "live" | "reconnecting";
 
 export type SessionUiState = {
   connectionNotice: string | null;
+  deliveryError: boolean;
   initialSnapshotLoaded: boolean;
   markdown: string;
   phase: SessionUiPhase;
@@ -51,6 +60,8 @@ export type SessionUiAction =
   | { type: "snapshot"; snapshot: BriefingSessionResponse }
   | { type: "status"; status: SessionStatusPayload }
   | { type: "content_delta"; contentDelta: SessionContentDeltaPayload }
+  | { type: "delivery_failed" }
+  | { type: "delivery_retry" }
   | { type: "snapshot_load_failed" }
   | { type: "stream_lost"; notice: string }
   | { type: "stream_restored" };
@@ -72,6 +83,7 @@ export function createInitialSessionUiState(snapshot?: BriefingSessionResponse |
 
   return withDerivedPhase({
     connectionNotice: null,
+    deliveryError: false,
     initialSnapshotLoaded: Boolean(snapshot),
     markdown,
     progress,
@@ -89,6 +101,20 @@ export function briefingSessionReducer(state: SessionUiState, action: SessionUiA
     return withDerivedPhase({
       ...state,
       initialSnapshotLoaded: true
+    });
+  }
+
+  if (action.type === "delivery_failed") {
+    return withDerivedPhase({
+      ...state,
+      deliveryError: true
+    });
+  }
+
+  if (action.type === "delivery_retry") {
+    return withDerivedPhase({
+      ...state,
+      deliveryError: false
     });
   }
 
@@ -115,6 +141,7 @@ export function briefingSessionReducer(state: SessionUiState, action: SessionUiA
     return withDerivedPhase({
       ...state,
       connectionNotice: null,
+      deliveryError: markdown.trim() ? false : state.deliveryError,
       initialSnapshotLoaded: true,
       markdown,
       progress: session.progress,
@@ -133,6 +160,7 @@ export function briefingSessionReducer(state: SessionUiState, action: SessionUiA
     return withDerivedPhase({
       ...state,
       connectionNotice: null,
+      deliveryError: state.markdown.trim() ? false : state.deliveryError,
       initialSnapshotLoaded: true,
       progress: session.progress,
       session,
@@ -151,6 +179,7 @@ export function briefingSessionReducer(state: SessionUiState, action: SessionUiA
     return withDerivedPhase({
       ...state,
       connectionNotice: null,
+      deliveryError: markdown.trim() ? false : state.deliveryError,
       initialSnapshotLoaded: true,
       markdown,
       progress: session.progress,
@@ -287,8 +316,14 @@ function deriveSessionUiPhase(state: Omit<SessionUiState, "phase">): SessionUiPh
   if (!state.initialSnapshotLoaded) {
     return "loading_session";
   }
+  if (!state.session) {
+    return "load_failed";
+  }
   if (state.session?.state === "failed") {
     return "failed";
+  }
+  if (state.session?.state === "ready" && !state.markdown.trim() && state.deliveryError) {
+    return "delivery_failed";
   }
   if (state.session?.state === "ready" && !state.markdown.trim()) {
     return "delivering";

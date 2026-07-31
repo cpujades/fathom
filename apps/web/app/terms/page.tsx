@@ -5,7 +5,7 @@ import styles from "../legal.module.css";
 
 export const metadata: Metadata = {
   title: "Terms of Service | Talven",
-  description: "The terms that apply when using Talven private podcast briefings."
+  description: "The terms that apply when using Talven private YouTube briefings."
 };
 
 export default function TermsPage() {
@@ -31,7 +31,7 @@ export default function TermsPage() {
           <section className={styles.section}>
             <h2>Using Talven</h2>
             <p>
-              Talven creates written briefings from supported public YouTube podcast URLs. You are responsible for the
+              Talven creates written briefings from supported public YouTube URLs. You are responsible for the
               links you submit and for how you use, store, share, or rely on generated briefings.
             </p>
           </section>

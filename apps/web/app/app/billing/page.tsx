@@ -20,6 +20,7 @@ import { formatDate, formatDuration } from "../../lib/format";
 import { getApiErrorMessage } from "../../lib/apiErrors";
 import { getAccountLabel } from "../../lib/accountLabel";
 import { getCachedBillingSnapshot, hasFreshBillingCache, loadBillingSnapshot } from "../../lib/appDataCache";
+import { resolveRequestedPlan } from "./billingIntent";
 
 type PlanGroup = {
   key: "subscription" | "pack";
@@ -151,6 +152,8 @@ function BillingPageContent() {
   const { accessToken, loading: shellLoading, remainingSeconds, setRemainingSeconds, signOut, user } = useAppShell();
   const checkoutStatus = searchParams.get("checkout");
   const customerSessionToken = searchParams.get("customer_session_token");
+  const requestedIntent = searchParams.get("intent");
+  const requestedPlanCode = searchParams.get("plan");
   const cachedBillingSnapshot = getCachedBillingSnapshot();
 
   const [plans, setPlans] = useState<PlanResponse[]>(cachedBillingSnapshot?.plansData ?? []);
@@ -169,6 +172,7 @@ function BillingPageContent() {
   const [error, setError] = useState<string | null>(null);
 
   const checkoutStartRef = useRef<number | null>(null);
+  const focusedPlanRef = useRef<string | null>(null);
   const refundPollRef = useRef<number | null>(null);
 
   const loadBilling = useCallback(
@@ -280,7 +284,7 @@ function BillingPageContent() {
       {
         key: "subscription",
         label: "Monthly subscriptions",
-        description: "Best for steady listening and recurring briefing volume.",
+        description: "Best for steady use and recurring briefing volume.",
         plans: subscriptions
       },
       {
@@ -291,6 +295,38 @@ function BillingPageContent() {
       }
     ];
   }, [plans]);
+
+  const requestedPlan = useMemo(
+    () => resolveRequestedPlan(plans, requestedIntent, requestedPlanCode),
+    [plans, requestedIntent, requestedPlanCode]
+  );
+
+  useEffect(() => {
+    if (!requestedPlan) {
+      return;
+    }
+    setOfferMode(requestedPlan.plan_type === "pack" ? "pack" : "subscription");
+  }, [requestedPlan]);
+
+  useEffect(() => {
+    if (!requestedPlan || focusedPlanRef.current === requestedPlan.plan_id) {
+      return;
+    }
+
+    const expectedMode = requestedPlan.plan_type === "pack" ? "pack" : "subscription";
+    if (offerMode !== expectedMode) {
+      return;
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      const planCard = document.getElementById(`billing-plan-${requestedPlan.plan_id}`);
+      planCard?.focus({ preventScroll: true });
+      planCard?.scrollIntoView({ behavior: "smooth", block: "center" });
+      focusedPlanRef.current = requestedPlan.plan_id;
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, [offerMode, requestedPlan]);
 
   const activePackCount = useMemo(() => {
     return (account?.packs ?? []).filter((pack) => pack.remaining_seconds > 0 && pack.status !== "refunded").length;
@@ -346,7 +382,7 @@ function BillingPageContent() {
       return `Current plan renews ${formatDate(account.subscription.period_end)}.`;
     }
 
-    return "Add more listening time whenever you need it.";
+    return "Add more video time whenever you need it.";
   }, [
     usage?.pack_remaining_seconds,
     usage?.pack_expires_at,
@@ -608,9 +644,9 @@ function BillingPageContent() {
       <div className={chrome.pageFrame}>
         <AppShellHeader active="billing" remainingSeconds={null} accountLabel={null} onSignOut={() => undefined} />
         <main id="main-content" className={chrome.mainFrame}>
-          <section className={chrome.surface}>
+          <section className={chrome.surface} aria-busy="true">
             <h1 className={chrome.surfaceTitle}>Loading your access...</h1>
-            <p className={chrome.surfaceText}>Fetching plans, balances, and billing details.</p>
+            <p className={chrome.surfaceText} role="status">Fetching plans, balances, and billing details.</p>
           </section>
         </main>
       </div>
@@ -631,7 +667,7 @@ function BillingPageContent() {
           <div>
             <p className={chrome.heroEyebrow}>Billing</p>
             <h1 className={chrome.heroTitle}>Your access</h1>
-            <p className={chrome.heroText}>See what listening time you have now, then add more when you need it.</p>
+            <p className={chrome.heroText}>See how much video time you have now, then add more when you need it.</p>
           </div>
           <div className={chrome.heroActions}>
             {canManageBilling ? (
@@ -640,7 +676,7 @@ function BillingPageContent() {
               </button>
             ) : (
               <a className={chrome.primaryButton} href="#billing-offers">
-                Get more listening time
+                Get more video time
               </a>
             )}
             <Link className={chrome.secondaryButton} href="/app">
@@ -658,7 +694,7 @@ function BillingPageContent() {
             <h2 className={chrome.noticeTitle}>Purchase status</h2>
             <p className={chrome.noticeText}>
               {purchaseSync.status === "syncing"
-                ? "Payment received. We are updating your listening balance now."
+                ? "Payment received. We are updating your video-time balance now."
                 : purchaseSync.status === "synced"
                   ? `${purchaseSync.orderLabel ?? "Your purchase"} is confirmed and your access is updated below.`
                   : "Payment succeeded, but provider confirmation is taking longer than expected. You do not need to pay again."}
@@ -708,9 +744,18 @@ function BillingPageContent() {
         ) : null}
 
         {error ? (
-          <section className={`${chrome.notice} ${styles.pageColumn} ${chrome.noticeError}`}>
+          <section className={`${chrome.notice} ${styles.pageColumn} ${chrome.noticeError}`} role="alert">
             <h2 className={chrome.noticeTitle}>Billing action failed</h2>
             <p className={chrome.noticeText}>{error}</p>
+          </section>
+        ) : null}
+
+        {requestedPlan ? (
+          <section className={`${chrome.notice} ${styles.pageColumn} ${chrome.noticeInfo}`} role="status">
+            <h2 className={chrome.noticeTitle}>{requestedPlan.name} is ready to review</h2>
+            <p className={chrome.noticeText}>
+              Your choice stayed with you after sign-in. Review the details below before opening secure checkout.
+            </p>
           </section>
         ) : null}
 
@@ -726,13 +771,13 @@ function BillingPageContent() {
           {usage && quotaAvailablePercent !== null ? (
             <div className={styles.accessMeter}>
               <div className={styles.accessMeterHeader}>
-                <span>Listening balance</span>
+                <span>Video-time balance</span>
                 <span>{quotaAvailablePercent}% available</span>
               </div>
               <div
                 className={styles.accessMeterTrack}
                 role="progressbar"
-                aria-label="Available listening time"
+                aria-label="Available video time"
                 aria-valuemin={0}
                 aria-valuemax={100}
                 aria-valuenow={quotaAvailablePercent}
@@ -771,8 +816,10 @@ function BillingPageContent() {
         <section className={`${chrome.surface} ${styles.pageColumn} ${styles.offerSection}`} id="billing-offers">
           <div className={chrome.surfaceHeader}>
             <div>
-              <h2 className={chrome.surfaceTitle}>Get more listening time</h2>
-              <p className={chrome.surfaceText}>Choose a monthly subscription or add a one-time reserve when your listening expands.</p>
+              <h2 className={chrome.surfaceTitle}>Get more video time</h2>
+              <p className={chrome.surfaceText}>
+                Choose a monthly subscription or add a one-time reserve when your use grows.
+              </p>
             </div>
           </div>
 
@@ -803,14 +850,24 @@ function BillingPageContent() {
                   account?.subscription.status === "active" &&
                   account.subscription.plan_name === plan.name;
                 const planBadge = getPlanBadge(plan, visiblePlanGroup.key);
+                const isRequestedPlan = requestedPlan?.plan_id === plan.plan_id;
 
                 return (
-                  <article className={styles.planCard} key={plan.plan_id}>
+                  <article
+                    className={`${styles.planCard} ${isRequestedPlan ? styles.planCardSelected : ""}`}
+                    id={`billing-plan-${plan.plan_id}`}
+                    key={plan.plan_id}
+                    tabIndex={isRequestedPlan ? -1 : undefined}
+                  >
                     <div className={styles.planCardBody}>
                       <div>
                         <div className={styles.planHeading}>
                           <p className={styles.planName}>{plan.name}</p>
-                          {planBadge ? <span className={styles.planBadge}>{planBadge}</span> : null}
+                          {isRequestedPlan ? (
+                            <span className={styles.planBadge}>Selected</span>
+                          ) : planBadge ? (
+                            <span className={styles.planBadge}>{planBadge}</span>
+                          ) : null}
                         </div>
                         <p className={styles.planPrice}>{formatPrice(plan.amount_cents, plan.currency, plan.billing_interval)}</p>
                       </div>
@@ -923,9 +980,9 @@ export default function BillingPage() {
         <div className={chrome.pageFrame}>
           <AppShellHeader active="billing" remainingSeconds={null} accountLabel={null} onSignOut={() => undefined} />
           <main id="main-content" className={chrome.mainFrame}>
-            <section className={chrome.surface}>
+            <section className={chrome.surface} aria-busy="true">
               <h1 className={chrome.surfaceTitle}>Loading your access...</h1>
-              <p className={chrome.surfaceText}>Preparing your plan and billing details.</p>
+              <p className={chrome.surfaceText} role="status">Preparing your plan and billing details.</p>
             </section>
           </main>
         </div>

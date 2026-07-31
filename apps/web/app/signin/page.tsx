@@ -8,7 +8,13 @@ import { useEffect, useMemo, useState } from "react";
 import styles from "../auth/auth.module.css";
 import { mapAuthCallbackErrorCode, mapAuthError } from "../lib/authErrors";
 import { getSupabaseClient } from "../lib/supabaseClient";
-import { buildAuthCallbackUrl, buildSignUpPath, getSafeNextPath } from "../lib/url";
+import {
+  buildAuthCallbackUrl,
+  buildAuthDestinationPath,
+  buildSignUpPath,
+  getSafeAuthIntentContext,
+  getSafeNextPath
+} from "../lib/url";
 
 export default function SignInPage() {
   const router = useRouter();
@@ -19,15 +25,23 @@ export default function SignInPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const authIntent = getSafeAuthIntentContext({
+      intent: params.get("intent"),
+      plan: params.get("plan")
+    });
     setNextPath(getSafeNextPath(params.get("next")));
-    setIntent(params.get("intent"));
-    setPlan(params.get("plan"));
+    setIntent(authIntent.intent);
+    setPlan(authIntent.plan);
     setError(mapAuthCallbackErrorCode(params.get("auth_error")));
   }, []);
 
   const callbackUrl = useMemo(() => {
-    return buildAuthCallbackUrl(nextPath);
-  }, [nextPath]);
+    return buildAuthCallbackUrl(nextPath, { intent, plan });
+  }, [intent, nextPath, plan]);
+
+  const destinationPath = useMemo(() => {
+    return buildAuthDestinationPath(nextPath, { intent, plan });
+  }, [intent, nextPath, plan]);
 
   const signUpHref = useMemo(() => {
     return buildSignUpPath(nextPath, {
@@ -76,7 +90,7 @@ export default function SignInPage() {
       if (signInError) {
         setError(mapAuthError(signInError, "Unable to sign you in."));
       } else {
-        router.replace(nextPath);
+        router.replace(destinationPath);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
@@ -140,7 +154,7 @@ export default function SignInPage() {
 
   return (
     <div className={styles.page}>
-      <div className={styles.shell}>
+      <main className={styles.shell} id="main-content">
         <aside className={styles.panel}>
           <div className={styles.brand}>
             <span className={styles.brandMark} aria-hidden="true" />
@@ -156,14 +170,24 @@ export default function SignInPage() {
           <p className={styles.panelFooter}>Need a new account? Create one in under a minute.</p>
         </aside>
 
-        <section className={styles.card}>
+        <section className={styles.card} aria-labelledby="signin-title">
           <div>
-            <h2 className={styles.title}>Sign in</h2>
+            <h2 className={styles.title} id="signin-title">
+              Sign in
+            </h2>
             <p className={styles.subtitle}>Use password or magic link. Google sign-in is also available.</p>
           </div>
 
-          {error ? <div className={styles.error}>{error}</div> : null}
-          {message ? <div className={styles.notice}>{message}</div> : null}
+          {error ? (
+            <div className={styles.error} role="alert">
+              {error}
+            </div>
+          ) : null}
+          {message ? (
+            <div className={styles.notice} role="status">
+              {message}
+            </div>
+          ) : null}
 
           <form className={styles.form} onSubmit={handleSignIn}>
             <div className={styles.field}>
@@ -229,7 +253,12 @@ export default function SignInPage() {
 
           <div className={styles.divider}>or</div>
 
-          <button className={`${styles.button} ${styles.buttonGhost}`} onClick={handleGoogle} disabled={loading}>
+          <button
+            className={`${styles.button} ${styles.buttonGhost}`}
+            type="button"
+            onClick={handleGoogle}
+            disabled={loading}
+          >
             <Image className={styles.googleIcon} src="/google-logo.webp" alt="" aria-hidden="true" width={18} height={18} />
             Continue with Google
           </button>
@@ -241,7 +270,7 @@ export default function SignInPage() {
             <Link href="/">Return to Talven</Link>
           </div>
         </section>
-      </div>
+      </main>
     </div>
   );
 }

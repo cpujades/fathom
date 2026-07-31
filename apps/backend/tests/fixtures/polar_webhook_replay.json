@@ -1,0 +1,55 @@
+{
+  "events": [
+    {
+      "id": "evt_order_paid_001",
+      "timestamp": "2026-07-29T10:00:00+00:00",
+      "type": "order.paid",
+      "data": {
+        "id": "ord_replay_001",
+        "customer_external_id": "91000000-0000-0000-0000-000000000001",
+        "customer_id": "cus_replay_001",
+        "product_id": "prod_pack_replay",
+        "currency": "usd",
+        "total_amount": 3000
+      }
+    },
+    {
+      "id": "evt_order_refunded_001",
+      "timestamp": "2026-07-29T10:05:00+00:00",
+      "type": "order.refunded",
+      "data": {
+        "id": "refund_replay_001",
+        "order_id": "ord_replay_001",
+        "refunded_amount": 3000
+      }
+    },
+    {
+      "id": "evt_subscription_active_001",
+      "timestamp": "2026-07-29T11:00:00+00:00",
+      "type": "subscription.active",
+      "data": {
+        "id": "sub_replay_001",
+        "customer_external_id": "91000000-0000-0000-0000-000000000001",
+        "customer_id": "cus_replay_001",
+        "product_id": "prod_subscription_replay",
+        "status": "active",
+        "current_period_start": "2026-07-01T00:00:00+00:00",
+        "current_period_end": "2026-08-01T00:00:00+00:00"
+      }
+    },
+    {
+      "id": "evt_subscription_revoked_001",
+      "timestamp": "2026-07-29T12:00:00+00:00",
+      "type": "subscription.revoked",
+      "data": {
+        "id": "sub_replay_001",
+        "customer_external_id": "91000000-0000-0000-0000-000000000001",
+        "customer_id": "cus_replay_001",
+        "product_id": "prod_subscription_replay",
+        "status": "revoked",
+        "current_period_start": "2026-07-01T00:00:00+00:00",
+        "current_period_end": "2026-08-01T00:00:00+00:00"
+      }
+    }
+  ]
+}

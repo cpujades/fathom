@@ -9,12 +9,14 @@ from fathom.application.billing.state import apply_order_refund_state, sync_enti
 from fathom.application.billing.webhooks import apply_subscription_event
 from fathom.core.config import Settings
 from fathom.crud.supabase.billing import (
+    get_billing_webhook_diagnostics,
     list_latest_subscription_orders_for_users,
     list_refund_pending_pack_orders,
     list_subscription_entitlements_for_reconciliation,
     reclaim_stale_webhook_processing,
     transition_billing_order_status,
 )
+from fathom.crud.supabase.jobs import requeue_unsettled_jobs
 from fathom.services import polar
 
 logger = logging.getLogger(__name__)
@@ -31,6 +33,7 @@ async def run_billing_maintenance(
     *,
     settings: Settings,
 ) -> dict[str, int]:
+    requeued_unsettled = await requeue_unsettled_jobs(admin_client)
     reclaimed_events = await reclaim_stale_webhook_processing(
         admin_client,
         stale_minutes=WEBHOOK_PROCESSING_STALE_MINUTES,
@@ -43,11 +46,20 @@ async def run_billing_maintenance(
         admin_client,
         settings=settings,
     )
+    webhook_diagnostics = await get_billing_webhook_diagnostics(
+        admin_client,
+        stale_minutes=WEBHOOK_PROCESSING_STALE_MINUTES,
+    )
 
     summary = {
+        "requeued_unsettled_jobs": requeued_unsettled,
         "reclaimed_webhook_events": reclaimed_events,
         "reconciled_refund_pending_orders": reconciled_orders,
         "reconciled_subscriptions": reconciled_subscriptions,
+        "failed_webhook_events": int(webhook_diagnostics.get("failed_count") or 0),
+        "deferred_webhook_events": int(webhook_diagnostics.get("deferred_count") or 0),
+        "stale_processing_webhook_events": int(webhook_diagnostics.get("stale_processing_count") or 0),
+        "deferred_unknown_order_events": int(webhook_diagnostics.get("deferred_unknown_order_count") or 0),
     }
     log_level = logging.INFO if any(summary.values()) else logging.DEBUG
     logger.log(log_level, "billing.maintenance.completed", extra=summary)

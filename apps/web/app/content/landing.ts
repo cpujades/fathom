@@ -106,11 +106,11 @@ const landingContent: LandingContent = {
     { label: "Questions", href: "#faq" }
   ],
   hero: {
-    eyebrow: "Private podcast briefings",
+    eyebrow: "Private YouTube briefings",
     deck: "Private brief / Source-linked / Ready in minutes",
     title: "Extract the signal. Keep the edge.",
     subtitle:
-      "Talven turns long podcast conversations into clear, source-linked briefings for people who prefer advantage to backlog.",
+      "Talven turns long-form YouTube videos into clear, source-linked briefings for people who prefer advantage to backlog.",
     primaryCta: {
       label: "Get your first briefing",
       href: "/signup"
@@ -124,12 +124,12 @@ const landingContent: LandingContent = {
   },
   problem: {
     eyebrow: "Why it matters",
-    title: "Most podcast value disappears into the hour you never revisit.",
-    subtitle: "Talven keeps the ideas worth carrying forward, without asking you to relisten.",
+    title: "Most long-form video value disappears into the hour you never revisit.",
+    subtitle: "Talven keeps the ideas worth carrying forward, without asking you to rewatch.",
     points: [
       {
         title: "Long conversations hide a few usable ideas",
-        text: "Most episodes contain a small number of points that actually change how you think or act."
+        text: "Most long videos contain a small number of points that actually change how you think or act."
       },
       {
         title: "Memory is not a retrieval system",
@@ -146,8 +146,8 @@ const landingContent: LandingContent = {
     title: "From open conversation to usable briefing.",
     steps: [
       {
-        title: "Submit an episode",
-        text: "Drop in a YouTube podcast link and send it straight into the queue."
+        title: "Submit a video",
+        text: "Drop in a public YouTube link and send it straight into the queue."
       },
       {
         title: "Talven extracts the signal",
@@ -164,8 +164,8 @@ const landingContent: LandingContent = {
     title: "Built to read like a briefing, not a transcript.",
     subtitle: "Talven condenses the ideas worth keeping and anchors them to source moments you can verify.",
     sampleLabel: "Sample brief",
-    sampleTitle: "58-minute episode -> 4-minute briefing",
-    sampleNote: "Each Talven briefing keeps the same reading logic: key claims first, source moments attached, next moves made clear.",
+    sampleTitle: "58-minute video -> 4-minute briefing",
+    sampleNote: "Talven briefings use the same reading logic: key claims first, source moments attached, next moves made clear.",
     before: "A long conversation spanning strategy, execution, and personal operating principles.",
     after: [
       "Key claims ranked by importance",
@@ -183,7 +183,7 @@ const landingContent: LandingContent = {
       },
       {
         timestamp: "46:03",
-        claim: "Final section ends with two practical experiments a listener could run in the next week."
+        claim: "Final section ends with two practical experiments a viewer could run in the next week."
       }
     ]
   },
@@ -194,7 +194,7 @@ const landingContent: LandingContent = {
     points: [
       {
         title: "Briefing-first format",
-        text: "Every output follows the same disciplined structure so it reads fast and stays usable."
+        text: "Briefings follow the same disciplined structure so they read fast and stay usable."
       },
       {
         title: "Timestamp traceability",
@@ -205,12 +205,12 @@ const landingContent: LandingContent = {
         text: "Talven favors concise synthesis over bloated recaps, but critical decisions should still be checked against source audio."
       }
     ],
-    expectation: "Best fit: listeners who want sharper thinking without turning every episode into homework."
+    expectation: "Best fit: people who want sharper thinking without turning every long video into homework."
   },
   pricingIntro: {
     eyebrow: "Pricing",
     title: "Choose a standing brief or a measured reserve.",
-    subtitle: "Subscriptions fit steady listening. Credit packs cover occasional bursts without a monthly commitment."
+    subtitle: "Subscriptions fit steady use. Credit packs cover occasional bursts without a monthly commitment."
   },
   faq: {
     eyebrow: "Questions",
@@ -218,12 +218,12 @@ const landingContent: LandingContent = {
     items: [
       {
         question: "What sources are supported right now?",
-        answer: "Talven currently supports YouTube podcast URLs."
+        answer: "Talven currently supports public YouTube URLs."
       },
       {
         question: "How long does a briefing take?",
         answer:
-          "Most jobs finish in minutes depending on episode length and queue load. You can track each briefing from your workspace."
+          "Most jobs finish in minutes depending on video length and queue load. You can track each briefing from your workspace."
       },
       {
         question: "Can I export briefings to my own tools?",
@@ -236,8 +236,8 @@ const landingContent: LandingContent = {
     ]
   },
   finalCta: {
-    title: "Build a private edge from what you listen to.",
-    text: "Start with one episode. Read the briefing. Decide if Talven belongs in your weekly stack.",
+    title: "Build a private edge from what you watch.",
+    text: "Start with one video. Read the briefing. Decide if Talven belongs in your weekly stack.",
     primaryCta: {
       label: "Get your first briefing",
       href: "/signup"

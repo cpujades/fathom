@@ -26,4 +26,13 @@ const getApiErrorMessage = (error: ApiErrorBody | unknown, fallback: string): st
   return fallback;
 };
 
-export { getApiErrorMessage };
+const getApiErrorCode = (error: ApiErrorBody | unknown): string | null => {
+  if (!error || typeof error !== "object" || !("error" in error)) {
+    return null;
+  }
+
+  const code = (error as { error?: { code?: unknown } }).error?.code;
+  return typeof code === "string" && code.trim() ? code : null;
+};
+
+export { getApiErrorCode, getApiErrorMessage };

@@ -158,9 +158,13 @@
 }
 
 .input:focus {
-  outline: none;
   border-color: rgba(46, 102, 79, 0.4);
   box-shadow: 0 0 0 3px rgba(46, 102, 79, 0.12);
+}
+
+.input:focus-visible {
+  outline: 2px solid #285c46;
+  outline-offset: 2px;
 }
 
 .actions {

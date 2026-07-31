@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
+from pathlib import Path
+
 from storage3.exceptions import StorageApiError
 
-from fathom.core.errors import ConfigurationError, ExternalServiceError
+from fathom.core.errors import ConfigurationError, ExternalServiceError, NotFoundError, RateLimitError
 from fathom.services.supabase.helpers import raise_for_storage_error
 from supabase import AsyncClient
 
@@ -38,7 +41,7 @@ async def upload_object(
     *,
     bucket: str,
     object_key: str,
-    data: bytes,
+    data: bytes | Path,
     content_type: str,
 ) -> None:
     if not bucket:
@@ -71,6 +74,36 @@ async def delete_object(
         await client.storage.from_(bucket).remove([object_key])
     except StorageApiError as exc:
         raise_for_storage_error(exc, "Failed to delete storage object.")
+
+
+async def delete_object_with_retry(
+    client: AsyncClient,
+    *,
+    bucket: str,
+    object_key: str,
+    max_attempts: int = 3,
+    base_delay_seconds: float = 0.2,
+) -> None:
+    """Delete an object idempotently, retrying only temporary storage failures."""
+    if max_attempts <= 0:
+        raise ValueError("max_attempts must be greater than zero.")
+    if base_delay_seconds < 0:
+        raise ValueError("base_delay_seconds cannot be negative.")
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            await delete_object(
+                client,
+                bucket=bucket,
+                object_key=object_key,
+            )
+            return
+        except NotFoundError:
+            return
+        except (ExternalServiceError, RateLimitError):
+            if attempt == max_attempts:
+                raise
+            await asyncio.sleep(base_delay_seconds * (2 ** (attempt - 1)))
 
 
 async def create_pdf_signed_url(

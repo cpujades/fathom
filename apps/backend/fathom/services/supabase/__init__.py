@@ -8,11 +8,18 @@ from fathom.services.supabase.helpers import (
     raise_for_storage_error,
 )
 from fathom.services.supabase.postgres import create_postgres_connection, create_postgres_pool, listen_for_notifications
-from fathom.services.supabase.supabase import create_supabase_admin_client, create_supabase_user_client
+from fathom.services.supabase.supabase import (
+    close_supabase_client,
+    create_supabase_admin_client,
+    create_supabase_user_client,
+    managed_supabase_client,
+)
 
 __all__ = [
+    "close_supabase_client",
     "create_supabase_admin_client",
     "create_supabase_user_client",
+    "managed_supabase_client",
     "create_postgres_connection",
     "create_postgres_pool",
     "listen_for_notifications",

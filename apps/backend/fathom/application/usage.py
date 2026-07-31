@@ -6,12 +6,11 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fathom.core.config import Settings
-from fathom.core.errors import ExternalServiceError, InvalidRequestError
+from fathom.core.errors import ExternalServiceError, InvalidRequestError, UsageSettlementError
 from fathom.core.logging import log_context
 from fathom.crud.supabase.billing import (
     adjust_entitlement_debt,
     consume_credit_lot_by_id,
-    consume_credit_lots,
     expire_active_subscription_lots,
     fetch_credit_lot_by_source,
     fetch_entitlement,
@@ -19,7 +18,7 @@ from fathom.crud.supabase.billing import (
     fetch_plan_by_product_id,
     fetch_polar_order_ids_refund_pending,
     fetch_usage_history,
-    insert_usage_entry,
+    settle_job_usage,
     summarize_credit_lots,
     update_entitlement_snapshot,
     upsert_credit_lot,
@@ -28,7 +27,7 @@ from fathom.crud.supabase.billing import (
 from fathom.crud.supabase.jobs import fetch_jobs_by_ids
 from fathom.crud.supabase.summaries import fetch_summaries_by_ids
 from fathom.crud.supabase.transcripts import fetch_transcripts_by_ids
-from fathom.services.supabase import create_supabase_admin_client
+from fathom.services.supabase import create_supabase_admin_client, managed_supabase_client
 
 logger = logging.getLogger(__name__)
 
@@ -270,7 +269,12 @@ async def get_usage_snapshot(
     admin_client: Any | None = None,
 ) -> UsageSnapshot:
     if admin_client is None:
-        admin_client = await create_supabase_admin_client(settings)
+        async with managed_supabase_client(await create_supabase_admin_client(settings)) as owned_client:
+            return await get_usage_snapshot(
+                user_id,
+                settings,
+                admin_client=owned_client,
+            )
 
     entitlement = await fetch_entitlement(admin_client, user_id)
     if not entitlement:
@@ -315,7 +319,11 @@ async def get_usage_snapshot(
 
 
 async def get_usage_overview(user_id: str, settings: Settings) -> UsageOverview:
-    admin_client = await create_supabase_admin_client(settings)
+    async with managed_supabase_client(await create_supabase_admin_client(settings)) as admin_client:
+        return await _get_usage_overview(user_id, settings, admin_client)
+
+
+async def _get_usage_overview(user_id: str, settings: Settings, admin_client: Any) -> UsageOverview:
     entitlement = await fetch_entitlement(admin_client, user_id)
     if not entitlement:
         entitlement = await _ensure_free_entitlement(admin_client, user_id, settings)
@@ -342,7 +350,11 @@ async def get_usage_overview(user_id: str, settings: Settings) -> UsageOverview:
 
 
 async def get_usage_history(user_id: str, settings: Settings, limit: int = 50) -> list[dict[str, Any]]:
-    admin_client = await create_supabase_admin_client(settings)
+    async with managed_supabase_client(await create_supabase_admin_client(settings)) as admin_client:
+        return await _get_usage_history(user_id, admin_client, limit=limit)
+
+
+async def _get_usage_history(user_id: str, admin_client: Any, *, limit: int) -> list[dict[str, Any]]:
     raw_entries = await fetch_usage_history(admin_client, user_id=user_id, limit=max(limit * 3, limit))
     entries = _collapse_usage_entries(raw_entries, limit=limit)
     job_ids = [str(entry.get("job_id")) for entry in entries if entry.get("job_id")]
@@ -419,81 +431,35 @@ async def record_usage_for_job(
     *,
     user_id: str,
     job_id: str,
+    lease_token: str,
     duration_seconds: int | None,
     settings: Settings,
+    admin_client: Any,
 ) -> None:
-    if not duration_seconds or duration_seconds <= 0:
-        logger.info(
-            "usage.recording.skipped",
-            extra={"user_id": user_id, "job_id": job_id, "reason": "missing_duration"},
-        )
-        return
-
-    admin_client = await create_supabase_admin_client(settings)
-    with log_context(user_id=user_id, job_id=job_id):
-        entitlement = await fetch_entitlement(admin_client, user_id)
-        if not entitlement:
-            entitlement = await _ensure_free_entitlement(admin_client, user_id, settings)
-
-        remaining = duration_seconds
-
-        consumed_subscription = await consume_credit_lots(
-            admin_client,
-            user_id=user_id,
-            lot_type="subscription_cycle",
-            seconds_to_consume=remaining,
-            now=datetime.now(UTC),
-        )
-        if consumed_subscription > 0:
-            await insert_usage_entry(
+    with log_context(job_id=job_id):
+        try:
+            result = await settle_job_usage(
                 admin_client,
-                user_id=user_id,
                 job_id=job_id,
-                seconds_used=consumed_subscription,
-                source="subscription",
-            )
-            remaining -= consumed_subscription
-
-        consumed_pack = 0
-        if remaining > 0:
-            refund_pending_order_ids = await fetch_polar_order_ids_refund_pending(admin_client, user_id)
-            exclude_pack_keys = set(refund_pending_order_ids) if refund_pending_order_ids else None
-            consumed_pack = await consume_credit_lots(
-                admin_client,
-                user_id=user_id,
-                lot_type="pack_order",
-                seconds_to_consume=remaining,
-                now=datetime.now(UTC),
-                exclude_pack_source_keys=exclude_pack_keys,
-            )
-            if consumed_pack > 0:
-                await insert_usage_entry(
-                    admin_client,
-                    user_id=user_id,
-                    job_id=job_id,
-                    seconds_used=consumed_pack,
-                    source="pack",
-                )
-                remaining -= consumed_pack
-
-        current_debt = int(entitlement.get("debt_seconds") or 0)
-        unmet_seconds = max(remaining, 0)
-        if unmet_seconds > 0:
-            new_debt = await adjust_entitlement_debt(
-                admin_client,
-                user_id=user_id,
-                delta_seconds=unmet_seconds,
+                lease_token=lease_token,
                 debt_cap_seconds=settings.billing_debt_cap_seconds,
             )
-        else:
-            refreshed_entitlement = await fetch_entitlement(admin_client, user_id)
-            new_debt = int(refreshed_entitlement.get("debt_seconds") or current_debt) if refreshed_entitlement else 0
+        except Exception as exc:
+            if isinstance(exc, UsageSettlementError):
+                raise
+            raise UsageSettlementError("Usage accounting could not be finalized; retrying shortly.") from exc
 
-        await _sync_entitlement_snapshot(
-            admin_client,
-            user_id=user_id,
-            settings=settings,
-            debt_seconds=new_debt,
+        settlement = result["settlement"]
+        logger.info(
+            "usage.settlement.completed",
+            extra={
+                "resolution_type": result["resolution_type"],
+                "expected_duration_seconds": duration_seconds,
+                "duration_seconds": settlement.get("duration_seconds"),
+                "subscription_seconds": settlement.get("subscription_seconds"),
+                "pack_seconds": settlement.get("pack_seconds"),
+                "debt_incurred_seconds": settlement.get("debt_incurred_seconds"),
+            },
         )
 
 

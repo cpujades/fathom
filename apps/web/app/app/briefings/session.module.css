@@ -1328,6 +1328,17 @@
   color: #8e7b49;
 }
 
+.markdown {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.markdown img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
 .markdown code {
   font-family: "SFMono-Regular", "Menlo", "Monaco", "Consolas", "Liberation Mono", "Courier New", monospace;
   background: rgba(224, 232, 224, 0.72);
