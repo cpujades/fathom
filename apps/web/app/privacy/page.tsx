@@ -23,7 +23,7 @@ export default function PrivacyPage() {
           <p className={styles.eyebrow}>Privacy</p>
           <h1 className={styles.title}>Privacy policy</h1>
           <p className={styles.lede}>
-            Talven turns user-submitted YouTube podcast links into private written briefings. This policy explains the
+            Talven turns user-submitted public YouTube links into private written briefings. This policy explains the
             data we collect, why we collect it, and how to contact us about privacy requests.
           </p>
           <p className={styles.updated}>Last updated: May 16, 2026</p>
@@ -34,7 +34,7 @@ export default function PrivacyPage() {
             <ul>
               <li>Account details such as email address, name, authentication state, and account preferences.</li>
               <li>Briefing inputs such as submitted YouTube URLs and generated briefing content.</li>
-              <li>Usage and billing details such as listening balance, plan, purchases, refunds, and payment status.</li>
+              <li>Usage and billing details such as video-time balance, plan, purchases, refunds, and payment status.</li>
               <li>Technical information such as device, browser, request metadata, logs, and error diagnostics.</li>
             </ul>
           </section>

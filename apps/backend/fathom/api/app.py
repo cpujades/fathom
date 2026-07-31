@@ -42,17 +42,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 cast(Any, CORSMiddleware),
                 allow_origins=settings.cors_allow_origins,
                 allow_credentials=True,
-                allow_methods=["*"],
-                allow_headers=["*"],
+                allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+                allow_headers=[
+                    "Authorization",
+                    "Content-Type",
+                    "Last-Event-ID",
+                    "X-Request-ID",
+                ],
+                expose_headers=["X-Request-ID"],
             )
         )
 
+    docs_url = None if settings.is_strict_runtime else "/docs"
+    redoc_url = None if settings.is_strict_runtime else "/redoc"
+    openapi_url = None if settings.is_strict_runtime else "/openapi.json"
     app = FastAPI(
         title="Talven",
         description="Talven briefing service",
         version=__version__,
         middleware=middleware,
         lifespan=lifespan,
+        docs_url=docs_url,
+        redoc_url=redoc_url,
+        openapi_url=openapi_url,
     )
     app.include_router(meta_router)
     app.include_router(briefing_sessions_router)
@@ -62,6 +74,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.state.rate_limit = settings.rate_limit
     app.state.trust_proxy_headers = settings.trust_proxy_headers
+    app.state.trusted_proxy_networks = settings.trusted_proxy_networks
+    app.state.strict_transport_security = settings.is_strict_runtime
 
     # Starlette's middleware typing is stricter than the runtime API here.
     app.add_middleware(cast(Any, BaseHTTPMiddleware), dispatch=log_requests)

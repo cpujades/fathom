@@ -47,6 +47,10 @@ jobs:
         if: steps.changes.outputs.supabase == 'true'
         run: supabase migration up --local
 
+      - name: Test database access boundaries
+        if: steps.changes.outputs.supabase == 'true'
+        run: supabase test db supabase/tests/database
+
       - name: Lint database schema
         if: steps.changes.outputs.supabase == 'true'
         run: supabase db lint --local --fail-on warning

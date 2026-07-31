@@ -19,16 +19,14 @@ from fathom.application.billing.state import (
 )
 from fathom.core.config import Settings
 from fathom.core.errors import ExternalServiceError, InvalidRequestError
+from fathom.core.logging import log_context
 from fathom.crud.supabase.billing import (
-    claim_webhook_event_for_processing,
+    apply_polar_webhook_transaction,
     expire_active_subscription_lots,
     fetch_billing_order_by_polar_id,
     fetch_credit_lot_by_source,
     fetch_entitlement,
     fetch_plan_by_product_id,
-    mark_webhook_event_failed,
-    mark_webhook_event_processed,
-    record_webhook_event_received,
     summarize_credit_lots,
     update_billing_order,
     upsert_billing_order,
@@ -37,7 +35,7 @@ from fathom.crud.supabase.billing import (
     upsert_subscription_entitlement_state,
 )
 from fathom.services import polar
-from fathom.services.supabase import create_supabase_admin_client
+from fathom.services.supabase import create_supabase_admin_client, managed_supabase_client
 
 logger = logging.getLogger(__name__)
 
@@ -58,46 +56,174 @@ async def handle_polar_webhook(payload: bytes, headers: Mapping[str, str], setti
         raise
 
     event_id, event_type, data = extract_event_fields(event, headers)
-    admin_client = await create_supabase_admin_client(settings)
-    inserted = await record_webhook_event_received(
-        admin_client,
-        event_id=event_id,
-        provider="polar",
-        event_type=event_type,
-        payload=event,
-    )
-    claimed = await claim_webhook_event_for_processing(admin_client, event_id=event_id)
-    if not claimed:
-        logger.info("billing.webhook.duplicate_ignored", extra={"event_id": event_id, "event_type": event_type})
-        return
-    if not inserted:
-        logger.info("billing.webhook.retry_claimed", extra={"event_id": event_id, "event_type": event_type})
+    with log_context(provider_event_id=event_id, provider_event_type=event_type):
+        async with managed_supabase_client(await create_supabase_admin_client(settings)) as admin_client:
+            event_at = _extract_event_time(event, data, headers)
+            resource_type, resource_id, normalized_payload = _normalize_event_payload(event_type, data)
+            result = await apply_polar_webhook_transaction(
+                admin_client,
+                event_id=event_id,
+                event_type=event_type,
+                event_at=event_at,
+                resource_type=resource_type,
+                resource_id=resource_id,
+                payload=normalized_payload,
+                debt_cap_seconds=settings.billing_debt_cap_seconds,
+            )
+            resolution_type = str(result.get("resolution_type") or "")
+            outcome = str(result.get("outcome") or "")
+            if resolution_type == "failed":
+                logger.error(
+                    "billing.webhook.transaction_failed",
+                    extra={"resolution_type": resolution_type, "outcome": outcome},
+                )
+                raise ExternalServiceError("Polar webhook processing failed.")
 
-    try:
-        if event_type == "order.paid":
-            await _handle_order_paid(admin_client, data, settings)
-        elif event_type == "order.refunded":
-            await _handle_order_refunded(admin_client, data, settings)
-        elif event_type in {
-            "subscription.created",
-            "subscription.active",
-            "subscription.uncanceled",
-            "subscription.canceled",
-            "subscription.past_due",
-            "subscription.updated",
-            "subscription.revoked",
-        }:
-            await apply_subscription_event(admin_client, data, settings, event_type=event_type)
-        elif event_type in {"customer.created", "customer.state_changed"}:
-            await _handle_customer_event(admin_client, data)
-        else:
-            logger.info("billing.webhook.ignored", extra={"event_type": event_type})
+            logger.info(
+                "billing.webhook.resolved",
+                extra={
+                    "resolution_type": resolution_type,
+                    "outcome": outcome,
+                },
+            )
 
-        await mark_webhook_event_processed(admin_client, event_id)
-        logger.info("billing.webhook.processed", extra={"event_id": event_id, "event_type": event_type})
-    except Exception as exc:
-        await mark_webhook_event_failed(admin_client, event_id, str(exc))
-        raise
+
+def _extract_event_time(
+    event: dict[str, Any],
+    data: dict[str, Any],
+    headers: Mapping[str, str],
+) -> datetime:
+    for value in (
+        event.get("timestamp"),
+        data.get("modified_at"),
+        data.get("updated_at"),
+        data.get("created_at"),
+    ):
+        parsed = parse_dt(value)
+        if parsed:
+            return parsed.astimezone(UTC)
+
+    header_value = headers.get("webhook-timestamp") or headers.get("svix-timestamp")
+    if header_value:
+        try:
+            return datetime.fromtimestamp(int(header_value), UTC)
+        except ValueError:
+            parsed = parse_dt(header_value)
+            if parsed:
+                return parsed.astimezone(UTC)
+
+    return datetime.now(UTC)
+
+
+def _normalize_event_payload(
+    event_type: str,
+    data: dict[str, Any],
+) -> tuple[str | None, str | None, dict[str, Any]]:
+    if event_type in {"customer.created", "customer.state_changed"}:
+        external_customer_id = as_str(data.get("external_id"))
+        billing_address = data.get("billing_address")
+        country = as_str(billing_address.get("country")) if isinstance(billing_address, dict) else None
+        normalized = {
+            "user_id": external_customer_id,
+            "external_customer_id": external_customer_id,
+            "customer_id": as_str(data.get("id")),
+            "email": as_str(data.get("email")),
+            "country": country,
+        }
+        return "customer", as_str(data.get("id")) or external_customer_id, normalized
+
+    if event_type == "order.paid":
+        user_id = _extract_user_id(data)
+        product_id = _extract_product_id(data)
+        order_id = as_str(data.get("id"))
+        normalized = {
+            "order_id": order_id,
+            "user_id": user_id,
+            "product_id": product_id,
+            "subscription_id": as_str(data.get("subscription_id")),
+            "customer_id": as_str(data.get("customer_id")),
+            "email": (
+                as_str(data.get("customer", {}).get("email")) if isinstance(data.get("customer"), dict) else None
+            ),
+            "currency": as_str(data.get("currency")),
+            "paid_amount_cents": extract_amount_cents(
+                data,
+                candidates=("total_amount", "net_amount", "amount"),
+            ),
+        }
+        return "order", order_id, normalized
+
+    if event_type == "order.refunded":
+        order_id = _extract_refunded_order_id(data)
+        provider_total_refunded = None
+        for key in ("refunded_amount", "total_refunded_amount"):
+            value = data.get(key)
+            if isinstance(value, int):
+                provider_total_refunded = max(value, 0)
+                break
+            if isinstance(value, str):
+                try:
+                    provider_total_refunded = max(int(value), 0)
+                    break
+                except ValueError:
+                    continue
+        normalized = {
+            "order_id": order_id,
+            "provider_total_refunded": provider_total_refunded,
+            "refund_delta_cents": extract_amount_cents(data, candidates=("refund_amount", "amount")),
+        }
+        return "order", order_id, normalized
+
+    if event_type.startswith("subscription."):
+        subscription_id = as_str(data.get("id")) or as_str(data.get("subscription_id"))
+        period_start = parse_dt(data.get("current_period_start"))
+        period_end = parse_dt(data.get("current_period_end"))
+        normalized = {
+            "subscription_id": subscription_id,
+            "user_id": _extract_user_id(data),
+            "product_id": _extract_product_id(data),
+            "customer_id": as_str(data.get("customer_id")),
+            "status": as_str(data.get("status")) or "unknown",
+            "period_start": period_start.astimezone(UTC).isoformat() if period_start else None,
+            "period_end": period_end.astimezone(UTC).isoformat() if period_end else None,
+        }
+        return "subscription", subscription_id, normalized
+
+    return None, None, {}
+
+
+def _extract_user_id(data: dict[str, Any]) -> str | None:
+    user_id = as_str(data.get("customer_external_id"))
+    if not user_id:
+        customer = data.get("customer")
+        if isinstance(customer, dict):
+            user_id = as_str(customer.get("external_id"))
+    if not user_id:
+        metadata = data.get("metadata")
+        if isinstance(metadata, dict):
+            user_id = as_str(metadata.get("user_id"))
+    return user_id
+
+
+def _extract_product_id(data: dict[str, Any]) -> str | None:
+    product_id = as_str(data.get("product_id"))
+    if not product_id:
+        product = data.get("product")
+        if isinstance(product, dict):
+            product_id = as_str(product.get("id"))
+    return product_id
+
+
+def _extract_refunded_order_id(data: dict[str, Any]) -> str | None:
+    order_id = as_str(data.get("order_id"))
+    if order_id:
+        return order_id
+    nested_order = data.get("order")
+    if isinstance(nested_order, dict):
+        order_id = as_str(nested_order.get("id"))
+        if order_id:
+            return order_id
+    return as_str(data.get("id"))
 
 
 async def _handle_customer_event(admin_client: Any, data: dict[str, Any]) -> None:

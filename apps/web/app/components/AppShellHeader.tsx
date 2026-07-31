@@ -51,6 +51,7 @@ function getInitials(accountLabel: string | null): string {
 export function AppShellHeader({ active = null, remainingSeconds, accountLabel, onSignOut }: AppShellHeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const menuTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     if (!menuOpen) {
@@ -66,6 +67,7 @@ export function AppShellHeader({ active = null, remainingSeconds, accountLabel, 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setMenuOpen(false);
+        window.requestAnimationFrame(() => menuTriggerRef.current?.focus());
       }
     };
 
@@ -94,6 +96,7 @@ export function AppShellHeader({ active = null, remainingSeconds, accountLabel, 
               key={item.id}
               className={`${styles.navLink} ${active === item.id ? styles.navLinkActive : ""}`}
               href={item.href}
+              aria-current={active === item.id ? "page" : undefined}
             >
               {item.label}
             </Link>
@@ -114,8 +117,10 @@ export function AppShellHeader({ active = null, remainingSeconds, accountLabel, 
               <div className={styles.profileMenu} ref={menuRef}>
                 <button
                   aria-expanded={menuOpen}
-                  aria-haspopup="menu"
+                  aria-controls="account-options"
+                  aria-label={menuOpen ? "Close account options" : "Open account options"}
                   className={`${styles.profileTrigger} ${active === "account" ? styles.profileTriggerActive : ""}`}
+                  ref={menuTriggerRef}
                   type="button"
                   onClick={() => setMenuOpen((open) => !open)}
                 >
@@ -126,18 +131,22 @@ export function AppShellHeader({ active = null, remainingSeconds, accountLabel, 
                 </button>
 
                 {menuOpen ? (
-                  <div className={styles.profilePopover} role="menu" aria-label="Account menu">
+                  <div className={styles.profilePopover} id="account-options" role="group" aria-label="Account options">
                     <div className={styles.profileSummary}>
                       <span className={styles.profileSummaryLabel}>Signed in as</span>
                       <span className={styles.profileSummaryValue}>{accountLabel ?? "Talven account"}</span>
                     </div>
-                    <Link className={styles.profileAction} href="/app/account" onClick={() => setMenuOpen(false)}>
+                    <Link
+                      aria-current={active === "account" ? "page" : undefined}
+                      className={styles.profileAction}
+                      href="/app/account"
+                      onClick={() => setMenuOpen(false)}
+                    >
                       Account settings
                     </Link>
                     {onSignOut ? (
                       <button
                         className={`${styles.profileAction} ${styles.profileActionDanger}`}
-                        role="menuitem"
                         type="button"
                         onClick={() => {
                           setMenuOpen(false);

@@ -48,7 +48,7 @@ export default function AppHome() {
     }
 
     if (!url.trim()) {
-      setError("Paste a valid podcast or YouTube URL to start a briefing.");
+      setError("Paste a valid public YouTube URL to start a briefing.");
       return;
     }
 
@@ -66,8 +66,8 @@ export default function AppHome() {
   const workspaceTitle = loading
     ? "Loading your desk..."
     : firstName
-      ? `What podcast is worth exploring, ${firstName}?`
-      : "What podcast is worth exploring?";
+      ? `What is worth understanding, ${firstName}?`
+      : "What is worth understanding?";
   const quotaLabel = useMemo(() => {
     if (remainingSeconds === null) {
       return "Checking";
@@ -110,9 +110,12 @@ export default function AppHome() {
                 <div className={styles.commandField}>
                   <input
                     className={`${chrome.input} ${styles.commandInput}`}
+                    id="briefing-source-url"
                     type="url"
-                    placeholder="Paste a YouTube or podcast URL"
-                    aria-label="Podcast or YouTube URL"
+                    placeholder="Paste a public YouTube URL"
+                    aria-label="Public YouTube URL"
+                    aria-describedby={error ? "briefing-source-error" : undefined}
+                    aria-invalid={error ? true : undefined}
                     value={url}
                     onChange={(event) => setUrl(event.target.value)}
                     disabled={loading}
@@ -126,7 +129,7 @@ export default function AppHome() {
                   >
                     {submitting ? "Starting..." : "Start briefing"}
                   </button>
-                  <div className={styles.quotaBadge} aria-label={`${quotaLabel} listening time available`}>
+                  <div className={styles.quotaBadge} aria-label={`${quotaLabel} video time available`}>
                     <span
                       className={styles.quotaRing}
                       style={{ "--quota-percent": `${quotaPercent}%` } as React.CSSProperties}
@@ -141,7 +144,15 @@ export default function AppHome() {
                   <Link href="/app/billing#billing-offers">Add time</Link>
                 ) : null}
               </div>
-              {error ? <p className={`${chrome.inlineStatus} ${chrome.inlineStatusError}`}>{error}</p> : null}
+              {error ? (
+                <p
+                  className={`${chrome.inlineStatus} ${chrome.inlineStatusError}`}
+                  id="briefing-source-error"
+                  role="alert"
+                >
+                  {error}
+                </p>
+              ) : null}
             </form>
           </article>
         </section>

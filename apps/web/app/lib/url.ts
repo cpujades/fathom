@@ -2,6 +2,20 @@ import { getOptionalPublicUrlEnv } from "@fathom/api-client/publicEnv";
 
 const DEFAULT_NEXT_PATH = "/app";
 const DEFAULT_SITE_URL = "http://localhost:3000";
+const AUTH_PLAN_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const MAX_AUTH_PLAN_LENGTH = 64;
+
+type AuthIntent = "paid";
+
+type AuthIntentContext = {
+  intent?: string | null;
+  plan?: string | null;
+};
+
+type SafeAuthIntentContext = {
+  intent: AuthIntent | null;
+  plan: string | null;
+};
 
 const isAllowedNextPathname = (pathname: string): boolean => {
   return pathname === DEFAULT_NEXT_PATH || pathname.startsWith(`${DEFAULT_NEXT_PATH}/`);
@@ -41,22 +55,58 @@ export const getSafeNextPath = (candidate: string | null | undefined, fallback =
   }
 };
 
+export const getSafeAuthIntentContext = (context?: AuthIntentContext): SafeAuthIntentContext => {
+  const intent = context?.intent === "paid" ? context.intent : null;
+  const candidatePlan = context?.plan?.trim().toLowerCase() ?? "";
+  const plan =
+    intent && candidatePlan.length <= MAX_AUTH_PLAN_LENGTH && AUTH_PLAN_PATTERN.test(candidatePlan)
+      ? candidatePlan
+      : null;
+
+  return {
+    intent,
+    plan
+  };
+};
+
+export const buildAuthDestinationPath = (
+  nextPath?: string,
+  context?: AuthIntentContext
+): string => {
+  const safeNextPath = getSafeNextPath(nextPath, DEFAULT_NEXT_PATH);
+  const safeContext = getSafeAuthIntentContext(context);
+  if (!safeContext.intent) {
+    return safeNextPath;
+  }
+
+  const destinationUrl = new URL(safeNextPath, "http://localhost");
+  destinationUrl.searchParams.set("intent", safeContext.intent);
+  if (safeContext.plan) {
+    destinationUrl.searchParams.set("plan", safeContext.plan);
+  } else {
+    destinationUrl.searchParams.delete("plan");
+  }
+  return `${destinationUrl.pathname}${destinationUrl.search}${destinationUrl.hash}`;
+};
+
 const buildAuthEntryPath = (
   pathname: "/signin" | "/signup",
   nextPath?: string,
-  extraParams?: Record<string, string | null | undefined>
+  context?: AuthIntentContext
 ): string => {
   const safeNextPath = getSafeNextPath(nextPath, DEFAULT_NEXT_PATH);
+  const safeContext = getSafeAuthIntentContext(context);
   const targetUrl = new URL(pathname, "http://localhost");
 
   if (safeNextPath !== DEFAULT_NEXT_PATH) {
     targetUrl.searchParams.set("next", safeNextPath);
   }
 
-  for (const [key, value] of Object.entries(extraParams ?? {})) {
-    if (value) {
-      targetUrl.searchParams.set(key, value);
-    }
+  if (safeContext.intent) {
+    targetUrl.searchParams.set("intent", safeContext.intent);
+  }
+  if (safeContext.plan) {
+    targetUrl.searchParams.set("plan", safeContext.plan);
   }
 
   return `${targetUrl.pathname}${targetUrl.search}`;
@@ -64,24 +114,34 @@ const buildAuthEntryPath = (
 
 export const buildSignInPath = (
   nextPath?: string,
-  extraParams?: Record<string, string | null | undefined>
+  context?: AuthIntentContext
 ): string => {
-  return buildAuthEntryPath("/signin", nextPath, extraParams);
+  return buildAuthEntryPath("/signin", nextPath, context);
 };
 
 export const buildSignUpPath = (
   nextPath?: string,
-  extraParams?: Record<string, string | null | undefined>
+  context?: AuthIntentContext
 ): string => {
-  return buildAuthEntryPath("/signup", nextPath, extraParams);
+  return buildAuthEntryPath("/signup", nextPath, context);
 };
 
-export const buildAuthCallbackUrl = (nextPath?: string): string => {
+export const buildAuthCallbackUrl = (
+  nextPath?: string,
+  context?: AuthIntentContext
+): string => {
   const safeNextPath = getSafeNextPath(nextPath, DEFAULT_NEXT_PATH);
+  const safeContext = getSafeAuthIntentContext(context);
   const callbackUrl = new URL("/auth/callback", getSiteUrl());
 
   if (safeNextPath !== DEFAULT_NEXT_PATH) {
     callbackUrl.searchParams.set("next", safeNextPath);
+  }
+  if (safeContext.intent) {
+    callbackUrl.searchParams.set("intent", safeContext.intent);
+  }
+  if (safeContext.plan) {
+    callbackUrl.searchParams.set("plan", safeContext.plan);
   }
 
   return callbackUrl.toString();
@@ -94,3 +154,5 @@ export const getCurrentAppPath = (fallback = DEFAULT_NEXT_PATH): string => {
 
   return getSafeNextPath(`${window.location.pathname}${window.location.search}${window.location.hash}`, fallback);
 };
+
+export type { AuthIntentContext, SafeAuthIntentContext };

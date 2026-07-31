@@ -115,6 +115,41 @@ test("ready without markdown stays in delivery phase", () => {
   assert.equal(state.progress, 100);
 });
 
+test("exhausted ready delivery becomes recoverable without losing the session", () => {
+  const delivering = createInitialSessionUiState(
+    baseSnapshot({ state: "ready", progress: 100, briefing_markdown: "" })
+  );
+  const failedDelivery = briefingSessionReducer(delivering, {
+    type: "delivery_failed"
+  });
+  const retrying = briefingSessionReducer(failedDelivery, {
+    type: "delivery_retry"
+  });
+
+  assert.equal(failedDelivery.phase, "delivery_failed");
+  assert.equal(failedDelivery.session?.state, "ready");
+  assert.equal(retrying.phase, "delivering");
+});
+
+test("ready markdown clears a previous delivery error", () => {
+  const failedDelivery = briefingSessionReducer(
+    createInitialSessionUiState(baseSnapshot({ state: "ready", progress: 100 })),
+    { type: "delivery_failed" }
+  );
+  const recovered = briefingSessionReducer(failedDelivery, {
+    type: "snapshot",
+    snapshot: baseSnapshot({
+      state: "ready",
+      progress: 100,
+      briefing_markdown: "# Finished briefing"
+    })
+  });
+
+  assert.equal(recovered.phase, "ready");
+  assert.equal(recovered.deliveryError, false);
+  assert.equal(recovered.markdown, "# Finished briefing");
+});
+
 test("stream loss and restore are explicit connection states", () => {
   const reconnecting = briefingSessionReducer(createInitialSessionUiState(baseSnapshot()), {
     type: "stream_lost",
@@ -126,4 +161,14 @@ test("stream loss and restore are explicit connection states", () => {
   assert.equal(reconnecting.connectionNotice, "Reconnecting");
   assert.equal(restored.streamHealth, "live");
   assert.equal(restored.connectionNotice, null);
+});
+
+test("an initial snapshot failure becomes a recoverable load failure", () => {
+  const state = briefingSessionReducer(createInitialSessionUiState(), {
+    type: "snapshot_load_failed"
+  });
+
+  assert.equal(state.initialSnapshotLoaded, true);
+  assert.equal(state.phase, "load_failed");
+  assert.equal(state.session, null);
 });

@@ -1,6 +1,6 @@
-# Fathom
+# Talven (repository: Fathom)
 
-Fathom turns long-form YouTube audio/video into structured briefings with streaming progress, usage-aware billing, and reusable transcript/summary caching.
+Talven turns long-form YouTube audio/video into structured, source-linked briefings with streaming progress, usage-aware billing, and reusable transcript/summary caching. The repository and Python/package namespace remain `fathom`.
 
 ## Stack
 
@@ -82,10 +82,19 @@ Optional backend runtime variables:
 - `CORS_ALLOW_ORIGINS`
 - `RATE_LIMIT`
 - `TRUST_PROXY_HEADERS`
+- `TRUSTED_PROXY_NETWORKS`
 - `POLAR_CHECKOUT_RETURN_URL`
 - `POLAR_SERVER`
+- `WORKER_SHUTDOWN_GRACE_SECONDS`
+- `SOURCE_DOWNLOAD_DEADLINE_SECONDS`
+- `PROVIDER_TRANSCRIPTION_DEADLINE_SECONDS`
+- `PROVIDER_SUMMARY_DEADLINE_SECONDS`
 
-`APP_ENV` defaults to `local`. Set `APP_ENV=production` for hosted API and worker deployments so readiness checks use the stricter production path.
+`APP_ENV` accepts `local`, `test`, `staging`, or `production` and defaults to
+`local`. Hosted modes fail closed unless rate limiting and exact HTTPS CORS
+origins are configured. If proxy headers are enabled, set
+`TRUSTED_PROXY_NETWORKS` to the ingress IPs or CIDR ranges; forwarded client
+addresses are ignored for every other peer.
 
 Optional backend logging variables:
 
@@ -180,6 +189,12 @@ uv run ty check apps/backend/fathom
 PYTHONPATH=apps/backend ./.venv/bin/python -m unittest discover -s apps/backend/tests
 ```
 
+The backend suite includes deterministic, offline briefing-quality fixtures. See
+[Briefing quality evaluation](./docs/quality/briefing-evaluation.md) for the checks and fixture rules.
+
+For a durable product and architecture map, start with the
+[Talven documentation index](./docs/README.md).
+
 ### Frontend
 
 ```bash
@@ -198,3 +213,5 @@ pnpm --filter @fathom/web build
 - Polar webhooks should target your public backend URL at `/webhooks/polar`.
 - Supabase migrations are managed from `supabase/` and deployed through GitHub Actions.
 - Incident notes live in [docs/runbooks/worker-and-billing-incidents.md](./docs/runbooks/worker-and-billing-incidents.md).
+- The bounded, no-provider recovery rehearsal lives in
+  [docs/runbooks/local-recovery-rehearsal.md](./docs/runbooks/local-recovery-rehearsal.md).

@@ -14,7 +14,8 @@ from fathom.crud.supabase.billing import (
 )
 from fathom.schemas.billing import PackRefundResponse
 from fathom.services import polar
-from fathom.services.supabase import create_supabase_admin_client
+from fathom.services.supabase import create_supabase_admin_client, managed_supabase_client
+from supabase import AsyncClient
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +26,22 @@ async def request_pack_refund(
     auth: AuthContext,
     settings: Settings,
 ) -> PackRefundResponse:
-    admin_client = await create_supabase_admin_client(settings)
+    async with managed_supabase_client(await create_supabase_admin_client(settings)) as admin_client:
+        return await _request_pack_refund(
+            polar_order_id=polar_order_id,
+            auth=auth,
+            settings=settings,
+            admin_client=admin_client,
+        )
+
+
+async def _request_pack_refund(
+    *,
+    polar_order_id: str,
+    auth: AuthContext,
+    settings: Settings,
+    admin_client: AsyncClient,
+) -> PackRefundResponse:
     order = await fetch_billing_order_for_user(
         admin_client,
         user_id=auth.user_id,

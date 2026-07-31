@@ -15,7 +15,7 @@ from supabase_auth.errors import AuthApiError
 from fathom.core.config import Settings, get_settings
 from fathom.core.errors import AppError, AuthenticationError, ConfigurationError, ExternalServiceError
 from fathom.core.logging import log_context
-from fathom.services.supabase import create_supabase_user_client
+from fathom.services.supabase import create_supabase_user_client, managed_supabase_client
 from fathom.services.supabase.helpers import raise_for_auth_error
 
 security = HTTPBearer(auto_error=False)
@@ -116,8 +116,8 @@ async def get_auth_context(
                         extra={"error_code": "unauthorized"},
                     )
                 raise
-        supabase = await create_supabase_user_client(settings, access_token)
-        user = await supabase.auth.get_user(jwt=access_token)
+        async with managed_supabase_client(await create_supabase_user_client(settings, access_token)) as supabase:
+            user = await supabase.auth.get_user(jwt=access_token)
     except AuthApiError as exc:
         auth_code = getattr(exc, "code", "") or "unknown"
         auth_status = getattr(exc, "status", None)

@@ -65,6 +65,12 @@ class ExternalServiceError(AppError):
     code = "external_service_error"
 
 
+class UsageSettlementError(ExternalServiceError):
+    """Post-processing usage accounting could not be finalized."""
+
+    code = "usage_settlement_failed"
+
+
 class NotReadyError(AppError):
     """Service is temporarily unavailable (503)."""
 

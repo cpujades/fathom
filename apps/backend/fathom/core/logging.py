@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import sys
+import uuid
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -48,8 +50,29 @@ _STANDARD_LOG_RECORD_ATTRS = {
 _LOG_CONTEXT: ContextVar[dict[str, Any] | None] = ContextVar("log_context", default=None)
 
 DEFAULT_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+MAX_LOG_VALUE_CHARS = 2_048
+MAX_CORRELATION_ID_CHARS = 64
 
 APP_LOGGER_PREFIX = "fathom"
+
+_CORRELATION_ID_PATTERN = re.compile(rf"[A-Za-z0-9][A-Za-z0-9._:-]{{0,{MAX_CORRELATION_ID_CHARS - 1}}}")
+_REDACTED = "[redacted]"
+_SENSITIVE_LOG_KEYS = {
+    "api_key",
+    "authorization",
+    "cookie",
+    "email",
+    "password",
+    "payload",
+    "secret",
+    "source_url",
+    "summary_markdown",
+    "transcript",
+    "transcript_text",
+    "url",
+    "user_id",
+    "webhook_signature",
+}
 
 # Pragmatic defaults to reduce third-party noise.
 _DEFAULT_THIRD_PARTY_LEVELS: dict[str, str] = {
@@ -193,7 +216,7 @@ class ConsoleFormatter(SmartContextFormatter):
     def format(self, record: logging.LogRecord) -> str:
         base_message = super().format(record)
         extra_fields = {
-            key: value
+            key: _sanitize_log_value(key, value)
             for key, value in record.__dict__.items()
             if key not in _STANDARD_LOG_RECORD_ATTRS and value is not None
         }
@@ -223,7 +246,7 @@ class JsonFormatter(logging.Formatter):
         for key, value in record.__dict__.items():
             if key in _STANDARD_LOG_RECORD_ATTRS or value is None:
                 continue
-            payload[key] = value
+            payload[key] = _sanitize_log_value(key, value)
 
         return json.dumps(payload, default=str, separators=(",", ":"))
 
@@ -269,6 +292,36 @@ def get_log_context() -> Mapping[str, Any]:
     """Return the current logging context (useful for debugging/tests)."""
 
     return _LOG_CONTEXT.get() or {}
+
+
+def normalize_correlation_id(value: str | None) -> str:
+    """Return a bounded, log-safe correlation ID, generating one when invalid."""
+
+    candidate = (value or "").strip()
+    if _CORRELATION_ID_PATTERN.fullmatch(candidate):
+        return candidate
+    return uuid.uuid4().hex
+
+
+def _sanitize_log_value(key: str, value: Any) -> Any:
+    normalized_key = key.lower()
+    if (
+        normalized_key in _SENSITIVE_LOG_KEYS
+        or normalized_key.endswith(("_api_key", "_password", "_secret", "_token"))
+        or normalized_key.startswith(("authorization_", "cookie_"))
+    ):
+        return _REDACTED
+
+    if isinstance(value, Mapping):
+        return {
+            str(nested_key): _sanitize_log_value(str(nested_key), nested_value)
+            for nested_key, nested_value in value.items()
+        }
+    if isinstance(value, (list, tuple, set)):
+        return [_sanitize_log_value(key, item) for item in value]
+    if isinstance(value, str) and len(value) > MAX_LOG_VALUE_CHARS:
+        return f"{value[:MAX_LOG_VALUE_CHARS]}...[truncated]"
+    return value
 
 
 def _resolve_log_level(default: str = "INFO") -> int:

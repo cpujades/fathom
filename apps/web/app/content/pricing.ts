@@ -48,7 +48,7 @@ const packPlans: Plan[] = [
     price: "$50",
     hours: "40 hours",
     features: [
-      "Largest pack for heavy listeners",
+      "Largest pack for heavy users",
       "Top up anytime to extend",
       "No monthly fees"
     ]
@@ -100,7 +100,7 @@ const pricingCopy: Record<"packs" | "subscriptions", PricingCopy> = {
     section_label: "Reserve access",
     headline: "Prefer reserve credits instead?",
     subhead:
-      "Use packs when listening comes in bursts. Buy time when needed, keep it for six months, and extend the window when you top up.",
+      "Use packs when briefing needs come in bursts. Buy video time when needed, keep it for six months, and extend the window when you top up.",
     secondary_cta: "Start with a free briefing",
     notes_label: "Reserve notes",
     footnote:
@@ -112,11 +112,11 @@ const pricingCopy: Record<"packs" | "subscriptions", PricingCopy> = {
     section_label: "Standing access",
     headline: "Prefer a standing monthly brief?",
     subhead:
-      "Best for steady listeners who want ready access, rollover protection, and lower effective cost as the habit compounds.",
+      "Best for steady users who want ready access, rollover protection, and lower effective cost as the habit compounds.",
     secondary_cta: "Go straight to paid access",
     notes_label: "Standing notes",
     benefits: [
-      "Rollover - keep unused listening time in play.",
+      "Rollover - keep unused video time in play.",
       "Readiness - always have briefing capacity on hand.",
       "Lower cost - better economics than packs at recurring usage."
     ],

@@ -8,6 +8,7 @@ from fathom.application.briefings.contract import (
     encode_sse_event,
     normalize_source,
 )
+from fathom.services.pdf import PDF_CACHE_VERSION
 
 
 class NormalizeSourceTests(unittest.TestCase):
@@ -79,6 +80,59 @@ class BriefingSessionSnapshotTests(unittest.TestCase):
         self.assertEqual(snapshot.source_author, "Chris Williamson")
         self.assertEqual(snapshot.source_duration_seconds, 5472)
         self.assertEqual(snapshot.source_thumbnail_url, "https://i.ytimg.com/vi/abc123/hqdefault.jpg")
+
+    def test_only_current_pdf_cache_is_advertised(self) -> None:
+        source = normalize_source("https://www.youtube.com/watch?v=abc123")
+        base_job = {
+            "id": "11111111-1111-1111-1111-111111111111",
+            "status": "succeeded",
+            "summary_id": "22222222-2222-2222-2222-222222222222",
+            "stage": "completed",
+            "progress": 100,
+        }
+
+        stale = build_briefing_session_snapshot(
+            job=base_job,
+            source=source,
+            summary={
+                "summary_markdown": "# Ready",
+                "pdf_object_key": "user/video/legacy.pdf",
+                "pdf_cache_version": None,
+            },
+        )
+        current = build_briefing_session_snapshot(
+            job=base_job,
+            source=source,
+            summary={
+                "summary_markdown": "# Ready",
+                "pdf_object_key": "user/video/current.pdf",
+                "pdf_cache_version": PDF_CACHE_VERSION,
+            },
+        )
+
+        self.assertFalse(stale.briefing_has_pdf)
+        self.assertTrue(current.briefing_has_pdf)
+
+    def test_map_queued_settlement_retry_into_visible_finalizing_snapshot(self) -> None:
+        source = normalize_source("https://www.youtube.com/watch?v=abc123")
+        snapshot = build_briefing_session_snapshot(
+            job={
+                "id": "11111111-1111-1111-1111-111111111111",
+                "status": "queued",
+                "summary_id": "22222222-2222-2222-2222-222222222222",
+                "stage": "finalizing",
+                "progress": 98,
+                "status_message": "Finalizing your briefing; retrying shortly",
+                "error_code": "usage_settlement_failed",
+                "error_message": "Usage accounting could not be finalized; retrying shortly.",
+            },
+            source=source,
+        )
+
+        self.assertEqual(snapshot.state, "finalizing_briefing")
+        self.assertEqual(snapshot.progress, 98)
+        self.assertEqual(snapshot.detail, "Finalizing your briefing; retrying shortly")
+        self.assertEqual(snapshot.error_code, "usage_settlement_failed")
 
 
 class SseEncodingTests(unittest.TestCase):

@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { type MouseEvent, useDeferredValue, useEffect, useMemo, useState } from "react";
+import { type MouseEvent, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createApiClient } from "@fathom/api-client";
 
@@ -140,6 +140,9 @@ export default function BriefingsPage() {
   const [confirmDeleteSessionId, setConfirmDeleteSessionId] = useState<string | null>(null);
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
   const [openingSessionId, setOpeningSessionId] = useState<string | null>(null);
+  const [libraryNotice, setLibraryNotice] = useState<string | null>(null);
+  const libraryNoticeRef = useRef<HTMLParagraphElement | null>(null);
+  const removeButtonRefs = useRef(new Map<string, HTMLButtonElement>());
 
   const deferredSearch = useDeferredValue(searchInput.trim());
   const activeBriefingCount = useMemo(
@@ -315,6 +318,7 @@ export default function BriefingsPage() {
     }
 
     setDeletingSessionId(entry.session_id);
+    setLibraryNotice(null);
     try {
       const api = createApiClient(accessToken);
       const { error: deleteError } = await api.DELETE("/briefing-sessions/{session_id}", {
@@ -343,11 +347,18 @@ export default function BriefingsPage() {
       });
       setConfirmDeleteSessionId(null);
       setError(null);
+      setLibraryNotice("Briefing removed from your library.");
+      window.requestAnimationFrame(() => libraryNoticeRef.current?.focus());
     } catch (err) {
       setError(getApiErrorMessage(err, "Unable to remove this briefing from history."));
     } finally {
       setDeletingSessionId(null);
     }
+  };
+
+  const closeDeleteConfirmation = (sessionId: string) => {
+    setConfirmDeleteSessionId(null);
+    window.requestAnimationFrame(() => removeButtonRefs.current.get(sessionId)?.focus());
   };
 
   return (
@@ -412,8 +423,16 @@ export default function BriefingsPage() {
             </label>
           </div>
 
+          {libraryNotice ? (
+            <p className={chrome.inlineStatus} ref={libraryNoticeRef} role="status" tabIndex={-1}>
+              {libraryNotice}
+            </p>
+          ) : null}
+
           {loading && briefings.items.length === 0 ? (
-            <p className={chrome.emptyState}>Loading your briefing library…</p>
+            <p className={chrome.emptyState} role="status">
+              Loading your briefing library…
+            </p>
           ) : briefings.items.length === 0 ? (
             <p className={chrome.emptyState}>{helperText}</p>
           ) : (
@@ -508,6 +527,13 @@ export default function BriefingsPage() {
                                   className={styles.menuDangerAction}
                                   type="button"
                                   onClick={() => setConfirmDeleteSessionId(entry.session_id)}
+                                  ref={(node) => {
+                                    if (node) {
+                                      removeButtonRefs.current.set(entry.session_id, node);
+                                    } else {
+                                      removeButtonRefs.current.delete(entry.session_id);
+                                    }
+                                  }}
                                 >
                                   Remove
                                 </button>
@@ -515,13 +541,14 @@ export default function BriefingsPage() {
                             </div>
 
                             {confirmingDelete ? (
-                              <div className={styles.confirmBlock}>
+                              <div className={styles.confirmBlock} role="group" aria-label={`Remove ${entry.title}`}>
                                 <p className={styles.confirmText}>Remove this briefing from history?</p>
                                 <div className={styles.confirmActions}>
                                   <button
+                                    autoFocus
                                     className={styles.confirmCancelButton}
                                     type="button"
-                                    onClick={() => setConfirmDeleteSessionId(null)}
+                                    onClick={() => closeDeleteConfirmation(entry.session_id)}
                                   >
                                     Keep briefing
                                   </button>
@@ -559,7 +586,11 @@ export default function BriefingsPage() {
             </div>
           ) : null}
 
-          {error ? <p className={`${chrome.inlineStatus} ${chrome.inlineStatusError}`}>{error}</p> : null}
+          {error ? (
+            <p className={`${chrome.inlineStatus} ${chrome.inlineStatusError}`} role="alert">
+              {error}
+            </p>
+          ) : null}
         </section>
       </main>
     </div>

@@ -83,7 +83,11 @@ class RateLimitSubjectTests(unittest.TestCase):
             authorization="Bearer not-a-jwt",
         )
 
-        subject = _get_rate_limit_subject(request, trust_proxy_headers=True)
+        subject = _get_rate_limit_subject(
+            request,
+            trust_proxy_headers=True,
+            trusted_proxy_networks=("10.0.0.0/8",),
+        )
 
         self.assertEqual(subject, "ip:203.0.113.9")
 

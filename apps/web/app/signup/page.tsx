@@ -8,7 +8,13 @@ import { useEffect, useMemo, useState } from "react";
 import styles from "../auth/auth.module.css";
 import { mapAuthCallbackErrorCode, mapAuthError } from "../lib/authErrors";
 import { getSupabaseClient } from "../lib/supabaseClient";
-import { buildAuthCallbackUrl, buildSignInPath, getSafeNextPath } from "../lib/url";
+import {
+  buildAuthCallbackUrl,
+  buildAuthDestinationPath,
+  buildSignInPath,
+  getSafeAuthIntentContext,
+  getSafeNextPath
+} from "../lib/url";
 
 export default function SignUpPage() {
   const router = useRouter();
@@ -19,15 +25,23 @@ export default function SignUpPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const authIntent = getSafeAuthIntentContext({
+      intent: params.get("intent"),
+      plan: params.get("plan")
+    });
     setNextPath(getSafeNextPath(params.get("next")));
-    setIntent(params.get("intent"));
-    setPlan(params.get("plan"));
+    setIntent(authIntent.intent);
+    setPlan(authIntent.plan);
     setError(mapAuthCallbackErrorCode(params.get("auth_error")));
   }, []);
 
   const callbackUrl = useMemo(() => {
-    return buildAuthCallbackUrl(nextPath);
-  }, [nextPath]);
+    return buildAuthCallbackUrl(nextPath, { intent, plan });
+  }, [intent, nextPath, plan]);
+
+  const destinationPath = useMemo(() => {
+    return buildAuthDestinationPath(nextPath, { intent, plan });
+  }, [intent, nextPath, plan]);
 
   const signInHref = useMemo(() => {
     return buildSignInPath(nextPath, {
@@ -112,7 +126,7 @@ export default function SignUpPage() {
       } else if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
         setError("An account with this email already exists. Try signing in instead.");
       } else if (data.session) {
-        router.replace(nextPath);
+        router.replace(destinationPath);
       } else {
         setMessage("Check your inbox to confirm your email.");
       }
@@ -149,30 +163,42 @@ export default function SignUpPage() {
 
   return (
     <div className={styles.page}>
-      <div className={styles.shell}>
+      <main className={styles.shell} id="main-content">
         <aside className={styles.panel}>
           <div className={styles.brand}>
             <span className={styles.brandMark} aria-hidden="true" />
             Talven
           </div>
           <h1 className={styles.panelTitle}>Create your account</h1>
-          <p className={styles.panelText}>Turn long-form audio into concise, actionable briefings built for private advantage.</p>
+          <p className={styles.panelText}>
+            Turn long-form YouTube videos into concise, actionable briefings built for private advantage.
+          </p>
           <ul className={styles.panelList}>
             <li>Begin with included monthly usage</li>
-            <li>Upgrade or top up when listening expands</li>
+            <li>Upgrade or top up when your video use expands</li>
             <li>Track usage and exports in one workspace</li>
           </ul>
           <p className={styles.panelFooter}>Already have an account? Sign in and continue where you left off.</p>
         </aside>
 
-        <section className={styles.card}>
+        <section className={styles.card} aria-labelledby="signup-title">
           <div>
-            <h2 className={styles.title}>Sign up</h2>
+            <h2 className={styles.title} id="signup-title">
+              Sign up
+            </h2>
             <p className={styles.subtitle}>Magic link is the fastest way to start. You can switch to password anytime.</p>
           </div>
 
-          {error ? <div className={styles.error}>{error}</div> : null}
-          {message ? <div className={styles.notice}>{message}</div> : null}
+          {error ? (
+            <div className={styles.error} role="alert">
+              {error}
+            </div>
+          ) : null}
+          {message ? (
+            <div className={styles.notice} role="status">
+              {message}
+            </div>
+          ) : null}
 
           <form className={styles.form} onSubmit={handleSignUp}>
             <div className={styles.field}>
@@ -260,7 +286,12 @@ export default function SignUpPage() {
 
           <div className={styles.divider}>or</div>
 
-          <button className={`${styles.button} ${styles.buttonGhost}`} onClick={handleGoogle} disabled={loading}>
+          <button
+            className={`${styles.button} ${styles.buttonGhost}`}
+            type="button"
+            onClick={handleGoogle}
+            disabled={loading}
+          >
             <Image className={styles.googleIcon} src="/google-logo.webp" alt="" aria-hidden="true" width={18} height={18} />
             Continue with Google
           </button>
@@ -272,7 +303,7 @@ export default function SignUpPage() {
             <Link href="/">Return to Talven</Link>
           </div>
         </section>
-      </div>
+      </main>
     </div>
   );
 }
