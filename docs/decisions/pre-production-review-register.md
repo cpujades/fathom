@@ -19,6 +19,26 @@ production recovery.
 - **Public-launch decision:** may be deferred during a supervised pilot, but
   must be resolved before a paid public launch.
 
+## Owner review queue
+
+These are explicit follow-up reviews requested by the product owner. They are
+not approvals to change behavior. Each should be handled in a separate task
+that first explains the current implementation in plain language, then checks
+the evidence and records any resulting decision.
+
+| Review task | Current scope to explain and inspect | Decision or evidence expected | Status |
+| --- | --- | --- | --- |
+| Local/staging security configuration | Environment validation; FastAPI middleware order; CORS allowlists and rejected wildcards; credentialed requests; trusted proxy/client-IP handling; local-development exceptions; Next.js CSP and other security headers; HSTS and HTTPS behavior; Supabase/Auth/Polar redirect origins | An environment-by-environment origin and proxy matrix; confirmation that local development remains usable; confirmation that staging/production fail closed; a plain-language before/after explanation of every header and middleware change; any hosting-dependent CSP decision recorded separately | Owner review requested before pilot configuration |
+| Supabase query and connection load | One-second event polling per open in-progress briefing; periodic snapshot reconciliation; API rate-limit bucket writes; history/detail queries; database connections used by API and workers | Measured query/connection load for realistic pilot concurrency; the safe capacity envelope; thresholds that would justify shared event wake-ups, retention, pooling, or query/index changes | Owner review requested; measure before scaling changes |
+| Content-suitability guardrails | Public YouTube inputs that are technically processable but may produce low-value briefings, including Shorts, gaming footage, silent/low-speech videos, clips, lectures, and interviews | Product definition of a suitable source; labeled examples; false-positive tolerance; charging/refund behavior; whether guidance, warnings, or rejection is appropriate before selecting an implementation | Owner review requested; implementation deferred |
+| Provider retry and timeout budgets | Per-request versus per-stage deadlines; up to three classified attempts; whole-job retries; long-source behavior; user-facing waiting/recovery states; provider cost after interrupted attempts | Capped real-provider latency data by source length and failure type; chosen request, stage, and end-to-end budgets; confirmation of which failures retry and what the user sees | Owner review requested before tuning |
+| PDF rendering design and capacity | Current isolated WeasyPrint subprocess; two concurrent renders per API process; five-second queue wait; 30-second render deadline; cache/single-flight behavior; CPU and memory isolation | Benchmark current memory, CPU, latency, and output fidelity; compare safe alternatives such as a dedicated export worker or another renderer; choose per-process capacity and scaling rules without weakening fetch/HTML/resource protections | Owner review requested before increasing concurrency or changing renderer |
+
+A review is complete only when its explanation, measurements or examples,
+trade-offs, chosen behavior, and follow-up actions are written down. An item
+may remain deferred after review; the purpose is to make that deferral
+deliberate and easy to revisit.
+
 ## Product and user journey
 
 | Area | Current decision or evidence | Remaining proof or decision | Status |
