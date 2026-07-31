@@ -13,7 +13,7 @@ from fathom.core.constants import SIGNED_URL_TTL_SECONDS, SUPABASE_PDF_BUCKET
 from fathom.core.errors import ExternalServiceError, NotReadyError
 from fathom.core.logging import log_context
 from fathom.crud.supabase.jobs import fetch_briefing_jobs_page
-from fathom.crud.supabase.storage_objects import create_pdf_signed_url, delete_object, upload_pdf
+from fathom.crud.supabase.storage_objects import create_pdf_signed_url, delete_object_with_retry, upload_pdf
 from fathom.crud.supabase.summaries import (
     complete_summary_pdf,
     fail_summary_pdf,
@@ -178,7 +178,7 @@ async def _create_briefing_pdf(
     except BaseException:
         if uploaded and not published and object_key is not None:
             try:
-                await delete_object(
+                await delete_object_with_retry(
                     admin_client,
                     bucket=SUPABASE_PDF_BUCKET,
                     object_key=object_key,

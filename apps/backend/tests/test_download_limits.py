@@ -12,7 +12,8 @@ from unittest.mock import AsyncMock, Mock, patch
 from pydantic import ValidationError
 
 from fathom.core.config import DEFAULT_SOURCE_DOWNLOAD_DEADLINE_SECONDS, Settings
-from fathom.crud.supabase.storage_objects import upload_object
+from fathom.core.errors import ExternalServiceError, ForbiddenError, NotFoundError, RateLimitError
+from fathom.crud.supabase.storage_objects import delete_object_with_retry, upload_object
 from fathom.services.downloader import DownloadError, download_audio
 from supabase import AsyncClient
 
@@ -244,6 +245,61 @@ class StreamingStorageUploadTests(unittest.IsolatedAsyncioTestCase):
             source_path,
             {"content-type": "audio/webm", "upsert": "true"},
         )
+
+    async def test_cleanup_retries_temporary_failures_with_bounded_backoff(self) -> None:
+        delete = AsyncMock(
+            side_effect=[
+                ExternalServiceError("temporary"),
+                RateLimitError("slow down"),
+                None,
+            ]
+        )
+        with (
+            patch("fathom.crud.supabase.storage_objects.delete_object", delete),
+            patch("fathom.crud.supabase.storage_objects.asyncio.sleep", AsyncMock()) as sleep,
+        ):
+            await delete_object_with_retry(
+                cast(AsyncClient, object()),
+                bucket="audio",
+                object_key="temporary/source.webm",
+            )
+
+        self.assertEqual(delete.await_count, 3)
+        self.assertEqual(
+            [call.args[0] for call in sleep.await_args_list],
+            [0.2, 0.4],
+        )
+
+    async def test_cleanup_treats_an_already_missing_object_as_success(self) -> None:
+        delete = AsyncMock(side_effect=NotFoundError("already deleted"))
+        with (
+            patch("fathom.crud.supabase.storage_objects.delete_object", delete),
+            patch("fathom.crud.supabase.storage_objects.asyncio.sleep", AsyncMock()) as sleep,
+        ):
+            await delete_object_with_retry(
+                cast(AsyncClient, object()),
+                bucket="audio",
+                object_key="temporary/source.webm",
+            )
+
+        delete.assert_awaited_once()
+        sleep.assert_not_awaited()
+
+    async def test_cleanup_does_not_retry_permanent_permission_failures(self) -> None:
+        delete = AsyncMock(side_effect=ForbiddenError("denied"))
+        with (
+            patch("fathom.crud.supabase.storage_objects.delete_object", delete),
+            patch("fathom.crud.supabase.storage_objects.asyncio.sleep", AsyncMock()) as sleep,
+            self.assertRaises(ForbiddenError),
+        ):
+            await delete_object_with_retry(
+                cast(AsyncClient, object()),
+                bucket="audio",
+                object_key="temporary/source.webm",
+            )
+
+        delete.assert_awaited_once()
+        sleep.assert_not_awaited()
 
 
 if __name__ == "__main__":

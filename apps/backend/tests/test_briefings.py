@@ -253,7 +253,7 @@ class BriefingLibraryTests(unittest.IsolatedAsyncioTestCase):
                 AsyncMock(return_value="https://storage.example/current"),
             ),
             patch(
-                "fathom.application.briefings.delete_object",
+                "fathom.application.briefings.delete_object_with_retry",
                 AsyncMock(),
             ) as delete_pdf,
         ):
@@ -329,7 +329,7 @@ class BriefingLibraryTests(unittest.IsolatedAsyncioTestCase):
                 AsyncMock(return_value="https://storage.example/winner"),
             ),
             patch(
-                "fathom.application.briefings.delete_object",
+                "fathom.application.briefings.delete_object_with_retry",
                 AsyncMock(),
             ) as delete_pdf,
         ):

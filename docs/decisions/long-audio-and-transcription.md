@@ -17,9 +17,10 @@ time-sensitive and must be rechecked before a purchase or migration.
    `whisper-large-v3-turbo`.
 6. Groq returns normalized full text plus segment timestamps.
 7. Talven stores the full transcript and immutable ordered segments.
-8. Temporary audio deletion is best effort: a deletion failure is logged but
-   does not throw away an otherwise successful transcript. Hosted bucket
-   lifecycle cleanup should be the second line of defense.
+8. Temporary audio deletion is best effort: transient and rate-limit failures
+   receive three bounded attempts, and a final failure is logged without
+   throwing away an otherwise successful transcript. Hosted bucket lifecycle
+   cleanup should be the second line of defense.
 
 “Best effort” means Talven attempts the action and records failure, but does not
 fail the primary user outcome solely because that secondary cleanup failed.

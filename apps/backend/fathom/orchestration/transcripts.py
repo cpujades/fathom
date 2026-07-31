@@ -13,7 +13,7 @@ from urllib.parse import urlparse
 from fathom.core.config import Settings
 from fathom.core.constants import GROQ_MODEL, GROQ_SIGNED_URL_TTL_SECONDS, SUPABASE_GROQ_BUCKET
 from fathom.crud.supabase.job_events import record_job_event_best_effort
-from fathom.crud.supabase.storage_objects import create_signed_url, delete_object, upload_object
+from fathom.crud.supabase.storage_objects import create_signed_url, delete_object_with_retry, upload_object
 from fathom.crud.supabase.transcripts import (
     create_transcript,
     fetch_transcript_by_hash,
@@ -223,7 +223,7 @@ async def _create_transcript(
             )
         finally:
             try:
-                await delete_object(
+                await delete_object_with_retry(
                     admin_client,
                     bucket=SUPABASE_GROQ_BUCKET,
                     object_key=object_key,
