@@ -26,7 +26,7 @@
     "clsx": "^2.1.1",
     "framer-motion": "^12.43.0",
     "geist": "^1.7.2",
-    "lucide-react": "^0.563.0",
+    "lucide-react": "^1.27.0",
     "next": "16.2.11",
     "prism-react-renderer": "^2.4.1",
     "react": "19.2.8",
