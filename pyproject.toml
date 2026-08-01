@@ -7,7 +7,7 @@ readme = "README.md"
 # Pinning prevents uv/pyenv from selecting an interpreter that can't build/install wheels reliably.
 requires-python = ">=3.11,<3.14"
 dependencies = [
-  "fastapi==0.140.13",
+  "fastapi==0.141.0",
   "uvicorn==0.52.0",
   "python-dotenv==1.2.2",
   "openai==2.50.0",

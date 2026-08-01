@@ -26,7 +26,7 @@
     "clsx": "^2.1.1",
     "framer-motion": "^12.43.0",
     "geist": "^1.7.2",
-    "lucide-react": "^0.563.0",
+    "lucide-react": "^0.577.0",
     "next": "16.2.12",
     "prism-react-renderer": "^2.4.1",
     "react": "19.2.8",
@@ -43,15 +43,15 @@
     "@axe-core/playwright": "4.12.1",
     "@playwright/test": "1.62.0",
     "@tailwindcss/postcss": "^4.3.3",
-    "@types/node": "25.6.0",
+    "@types/node": "25.9.5",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
     "@types/react-syntax-highlighter": "^15.5.13",
     "autoprefixer": "^10.5.4",
     "eslint": "^9.39.5",
-    "eslint-config-next": "16.1.6",
-    "postcss": "8.5.24",
+    "eslint-config-next": "16.2.12",
+    "postcss": "8.5.25",
     "tailwindcss": "^4.3.3",
-    "typescript": "6.0.2"
+    "typescript": "6.0.3"
   }
 }
