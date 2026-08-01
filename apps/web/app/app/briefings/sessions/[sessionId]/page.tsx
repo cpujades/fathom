@@ -16,10 +16,13 @@ import { getAccountLabel } from "../../../../lib/accountLabel";
 import { formatExactDuration } from "../../../../lib/format";
 import { logger } from "../../../../lib/logger";
 import {
+  assertAuthenticatedRequestScopeCurrent,
   cacheSessionSnapshot,
+  captureAuthenticatedRequestScope,
   evictSessionSnapshot,
   getCachedSessionSnapshot,
-  invalidateBriefingsCache
+  invalidateBriefingsCache,
+  isAuthenticatedRequestScopeCurrent
 } from "../../../../lib/appDataCache";
 import { buildSignInPath } from "../../../../lib/url";
 import { readSessionStream, type SessionStreamEvent } from "../../sessionStream";
@@ -37,6 +40,7 @@ import {
   getFinalizationPresentation,
   isCreditOrPaymentError
 } from "../../sessionPresentation";
+import { parseTakeawayItems } from "../../takeawayParser";
 import styles from "../../session.module.css";
 
 const RECONNECT_BASE_DELAY_MS = 1000;
@@ -126,11 +130,6 @@ type ParsedBriefing = {
   references: ParsedBriefingSection | null;
 };
 
-type TakeawayItem = {
-  title: string;
-  body: string;
-};
-
 type BriefingSectionKind = "deepRead" | "standard";
 
 export default function BriefingSessionPage() {
@@ -143,11 +142,12 @@ export default function BriefingSessionPage() {
     const queryString = searchParams.toString();
     return buildSignInPath(`${pathname}${queryString ? `?${queryString}` : ""}`);
   }, [pathname, searchParams]);
-  const cachedSnapshot = useMemo(
-    () => (sessionId ? getCachedSessionSnapshot(sessionId) : null),
-    [sessionId]
-  );
   const { accessToken, loading, refreshUsage, remainingSeconds, signOut, user } = useAppShell();
+  const userId = user?.id ?? null;
+  const cachedSnapshot = useMemo(
+    () => (sessionId && userId ? getCachedSessionSnapshot(userId, sessionId) : null),
+    [sessionId, userId]
+  );
   const [sessionState, dispatchSession] = useReducer(
     briefingSessionReducer,
     cachedSnapshot,
@@ -178,16 +178,16 @@ export default function BriefingSessionPage() {
   } = sessionState;
 
   useEffect(() => {
-    if (session) {
-      cacheSessionSnapshot(session);
+    if (session && userId) {
+      cacheSessionSnapshot(userId, session);
     }
-  }, [session]);
+  }, [session, userId]);
 
   useEffect(() => {
     if (loading || !sessionId) {
       return;
     }
-    if (!accessToken) {
+    if (!accessToken || !userId) {
       router.replace(signInPath);
       return;
     }
@@ -203,14 +203,20 @@ export default function BriefingSessionPage() {
     setSessionLoadErrorCode(null);
     setActionError(null);
 
-    const prefetchedSnapshot = getCachedSessionSnapshot(sessionId);
+    const prefetchedSnapshot = getCachedSessionSnapshot(userId, sessionId);
     dispatchSession({ type: "reset", snapshot: prefetchedSnapshot });
     terminalStateRef.current = prefetchedSnapshot ? isTerminalSessionState(prefetchedSnapshot.state) : false;
 
     const abortController = new AbortController();
+    const requestScope = captureAuthenticatedRequestScope(userId);
     const api = createApiClient(accessToken);
+    const requestIsCurrent = () =>
+      !abortController.signal.aborted && isAuthenticatedRequestScopeCurrent(requestScope);
 
     const handleSessionSnapshot = (snapshot: BriefingSessionResponse) => {
+      if (!requestIsCurrent()) {
+        return;
+      }
       dispatchSession({ type: "snapshot", snapshot });
       terminalStateRef.current = terminalStateRef.current || isTerminalSessionState(snapshot.state);
       lastStreamActivityRef.current = Date.now();
@@ -219,19 +225,25 @@ export default function BriefingSessionPage() {
     };
 
     const handleStatusUpdate = (statusUpdate: SessionStatusPayload) => {
+      if (!requestIsCurrent()) {
+        return;
+      }
       dispatchSession({ type: "status", status: statusUpdate });
       terminalStateRef.current = terminalStateRef.current || isTerminalSessionState(statusUpdate.state);
       lastStreamActivityRef.current = Date.now();
     };
 
     const handleContentDelta = (contentDelta: SessionContentDeltaPayload) => {
+      if (!requestIsCurrent()) {
+        return;
+      }
       dispatchSession({ type: "content_delta", contentDelta });
       terminalStateRef.current = terminalStateRef.current || isTerminalSessionState(contentDelta.state);
       lastStreamActivityRef.current = Date.now();
     };
 
     const handleStreamEvent = async (event: SessionStreamEvent<unknown>) => {
-      if (!event.data) {
+      if (!event.data || !requestIsCurrent()) {
         return;
       }
 
@@ -260,7 +272,7 @@ export default function BriefingSessionPage() {
 
     const refreshSessionSnapshot = async (currentSessionId: string, blocking = false) => {
       const handleSnapshotRefreshFailure = (error: unknown) => {
-        if (abortController.signal.aborted) {
+        if (!requestIsCurrent()) {
           return;
         }
 
@@ -291,7 +303,7 @@ export default function BriefingSessionPage() {
           }
         });
 
-        if (abortController.signal.aborted) {
+        if (!requestIsCurrent()) {
           return null;
         }
 
@@ -446,10 +458,10 @@ export default function BriefingSessionPage() {
     return () => {
       abortController.abort();
     };
-  }, [accessToken, loading, router, sessionId, sessionLoadAttempt, signInPath]);
+  }, [accessToken, loading, router, sessionId, sessionLoadAttempt, signInPath, userId]);
 
   const handlePdfAction = async () => {
-    if (!session?.briefing_id || !accessToken) {
+    if (!session?.briefing_id || !accessToken || !userId) {
       return;
     }
 
@@ -457,6 +469,7 @@ export default function BriefingSessionPage() {
     setPdfLoading(true);
 
     try {
+      const requestScope = captureAuthenticatedRequestScope(userId);
       const api = createApiClient(accessToken);
       const briefingId = String(session.briefing_id);
       const response = session.briefing_has_pdf
@@ -474,6 +487,7 @@ export default function BriefingSessionPage() {
               }
             }
           });
+      assertAuthenticatedRequestScopeCurrent(requestScope);
 
       const data = response.data;
       const apiError = response.error;
@@ -498,7 +512,7 @@ export default function BriefingSessionPage() {
   };
 
   const handleDeleteSession = async () => {
-    if (!accessToken || !sessionId || deleteLoading) {
+    if (!accessToken || !userId || !sessionId || deleteLoading) {
       return;
     }
 
@@ -506,12 +520,14 @@ export default function BriefingSessionPage() {
     setActionError(null);
 
     try {
+      const requestScope = captureAuthenticatedRequestScope(userId);
       const response = await fetch(new URL(`/briefing-sessions/${sessionId}`, getApiBaseUrl()).toString(), {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${accessToken}`
         }
       });
+      assertAuthenticatedRequestScopeCurrent(requestScope);
 
       if (!response.ok) {
         let message = "Unable to remove this briefing.";
@@ -527,8 +543,8 @@ export default function BriefingSessionPage() {
         return;
       }
 
-      evictSessionSnapshot(sessionId);
-      invalidateBriefingsCache();
+      evictSessionSnapshot(userId, sessionId);
+      invalidateBriefingsCache(userId);
       setDeleteConfirming(false);
       router.replace("/app/briefings");
     } catch (err) {
@@ -650,12 +666,13 @@ export default function BriefingSessionPage() {
   };
 
   useEffect(() => {
-    if (!accessToken || !sessionId || phase !== "delivering") {
+    if (!accessToken || !userId || !sessionId || phase !== "delivering") {
       return undefined;
     }
 
     let attempts = 0;
     let cancelled = false;
+    const requestScope = captureAuthenticatedRequestScope(userId);
     const api = createApiClient(accessToken);
 
     const reconcileReadyMarkdown = async () => {
@@ -668,7 +685,7 @@ export default function BriefingSessionPage() {
         }
       });
 
-      if (cancelled) {
+      if (cancelled || !isAuthenticatedRequestScopeCurrent(requestScope)) {
         return;
       }
 
@@ -706,7 +723,7 @@ export default function BriefingSessionPage() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [accessToken, phase, sessionId, sessionLoadAttempt]);
+  }, [accessToken, phase, sessionId, sessionLoadAttempt, userId]);
 
   useEffect(() => {
     if (phase !== "ready" || !session?.session_id || refreshedUsageSessionRef.current === session.session_id) {
@@ -1023,7 +1040,10 @@ export default function BriefingSessionPage() {
                       {takeawayItems.map((takeaway, index) => (
                         <li className={styles.takeawayCard} key={`${takeaway.title}-${index}`}>
                           <h3>{takeaway.title}</h3>
-                          <p>{takeaway.body}</p>
+                          <StreamingMarkdown
+                            markdown={takeaway.bodyMarkdown}
+                            className={`${styles.markdown} ${styles.takeawayBody}`}
+                          />
                         </li>
                       ))}
                     </ol>
@@ -1660,22 +1680,6 @@ function emphasizeFirstSentence(markdown: string): string {
   }
 
   return `**${sentenceMatch[1]}**${sentenceMatch[2]}`;
-}
-
-function parseTakeawayItems(markdown: string): TakeawayItem[] {
-  const items: TakeawayItem[] = [];
-  const pattern = /(?:^|\n)\s*(?:[-*+]\s*)?\*\*(.+?)\*\*\s*:?\s*([\s\S]*?)(?=\n\s*(?:[-*+]\s*)?\*\*.+?\*\*\s*:|$)/g;
-
-  for (const match of markdown.matchAll(pattern)) {
-    const title = cleanInlineMarkdown(match[1]);
-    const body = cleanInlineMarkdown(match[2].replace(/^[-*+]\s*/, ""));
-
-    if (title && body) {
-      items.push({ title, body });
-    }
-  }
-
-  return items;
 }
 
 function getSectionId(title: string, index: number): string {

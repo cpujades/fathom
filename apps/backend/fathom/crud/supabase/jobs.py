@@ -431,16 +431,28 @@ async def _update_job(
     payload: dict[str, Any],
     error_message: str,
 ) -> None:
+    if lease_token is not None:
+        try:
+            response = await client.rpc(
+                "update_job_with_valid_lease",
+                {
+                    "p_job_id": job_id,
+                    "p_lease_token": lease_token,
+                    "p_payload": payload,
+                },
+            ).execute()
+        except APIError as exc:
+            raise_for_postgrest_error(exc, error_message)
+
+        if response.data is not True:
+            raise JobLeaseLostError(f"Job lease lost for {job_id}.")
+        return
+
     try:
         query = client.table("jobs").update(payload).eq("id", job_id)
-        if lease_token is not None:
-            query = query.eq("status", "running").eq("lease_token", lease_token)
         response = await query.execute()
     except APIError as exc:
         raise_for_postgrest_error(exc, error_message)
-
-    if lease_token is not None and not response.data:
-        raise JobLeaseLostError(f"Job lease lost for {job_id}.")
 
 
 async def archive_job(client: AsyncClient, *, job_id: str) -> None:

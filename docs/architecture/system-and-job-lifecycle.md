@@ -28,9 +28,9 @@ The browser never talks directly to Groq, OpenRouter, or Polar. It has limited
 read-only access to three RLS-protected database tables, but normal product
 requests still go through the API.
 
-## Why there are 14 application tables
+## Why there are 16 application tables
 
-The 14 tables are the final public application schema after migrations; the
+The 16 tables are the final public application schema after migrations; the
 old Stripe customer table is removed. They do not include Supabase's internal
 Auth or Storage tables. The schema separates records that have different
 owners, lifecycles, security rules, and audit requirements instead of putting
@@ -50,8 +50,113 @@ unrelated mutable data into one large row.
 | `usage_settlements` | The unique, atomic final charge for one successful job |
 | `billing_orders` | Polar purchases, refunds, and order lifecycle |
 | `billing_webhook_events` | Provider-event deduplication, ordering, replay, and diagnostics |
+| `billing_maintenance_leases` | Short-lived ownership fence ensuring only one worker performs billing recovery at a time |
+| `briefing_stream_leases` | Expiring per-user/client ownership records that bound active SSE streams across API replicas |
 | `polar_customers` | The private mapping between a Talven user and Polar customer state |
 | `api_rate_limit_buckets` | Short-lived per-client/per-scope request counters |
+
+## How the tables relate
+
+The simplest mental model is:
+
+- a `jobs` row is one user's private briefing session and access record;
+- a `transcripts` row plus its `transcript_segments` is reusable processing for
+  one source and transcription contract;
+- a `summaries` row is reusable generated output for one transcript and summary
+  contract;
+- `usage_settlements` and `usage_ledger` explain the one final charge for a
+  successful job; and
+- `entitlements` is the fast current-balance snapshot derived from authoritative
+  credit and debt movements.
+
+```mermaid
+flowchart LR
+    AUTH["Supabase Auth user"]
+
+    subgraph CONTENT["Briefing content and access"]
+        T["transcripts"] --> TS["transcript_segments"]
+        T --> S["summaries"]
+        S --> J["jobs"]
+        J --> JE["job_events"]
+        J --> US["usage_settlements"]
+        US --> UL["usage_ledger"]
+    end
+
+    subgraph BILLING["Billing and usage"]
+        P["plans"] --> BO["billing_orders"]
+        P --> CL["credit_lots"]
+        P --> E["entitlements"]
+        PC["polar_customers"] -.-> BO
+        BO -.-> CL
+        CL --> E
+        US --> CL
+        US --> E
+        BWE["billing_webhook_events"] -.-> BO
+    end
+
+    subgraph OPERATIONS["Short-lived operational controls"]
+        BML["billing_maintenance_leases"]
+        BSL["briefing_stream_leases"]
+        RLB["api_rate_limit_buckets"]
+    end
+
+    AUTH -.-> J
+    AUTH -.-> E
+    AUTH -.-> CL
+    AUTH -.-> BO
+    AUTH -.-> PC
+    AUTH -.-> BSL
+```
+
+Solid arrows show the main stored dependency or state-update path. Dotted
+arrows show a logical relationship that may use `user_id`, a provider ID, or a
+source key rather than a direct foreign key.
+
+### Database-enforced relationships
+
+| Parent | Child | Enforced link | Deletion behavior |
+| --- | --- | --- | --- |
+| `transcripts` | `transcript_segments` | `transcript_id` foreign key | Segments are deleted with the transcript |
+| `transcripts` | `summaries` | `transcript_id` foreign key | Summaries are deleted with the transcript |
+| `summaries` | `jobs` | `summary_id` foreign key | Deleting a summary clears the job link rather than deleting the user's job |
+| `jobs` | `job_events` | `job_id` foreign key | Events are deleted with the job |
+| `jobs` | `usage_settlements` | unique `job_id` foreign key | A settled job cannot be deleted underneath its audit record |
+| `jobs` and `usage_settlements` | `usage_ledger` | `job_id` and `settlement_id` foreign keys | New settlement evidence is retained rather than cascaded away |
+| `plans` | `billing_orders`, `credit_lots`, `entitlements` | `plan_id` fields | A removed plan definition clears the optional link but preserves financial history |
+
+### Intentional logical relationships
+
+- `user_id` connects private jobs, balances, credit lots, billing orders, Polar
+  customer mapping, settlements, and stream leases to one Supabase Auth user.
+  RLS and API ownership checks protect user-facing access even where the schema
+  deliberately avoids an Auth foreign key.
+- A pack `billing_orders.polar_order_id` matches the `credit_lots.source_key`
+  for the credit created by that order. Billing commands lock and update them
+  together.
+- `billing_webhook_events` stores provider events before Talven assumes a local
+  order exists. This is why it keeps provider identifiers and payload evidence
+  instead of requiring a foreign key to `billing_orders`: a legitimate webhook
+  can arrive before the corresponding local order is visible.
+- `entitlements` is not an independent money history. It is a rebuildable,
+  current snapshot updated from credit lots, debt, subscriptions, refunds, and
+  settlements.
+- Operational lease/rate-limit tables are intentionally not part of the
+  content hierarchy. They expire and coordinate work; they do not own a
+  user's briefing or payment history.
+
+### Shared content does not mean shared accounts
+
+Two users submitting the same compatible public video may have separate
+`jobs`, events, settlements, and billing records that point to the same ready
+`summaries` row. The summary points to one reusable transcript and evidence
+segments. RLS permits a user to read that summary only through their own
+successful or archived job.
+
+Therefore, cache reuse saves provider work but does not expose who else watched
+the source, another user's library state, or another user's billing. It also
+explains why permanent deletion needs dependency and retention rules: deleting
+one user's job must not accidentally destroy a shared summary still referenced
+by another user's job.
 
 For example, `entitlements` is the fast account balance shown now, while
 `usage_ledger` is the unchangeable history explaining how it became that
@@ -78,6 +183,13 @@ source without gaining access to each other's sessions or billing records.
    the job successful.
 8. Persisted events plus periodic snapshots let the browser recover after an
    SSE disconnect. Markdown and PDF remain private.
+
+Pack refund initiation is also a database command. It locks the purchase before
+its credit lot in the same order as usage settlement, recomputes the refundable
+amount from the locked remainder, and changes `paid` to `refund_pending` before
+Polar is called. A refund-pending or refunded pack is therefore unavailable to
+both settlement and entitlement snapshots; a definitive provider rejection is
+the only path that atomically reopens it.
 
 ## How the database queue works
 

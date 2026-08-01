@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import json
 import tempfile
 import threading
 import unittest
@@ -11,10 +13,18 @@ from unittest.mock import AsyncMock, Mock, patch
 
 from pydantic import ValidationError
 
-from fathom.core.config import DEFAULT_SOURCE_DOWNLOAD_DEADLINE_SECONDS, Settings
+from fathom.core.config import (
+    DEFAULT_SOURCE_DOWNLOAD_DEADLINE_SECONDS,
+    DEFAULT_SOURCE_METADATA_DEADLINE_SECONDS,
+    Settings,
+)
 from fathom.core.errors import ExternalServiceError, ForbiddenError, NotFoundError, RateLimitError
 from fathom.crud.supabase.storage_objects import delete_object_with_retry, upload_object
-from fathom.services.downloader import DownloadError, download_audio
+from fathom.services.downloader import (
+    DownloadError,
+    download_audio,
+    fetch_video_metadata_with_deadline,
+)
 from supabase import AsyncClient
 
 
@@ -204,6 +214,9 @@ class DownloadDeadlineSettingsTests(unittest.TestCase):
             "SUPABASE_URL": "https://example.supabase.co",
             "SUPABASE_PUBLISHABLE_KEY": "publishable",
             "SUPABASE_SECRET_KEY": "secret",
+            "APP_ENV": "local",
+            "RATE_LIMIT": "0",
+            "CORS_ALLOW_ORIGINS": "",
         }
 
     def test_download_deadline_has_safe_default(self) -> None:
@@ -212,6 +225,10 @@ class DownloadDeadlineSettingsTests(unittest.TestCase):
         self.assertEqual(
             settings.source_download_deadline_seconds,
             DEFAULT_SOURCE_DOWNLOAD_DEADLINE_SECONDS,
+        )
+        self.assertEqual(
+            settings.source_metadata_deadline_seconds,
+            DEFAULT_SOURCE_METADATA_DEADLINE_SECONDS,
         )
 
     def test_download_deadline_must_be_positive_and_bounded(self) -> None:
@@ -223,6 +240,74 @@ class DownloadDeadlineSettingsTests(unittest.TestCase):
         values["SOURCE_DOWNLOAD_DEADLINE_SECONDS"] = "3601"
         with self.assertRaises(ValidationError):
             Settings.model_validate(values)
+
+
+class YouTubeWorkerDeadlineTests(unittest.IsolatedAsyncioTestCase):
+    async def test_metadata_worker_returns_validated_result(self) -> None:
+        process = SimpleNamespace(
+            returncode=0,
+            communicate=AsyncMock(
+                return_value=(
+                    json.dumps(
+                        {
+                            "ok": True,
+                            "result": {
+                                "video_id": "video-id",
+                                "duration_seconds": 60,
+                                "title": "Title",
+                            },
+                        }
+                    ).encode(),
+                    b"",
+                )
+            ),
+            kill=Mock(),
+            wait=AsyncMock(),
+        )
+        create_process = AsyncMock(return_value=process)
+        with (
+            patch(
+                "fathom.services.downloader.asyncio.create_subprocess_exec",
+                create_process,
+            ),
+            patch.dict("os.environ", {"OPENROUTER_API_KEY": "secret", "PATH": "/usr/bin"}),
+        ):
+            result = await fetch_video_metadata_with_deadline(
+                "https://www.youtube.com/watch?v=test",
+                deadline_seconds=1,
+            )
+
+        self.assertEqual(result.video_id, "video-id")
+        self.assertEqual(result.duration_seconds, 60)
+        worker_env = create_process.await_args.kwargs["env"]
+        self.assertEqual(worker_env["PATH"], "/usr/bin")
+        self.assertNotIn("OPENROUTER_API_KEY", worker_env)
+
+    async def test_metadata_worker_is_killed_at_the_overall_deadline(self) -> None:
+        async def never_returns(_request: bytes) -> tuple[bytes, bytes]:
+            await asyncio.sleep(60)
+            return b"", b""
+
+        process = SimpleNamespace(
+            returncode=None,
+            communicate=never_returns,
+            kill=Mock(),
+            wait=AsyncMock(),
+        )
+        with (
+            patch(
+                "fathom.services.downloader.asyncio.create_subprocess_exec",
+                AsyncMock(return_value=process),
+            ),
+            self.assertRaisesRegex(DownloadError, "deadline exceeded"),
+        ):
+            await fetch_video_metadata_with_deadline(
+                "https://www.youtube.com/watch?v=test",
+                deadline_seconds=0.001,
+            )
+
+        process.kill.assert_called_once()
+        process.wait.assert_awaited_once()
 
 
 class StreamingStorageUploadTests(unittest.IsolatedAsyncioTestCase):

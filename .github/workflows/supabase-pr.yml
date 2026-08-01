@@ -17,11 +17,11 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Detect Supabase changes
         id: changes
-        uses: dorny/paths-filter@v4
+        uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4
         with:
           filters: |
             supabase:
@@ -34,9 +34,9 @@ jobs:
 
       - name: Set up Supabase CLI
         if: steps.changes.outputs.supabase == 'true'
-        uses: supabase/setup-cli@v3
+        uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520 # v3
         with:
-          version: latest
+          version: 2.111.0
 
       # We only need Postgres for migrations/linting.
       - name: Start local database

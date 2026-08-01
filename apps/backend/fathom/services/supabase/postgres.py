@@ -65,7 +65,11 @@ async def create_postgres_connection(settings: Settings) -> AsyncIterator[asyncp
         raise ConfigurationError("SUPABASE_DB connection details are not configured.")
 
     try:
-        conn = await asyncpg.connect(postgres_url, timeout=10)
+        conn = await asyncpg.connect(
+            postgres_url,
+            timeout=10,
+            ssl=True if settings.is_strict_runtime else False,
+        )
         logger.debug("postgres.connection.established")
         try:
             yield conn
@@ -86,6 +90,7 @@ async def create_postgres_pool(settings: Settings) -> asyncpg.Pool:
         pool = await asyncpg.create_pool(
             postgres_url,
             timeout=10,
+            ssl=True if settings.is_strict_runtime else False,
             min_size=1,
             max_size=10,
         )

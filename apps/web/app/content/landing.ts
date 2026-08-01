@@ -107,7 +107,7 @@ const landingContent: LandingContent = {
   ],
   hero: {
     eyebrow: "Private YouTube briefings",
-    deck: "Private brief / Source-linked / Ready in minutes",
+    deck: "Source-linked / Track progress / Export anytime",
     title: "Extract the signal. Keep the edge.",
     subtitle:
       "Talven turns long-form YouTube videos into clear, source-linked briefings for people who prefer advantage to backlog.",
@@ -223,7 +223,7 @@ const landingContent: LandingContent = {
       {
         question: "How long does a briefing take?",
         answer:
-          "Most jobs finish in minutes depending on video length and queue load. You can track each briefing from your workspace."
+          "Processing time depends on video length, queue load, and provider availability. You can track each briefing from your workspace and return when it is ready."
       },
       {
         question: "Can I export briefings to my own tools?",

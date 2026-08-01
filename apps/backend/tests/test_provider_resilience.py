@@ -331,6 +331,9 @@ class ProviderDeadlineSettingsTests(unittest.TestCase):
             "SUPABASE_URL": "https://example.supabase.co",
             "SUPABASE_PUBLISHABLE_KEY": "publishable",
             "SUPABASE_SECRET_KEY": "secret",
+            "APP_ENV": "local",
+            "RATE_LIMIT": "0",
+            "CORS_ALLOW_ORIGINS": "",
         }
 
     def test_provider_deadline_defaults_preserve_existing_retry_envelopes(self) -> None:

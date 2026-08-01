@@ -323,11 +323,13 @@ class AuthenticatedGateCE2ETests(unittest.IsolatedAsyncioTestCase):
     async def _create_session(self, video_id: str) -> dict[str, Any]:
         with patch.object(
             session_application,
-            "fetch_video_metadata",
-            return_value=VideoMetadata(
-                video_id=video_id,
-                duration_seconds=120,
-                title=f"Gate C {video_id}",
+            "fetch_video_metadata_with_deadline",
+            new=AsyncMock(
+                return_value=VideoMetadata(
+                    video_id=video_id,
+                    duration_seconds=120,
+                    title=f"Gate C {video_id}",
+                )
             ),
         ):
             response = await self._api().post(
@@ -359,7 +361,7 @@ class AuthenticatedGateCE2ETests(unittest.IsolatedAsyncioTestCase):
         backoff = 0 if zero_worker_backoff else 5
         with (
             patch(
-                "fathom.orchestration.transcripts.download_audio",
+                "fathom.orchestration.transcripts.download_audio_with_deadline",
                 side_effect=_fake_download_audio,
             ),
             patch(

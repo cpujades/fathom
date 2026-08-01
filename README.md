@@ -87,8 +87,13 @@ Optional backend runtime variables:
 - `POLAR_SERVER`
 - `WORKER_SHUTDOWN_GRACE_SECONDS`
 - `SOURCE_DOWNLOAD_DEADLINE_SECONDS`
+- `SOURCE_METADATA_DEADLINE_SECONDS`
 - `PROVIDER_TRANSCRIPTION_DEADLINE_SECONDS`
 - `PROVIDER_SUMMARY_DEADLINE_SECONDS`
+- `SSE_MAX_STREAMS_PER_USER`
+- `SSE_MAX_STREAMS_PER_IP`
+- `SSE_STREAM_LEASE_SECONDS`
+- `SSE_STREAM_MAX_LIFETIME_SECONDS`
 
 `APP_ENV` accepts `local`, `test`, `staging`, or `production` and defaults to
 `local`. Hosted modes fail closed unless rate limiting and exact HTTPS CORS
@@ -209,9 +214,18 @@ pnpm --filter @fathom/web build
 - The worker should be configured to restart automatically on failure.
 - The frontend must set `NEXT_PUBLIC_API_BASE_URL`. It no longer falls back to localhost.
 - Rate limiting uses shared Postgres buckets keyed by client IP. Only enable `TRUST_PROXY_HEADERS=true` when the app is behind a trusted ingress/proxy that normalizes forwarded headers.
-- SSE session events, Polar webhooks, and `/meta/*` routes are exempt from rate limiting so live updates and provider callbacks do not get throttled accidentally.
+- Polar webhooks and `/meta/health` bypass ordinary request throttling. SSE opens and readiness checks are rate-limited; active SSE connections also use expiring database leases with per-user/IP caps and a hard lifetime.
+- Staging and production require HTTPS Supabase/Polar URLs, a non-loopback database host, certificate-verified Postgres TLS, exact HTTPS CORS origins, and the Polar production server.
+- `supabase/config.toml` configures the local Auth stack; hosted Supabase Auth settings and SMTP must be mirrored and verified in the Dashboard because database migrations do not deploy them.
 - Polar webhooks should target your public backend URL at `/webhooks/polar`.
 - Supabase migrations are managed from `supabase/` and deployed through GitHub Actions.
 - Incident notes live in [docs/runbooks/worker-and-billing-incidents.md](./docs/runbooks/worker-and-billing-incidents.md).
 - The bounded, no-provider recovery rehearsal lives in
   [docs/runbooks/local-recovery-rehearsal.md](./docs/runbooks/local-recovery-rehearsal.md).
+- Plain-language explanations of leases, stream limits, billing recovery,
+  refund concurrency, and Auth configuration live in
+  [docs/architecture/runtime-safety-explained.md](./docs/architecture/runtime-safety-explained.md).
+- Hosted Supabase Auth, SMTP, health/readiness probes, and rate-limit setup are
+  configured with [the hosted-operations runbook](./docs/runbooks/hosted-auth-and-service-probes.md).
+- Release credential rotation and protected-branch behavior are documented in
+  [the release automation runbook](./docs/runbooks/release-automation.md).

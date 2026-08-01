@@ -42,6 +42,7 @@ create and remove reserved test UUIDs.
 ```bash
 FATHOM_TEST_DATABASE_URL=postgresql://... \
 PYTHONPATH=apps/backend ./.venv/bin/python -m unittest \
+  apps.backend.tests.test_billing_concurrency_integration \
   apps.backend.tests.test_usage_settlement_integration \
   apps.backend.tests.test_polar_webhook_integration \
   apps.backend.tests.test_transcript_evidence_integration
@@ -49,6 +50,10 @@ PYTHONPATH=apps/backend ./.venv/bin/python -m unittest \
 
 Acceptance criteria:
 
+- refund initiation and settlement serialize on the billing order in both
+  commit orders, so the provider quote uses the post-settlement remainder or
+  the settlement excludes the refund-pending pack;
+- two concurrent maintenance workers produce exactly one lease owner;
 - concurrent settlement produces one settlement and one balanced set of ledger
   effects;
 - duplicate webhook delivery produces one billing effect and a convergent

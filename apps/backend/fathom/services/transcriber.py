@@ -57,7 +57,10 @@ def _extract_groq_transcription(response: Any) -> TranscriptionResult:
 
     raw_segments = getattr(response, "segments", None)
     if raw_segments is None:
-        return TranscriptionResult(text=text, segments=())
+        raise TranscriptionError(
+            "Groq response missing timestamp segments.",
+            kind=ProviderFailureKind.TRANSIENT,
+        )
     if not isinstance(raw_segments, list):
         raise TranscriptionError(
             "Groq response contained invalid timestamp segments.",
@@ -105,6 +108,11 @@ def _extract_groq_transcription(response: Any) -> TranscriptionResult:
         segments.append(segment)
         previous_start = segment.start_seconds
 
+    if not segments:
+        raise TranscriptionError(
+            "Groq response contained no timestamp segments.",
+            kind=ProviderFailureKind.TRANSIENT,
+        )
     return TranscriptionResult(text=text, segments=tuple(segments))
 
 

@@ -1,16 +1,128 @@
 from __future__ import annotations
 
+import asyncio
 import unittest
+from datetime import UTC, datetime
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import AsyncMock, patch
 
-from fathom.application.billing.recovery import run_billing_maintenance
+from fathom.application.billing.recovery import (
+    _maintain_billing_maintenance_lease,
+    _run_claimed_billing_maintenance,
+    reconcile_pending_pack_refunds,
+    reconcile_subscription_entitlements,
+    run_billing_maintenance,
+)
+from fathom.core.config import Settings
+from fathom.core.errors import ExternalServiceError
 
 
 class BillingRecoveryTests(unittest.IsolatedAsyncioTestCase):
-    async def test_maintenance_requeues_terminal_jobs_missing_required_settlement(self) -> None:
-        admin_client = object()
+    def setUp(self) -> None:
+        self.admin_client = object()
+        self.settings = cast(Settings, SimpleNamespace(billing_debt_cap_seconds=600))
 
+    async def test_maintenance_skips_when_another_worker_owns_lease(self) -> None:
+        with (
+            patch(
+                "fathom.application.billing.recovery.claim_billing_maintenance_lease",
+                AsyncMock(return_value=False),
+            ),
+            patch(
+                "fathom.application.billing.recovery._run_claimed_billing_maintenance",
+                AsyncMock(),
+            ) as run_claimed,
+            patch(
+                "fathom.application.billing.recovery.release_billing_maintenance_lease",
+                AsyncMock(),
+            ) as release,
+        ):
+            summary = await run_billing_maintenance(self.admin_client, settings=self.settings)
+
+        self.assertEqual(summary, {"maintenance_skipped": 1})
+        run_claimed.assert_not_awaited()
+        release.assert_not_awaited()
+
+    async def test_maintenance_releases_owned_lease(self) -> None:
+        expected = {"maintenance_skipped": 0, "requeued_unsettled_jobs": 1}
+        with (
+            patch(
+                "fathom.application.billing.recovery.claim_billing_maintenance_lease",
+                AsyncMock(return_value=True),
+            ) as claim,
+            patch(
+                "fathom.application.billing.recovery._run_claimed_billing_maintenance",
+                AsyncMock(return_value=expected),
+            ),
+            patch(
+                "fathom.application.billing.recovery.release_billing_maintenance_lease",
+                AsyncMock(return_value=True),
+            ) as release,
+        ):
+            summary = await run_billing_maintenance(self.admin_client, settings=self.settings)
+
+        self.assertEqual(summary, expected)
+        self.assertIsNotNone(claim.await_args)
+        self.assertIsNotNone(release.await_args)
+        assert claim.await_args is not None
+        assert release.await_args is not None
+        claim_kwargs = claim.await_args.kwargs
+        release_kwargs = release.await_args.kwargs
+        self.assertEqual(claim_kwargs["lease_name"], "billing-recovery")
+        self.assertEqual(claim_kwargs["lease_token"], release_kwargs["lease_token"])
+        self.assertEqual(release_kwargs["lease_name"], "billing-recovery")
+
+    async def test_lease_heartbeat_fails_closed_when_ownership_is_lost(self) -> None:
+        with (
+            patch("fathom.application.billing.recovery.asyncio.sleep", AsyncMock()),
+            patch(
+                "fathom.application.billing.recovery.renew_billing_maintenance_lease",
+                AsyncMock(return_value=False),
+            ),
+        ):
+            with self.assertRaisesRegex(ExternalServiceError, "lease was lost"):
+                await _maintain_billing_maintenance_lease(
+                    self.admin_client,
+                    lease_token="token-123",
+                )
+
+    async def test_lost_lease_cancels_maintenance_and_releases_ownership(self) -> None:
+        maintenance_cancelled = False
+
+        async def blocked_maintenance(*_args: object, **_kwargs: object) -> dict[str, int]:
+            nonlocal maintenance_cancelled
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                maintenance_cancelled = True
+                raise
+
+        with (
+            patch(
+                "fathom.application.billing.recovery.claim_billing_maintenance_lease",
+                AsyncMock(return_value=True),
+            ),
+            patch(
+                "fathom.application.billing.recovery._run_claimed_billing_maintenance",
+                side_effect=blocked_maintenance,
+            ),
+            patch(
+                "fathom.application.billing.recovery._maintain_billing_maintenance_lease",
+                AsyncMock(side_effect=ExternalServiceError("Billing maintenance lease was lost.")),
+            ),
+            patch(
+                "fathom.application.billing.recovery.release_billing_maintenance_lease",
+                AsyncMock(return_value=False),
+            ) as release,
+        ):
+            with self.assertRaisesRegex(ExternalServiceError, "lease was lost"):
+                await run_billing_maintenance(self.admin_client, settings=self.settings)
+
+        self.assertTrue(maintenance_cancelled)
+        release.assert_awaited_once()
+
+    async def test_claimed_maintenance_reports_recovery_and_diagnostics(self) -> None:
         with (
             patch(
                 "fathom.application.billing.recovery.requeue_unsettled_jobs",
@@ -18,7 +130,15 @@ class BillingRecoveryTests(unittest.IsolatedAsyncioTestCase):
             ) as requeue,
             patch(
                 "fathom.application.billing.recovery.reclaim_stale_webhook_processing",
-                AsyncMock(return_value=0),
+                AsyncMock(return_value=1),
+            ),
+            patch(
+                "fathom.application.billing.recovery.reconcile_pending_pack_refunds",
+                AsyncMock(return_value=3),
+            ),
+            patch(
+                "fathom.application.billing.recovery.reconcile_subscription_entitlements",
+                AsyncMock(return_value=4),
             ),
             patch(
                 "fathom.application.billing.recovery.get_billing_webhook_diagnostics",
@@ -31,145 +151,134 @@ class BillingRecoveryTests(unittest.IsolatedAsyncioTestCase):
                     }
                 ),
             ),
-            patch(
-                "fathom.application.billing.recovery.list_refund_pending_pack_orders",
-                AsyncMock(return_value=[]),
-            ),
-            patch(
-                "fathom.application.billing.recovery.list_subscription_entitlements_for_reconciliation",
-                AsyncMock(return_value=[]),
-            ),
-            patch(
-                "fathom.application.billing.recovery.list_latest_subscription_orders_for_users",
-                AsyncMock(return_value={}),
-            ),
         ):
-            summary = await run_billing_maintenance(
-                admin_client,
-                settings=SimpleNamespace(billing_debt_cap_seconds=600),
+            summary = await _run_claimed_billing_maintenance(
+                self.admin_client,
+                settings=self.settings,
             )
 
-        requeue.assert_awaited_once_with(admin_client)
+        requeue.assert_awaited_once_with(self.admin_client)
+        self.assertEqual(summary["maintenance_skipped"], 0)
         self.assertEqual(summary["requeued_unsettled_jobs"], 2)
+        self.assertEqual(summary["reclaimed_webhook_events"], 1)
+        self.assertEqual(summary["reconciled_refund_pending_orders"], 3)
+        self.assertEqual(summary["reconciled_subscriptions"], 4)
         self.assertEqual(summary["failed_webhook_events"], 2)
-        self.assertEqual(summary["deferred_webhook_events"], 1)
-        self.assertEqual(summary["deferred_unknown_order_events"], 1)
 
-    async def test_maintenance_applies_provider_confirmed_refund(self) -> None:
-        admin_client = object()
+    async def test_provider_confirmed_refund_uses_ordered_webhook_transaction(self) -> None:
         order = {
             "id": "order-row-1",
             "polar_order_id": "ord_123",
             "user_id": "user_123",
             "status": "refund_pending",
             "plan_type": "pack",
-            "paid_amount_cents": 3000,
-            "refunded_amount_cents": 0,
         }
-
+        provider_order = {
+            "id": "ord_123",
+            "status": "paid",
+            "refunded_amount": 1200,
+            "modified_at": "2026-04-01T12:00:00+00:00",
+        }
         with (
-            patch(
-                "fathom.application.billing.recovery.requeue_unsettled_jobs",
-                AsyncMock(return_value=0),
-            ),
-            patch("fathom.application.billing.recovery.reclaim_stale_webhook_processing", AsyncMock(return_value=0)),
-            patch(
-                "fathom.application.billing.recovery.get_billing_webhook_diagnostics",
-                AsyncMock(return_value={}),
-            ),
             patch(
                 "fathom.application.billing.recovery.list_refund_pending_pack_orders",
                 AsyncMock(return_value=[order]),
-            ),
-            patch(
-                "fathom.application.billing.recovery.list_subscription_entitlements_for_reconciliation",
-                AsyncMock(return_value=[]),
-            ),
-            patch(
-                "fathom.application.billing.recovery.list_latest_subscription_orders_for_users",
-                AsyncMock(return_value={}),
             ),
             patch(
                 "fathom.application.billing.recovery.polar.get_order",
-                AsyncMock(return_value={"id": "ord_123", "status": "paid", "refunded_amount": 1200}),
+                AsyncMock(return_value=provider_order),
             ),
-            patch("fathom.application.billing.recovery.apply_order_refund_state", AsyncMock()) as apply_refund_state,
             patch(
-                "fathom.application.billing.recovery.transition_billing_order_status",
-                AsyncMock(return_value=False),
-            ) as reopen_order,
+                "fathom.application.billing.recovery.apply_polar_webhook_transaction",
+                AsyncMock(return_value={"resolution_type": "processed", "outcome": "refunded"}),
+            ) as apply_transaction,
+            patch("fathom.application.billing.recovery.reopen_pack_refund", AsyncMock()) as reopen,
         ):
-            summary = await run_billing_maintenance(
-                admin_client,
-                settings=SimpleNamespace(billing_debt_cap_seconds=600),
+            reconciled = await reconcile_pending_pack_refunds(
+                self.admin_client,
+                settings=self.settings,
             )
 
-        apply_refund_state.assert_awaited_once()
-        reopen_order.assert_not_awaited()
-        self.assertEqual(summary["reconciled_refund_pending_orders"], 1)
+        self.assertEqual(reconciled, 1)
+        reopen.assert_not_awaited()
+        self.assertIsNotNone(apply_transaction.await_args)
+        assert apply_transaction.await_args is not None
+        kwargs = apply_transaction.await_args.kwargs
+        self.assertEqual(kwargs["event_type"], "order.refunded")
+        self.assertEqual(kwargs["resource_type"], "order")
+        self.assertEqual(kwargs["resource_id"], "ord_123")
+        self.assertEqual(kwargs["payload"]["provider_total_refunded"], 1200)
+        self.assertEqual(kwargs["event_at"], datetime(2026, 4, 1, 12, tzinfo=UTC))
 
-    async def test_maintenance_reopens_stuck_refund_pending_order_when_provider_shows_paid(self) -> None:
-        admin_client = object()
+    async def test_paid_provider_state_atomically_reopens_pending_refund(self) -> None:
         order = {
             "id": "order-row-1",
             "polar_order_id": "ord_123",
             "user_id": "user_123",
             "status": "refund_pending",
             "plan_type": "pack",
-            "paid_amount_cents": 3000,
-            "refunded_amount_cents": 0,
         }
-
         with (
-            patch(
-                "fathom.application.billing.recovery.requeue_unsettled_jobs",
-                AsyncMock(return_value=0),
-            ),
-            patch("fathom.application.billing.recovery.reclaim_stale_webhook_processing", AsyncMock(return_value=0)),
-            patch(
-                "fathom.application.billing.recovery.get_billing_webhook_diagnostics",
-                AsyncMock(return_value={}),
-            ),
             patch(
                 "fathom.application.billing.recovery.list_refund_pending_pack_orders",
                 AsyncMock(return_value=[order]),
-            ),
-            patch(
-                "fathom.application.billing.recovery.list_subscription_entitlements_for_reconciliation",
-                AsyncMock(return_value=[]),
-            ),
-            patch(
-                "fathom.application.billing.recovery.list_latest_subscription_orders_for_users",
-                AsyncMock(return_value={}),
             ),
             patch(
                 "fathom.application.billing.recovery.polar.get_order",
                 AsyncMock(return_value={"id": "ord_123", "status": "paid", "refunded_amount": 0}),
             ),
-            patch("fathom.application.billing.recovery.apply_order_refund_state", AsyncMock()) as apply_refund_state,
             patch(
-                "fathom.application.billing.recovery.transition_billing_order_status",
-                AsyncMock(return_value=True),
-            ) as reopen_order,
-            patch("fathom.application.billing.recovery.sync_entitlement_snapshot", AsyncMock()) as sync_snapshot,
+                "fathom.application.billing.recovery.reopen_pack_refund",
+                AsyncMock(return_value={"resolution_type": "reopened"}),
+            ) as reopen,
+            patch(
+                "fathom.application.billing.recovery.apply_polar_webhook_transaction",
+                AsyncMock(),
+            ) as apply_transaction,
         ):
-            await run_billing_maintenance(admin_client, settings=SimpleNamespace(billing_debt_cap_seconds=600))
+            reconciled = await reconcile_pending_pack_refunds(
+                self.admin_client,
+                settings=self.settings,
+            )
 
-        apply_refund_state.assert_not_awaited()
-        reopen_order.assert_awaited_once()
-        sync_snapshot.assert_awaited_once()
+        self.assertEqual(reconciled, 1)
+        reopen.assert_awaited_once_with(
+            self.admin_client,
+            user_id="user_123",
+            polar_order_id="ord_123",
+            debt_cap_seconds=600,
+        )
+        apply_transaction.assert_not_awaited()
 
-    async def test_maintenance_reconciles_subscription_entitlements_from_provider_truth(self) -> None:
-        admin_client = object()
-        entitlement = {
+    async def test_confirmed_refund_without_provider_timestamp_is_not_applied(self) -> None:
+        order = {
+            "polar_order_id": "ord_123",
             "user_id": "user_123",
-            "subscription_plan_id": "plan_123",
-            "subscription_status": "active",
+            "status": "refund_pending",
         }
-        latest_order = {
-            "user_id": "user_123",
-            "polar_subscription_id": "sub_123",
-        }
+        with (
+            patch(
+                "fathom.application.billing.recovery.list_refund_pending_pack_orders",
+                AsyncMock(return_value=[order]),
+            ),
+            patch(
+                "fathom.application.billing.recovery.polar.get_order",
+                AsyncMock(return_value={"id": "ord_123", "status": "paid", "refunded_amount": 1200}),
+            ),
+            patch(
+                "fathom.application.billing.recovery.apply_polar_webhook_transaction",
+                AsyncMock(),
+            ) as apply_transaction,
+        ):
+            reconciled = await reconcile_pending_pack_refunds(
+                self.admin_client,
+                settings=self.settings,
+            )
+
+        self.assertEqual(reconciled, 0)
+        apply_transaction.assert_not_awaited()
+
+    async def test_subscription_reconciliation_uses_provider_ordering_transaction(self) -> None:
         provider_subscription = {
             "id": "sub_123",
             "customer_external_id": "user_123",
@@ -177,73 +286,57 @@ class BillingRecoveryTests(unittest.IsolatedAsyncioTestCase):
             "status": "past_due",
             "current_period_start": "2026-04-01T00:00:00+00:00",
             "current_period_end": "2026-05-01T00:00:00+00:00",
+            "modified_at": "2026-04-02T00:00:00+00:00",
         }
-
         with (
             patch(
-                "fathom.application.billing.recovery.requeue_unsettled_jobs",
-                AsyncMock(return_value=0),
-            ),
-            patch("fathom.application.billing.recovery.reclaim_stale_webhook_processing", AsyncMock(return_value=0)),
-            patch(
-                "fathom.application.billing.recovery.get_billing_webhook_diagnostics",
-                AsyncMock(return_value={}),
-            ),
-            patch("fathom.application.billing.recovery.list_refund_pending_pack_orders", AsyncMock(return_value=[])),
-            patch(
                 "fathom.application.billing.recovery.list_subscription_entitlements_for_reconciliation",
-                AsyncMock(return_value=[entitlement]),
+                AsyncMock(return_value=[{"user_id": "user_123", "subscription_status": "active"}]),
             ),
             patch(
                 "fathom.application.billing.recovery.list_latest_subscription_orders_for_users",
-                AsyncMock(return_value={"user_123": latest_order}),
+                AsyncMock(return_value={"user_123": {"polar_subscription_id": "sub_123"}}),
             ),
             patch(
                 "fathom.application.billing.recovery.polar.get_subscription",
                 AsyncMock(return_value=provider_subscription),
             ),
-            patch("fathom.application.billing.recovery.apply_subscription_event", AsyncMock()) as apply_subscription,
+            patch(
+                "fathom.application.billing.recovery.apply_polar_webhook_transaction",
+                AsyncMock(return_value={"resolution_type": "processed", "outcome": "applied"}),
+            ) as apply_transaction,
         ):
-            await run_billing_maintenance(admin_client, settings=SimpleNamespace(billing_debt_cap_seconds=600))
+            reconciled = await reconcile_subscription_entitlements(
+                self.admin_client,
+                settings=self.settings,
+            )
 
-        apply_subscription.assert_awaited_once_with(
-            admin_client,
-            provider_subscription,
-            unittest.mock.ANY,
-            event_type="subscription.reconciled",
-        )
+        self.assertEqual(reconciled, 1)
+        self.assertIsNotNone(apply_transaction.await_args)
+        assert apply_transaction.await_args is not None
+        kwargs = apply_transaction.await_args.kwargs
+        self.assertEqual(kwargs["event_type"], "subscription.updated")
+        self.assertEqual(kwargs["resource_type"], "subscription")
+        self.assertEqual(kwargs["resource_id"], "sub_123")
+        self.assertEqual(kwargs["payload"]["status"], "past_due")
+        self.assertTrue(kwargs["event_id"].startswith("reconcile:subscription:sub_123:"))
 
-    async def test_maintenance_skips_subscription_reconciliation_without_provider_subscription_id(self) -> None:
-        admin_client = object()
-        entitlement = {
-            "user_id": "user_123",
-            "subscription_plan_id": "plan_123",
-            "subscription_status": "active",
-        }
-
+    async def test_subscription_without_provider_order_id_is_skipped(self) -> None:
         with (
             patch(
-                "fathom.application.billing.recovery.requeue_unsettled_jobs",
-                AsyncMock(return_value=0),
-            ),
-            patch("fathom.application.billing.recovery.reclaim_stale_webhook_processing", AsyncMock(return_value=0)),
-            patch(
-                "fathom.application.billing.recovery.get_billing_webhook_diagnostics",
-                AsyncMock(return_value={}),
-            ),
-            patch("fathom.application.billing.recovery.list_refund_pending_pack_orders", AsyncMock(return_value=[])),
-            patch(
                 "fathom.application.billing.recovery.list_subscription_entitlements_for_reconciliation",
-                AsyncMock(return_value=[entitlement]),
+                AsyncMock(return_value=[{"user_id": "user_123", "subscription_status": "active"}]),
             ),
             patch(
                 "fathom.application.billing.recovery.list_latest_subscription_orders_for_users",
                 AsyncMock(return_value={}),
             ),
             patch("fathom.application.billing.recovery.polar.get_subscription", AsyncMock()) as get_subscription,
-            patch("fathom.application.billing.recovery.apply_subscription_event", AsyncMock()) as apply_subscription,
         ):
-            await run_billing_maintenance(admin_client, settings=SimpleNamespace(billing_debt_cap_seconds=600))
+            reconciled = await reconcile_subscription_entitlements(
+                self.admin_client,
+                settings=self.settings,
+            )
 
+        self.assertEqual(reconciled, 0)
         get_subscription.assert_not_awaited()
-        apply_subscription.assert_not_awaited()

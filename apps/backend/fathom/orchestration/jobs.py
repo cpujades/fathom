@@ -68,7 +68,6 @@ async def process_job(job: dict[str, object], settings: Settings, admin_client: 
             user_id=user_id,
             requested_summary_id=requested_summary_id,
             transcript_id=transcript.transcript_id,
-            transcript_text=transcript.transcript_text,
             transcript_segments=transcript.segments,
             source_video_id=getattr(transcript, "video_id", None),
             settings=settings,

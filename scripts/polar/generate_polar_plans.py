@@ -74,7 +74,7 @@ def _polar_request(
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
             "Accept": "application/json",
-            "User-Agent": "Fathom-PolarSync/1.0",
+            "User-Agent": "Talven-PolarSync/1.0",
         },
         data=data,
     )
@@ -115,7 +115,7 @@ def _create_polar_product(
 
     payload: dict[str, Any] = {
         "name": plan.name,
-        "description": f"Fathom plan {plan.plan_code} v{plan.version}",
+        "description": f"Talven plan {plan.plan_code} v{plan.version}",
         "is_recurring": is_subscription,
         "prices": [price_payload],
         "metadata": {

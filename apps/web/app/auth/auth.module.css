@@ -140,6 +140,13 @@
   gap: 0.34rem;
 }
 
+.fieldHelp {
+  margin: 0;
+  color: #6f7e75;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
 .label {
   font-size: 0.77rem;
   text-transform: uppercase;
@@ -279,6 +286,20 @@
   flex-wrap: wrap;
   color: #728077;
   font-size: 0.82rem;
+}
+
+.legalNotice {
+  margin: 0;
+  color: #728077;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.legalNotice a {
+  color: #315c47;
+  font-weight: 650;
+  text-underline-offset: 0.18em;
 }
 
 @media (max-width: 900px) {

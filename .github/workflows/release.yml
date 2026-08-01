@@ -16,23 +16,22 @@ jobs:
   release:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
-    env:
-      RELEASE_AUTOMATION_TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
-          token: ${{ env.RELEASE_AUTOMATION_TOKEN }}
+          persist-credentials: false
+          token: ${{ github.token }}
 
       - name: Set up Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.13"
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
         with:
           enable-cache: true
 
@@ -40,7 +39,7 @@ jobs:
         run: uv sync --group dev
 
       - name: Collect merged PR commits
-        uses: actions/github-script@v9
+        uses: actions/github-script@373c709c69115d41ff229c7e5df9f8788daa9553 # v9
         with:
           script: |
             const fs = require("node:fs");
@@ -127,6 +126,27 @@ jobs:
         id: release
         run: python .github/scripts/release.py --commits-file .github/tmp/release-commits.json
 
+      - name: Verify release push credentials
+        if: steps.release.outputs.released == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${GH_TOKEN}" ]]; then
+            echo "::error::RELEASE_AUTOMATION_TOKEN is required to push through the protected main-branch ruleset."
+            exit 1
+          fi
+
+          can_push="$(gh api "repos/${GITHUB_REPOSITORY}" --jq '.permissions.push')" || {
+            echo "::error::RELEASE_AUTOMATION_TOKEN is invalid, expired, or cannot access this repository."
+            exit 1
+          }
+          if [[ "${can_push}" != "true" ]]; then
+            echo "::error::RELEASE_AUTOMATION_TOKEN does not have repository contents write access."
+            exit 1
+          fi
+
       - name: Update lockfile
         if: steps.release.outputs.released == 'true'
         run: uv lock
@@ -134,15 +154,10 @@ jobs:
       - name: Commit release
         if: steps.release.outputs.released == 'true'
         env:
+          RELEASE_AUTOMATION_TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
           VERSION: ${{ steps.release.outputs.version }}
-          RELEASE_AUTOMATION_TOKEN: ${{ env.RELEASE_AUTOMATION_TOKEN }}
         run: |
           set -euo pipefail
-
-          if [[ -z "${RELEASE_AUTOMATION_TOKEN}" ]]; then
-            echo "RELEASE_AUTOMATION_TOKEN is not configured."
-            exit 1
-          fi
 
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git config user.name "github-actions[bot]"
@@ -161,7 +176,7 @@ jobs:
 
       - name: Publish GitHub release
         if: steps.release.outputs.released == 'true'
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@c12583777ecdfd3be55c69cf75464299dc01057e # v3
         with:
           tag_name: v${{ steps.release.outputs.version }}
           body_path: .github/tmp/release-notes.md

@@ -20,7 +20,7 @@ export default function LandingHeader({ navItems, primaryCta }: LandingHeaderPro
           <Link href="/" className={styles.brand}>
             <span className={styles.brandMark} aria-hidden="true" />
             <span className={styles.brandText}>
-              <span className={styles.brandMeta}>Private intelligence</span>
+              <span className={styles.brandMeta}>Source-linked briefings</span>
               <span className={styles.brandWord}>Talven</span>
             </span>
           </Link>

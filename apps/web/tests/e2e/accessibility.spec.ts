@@ -8,7 +8,7 @@ async function expectNoAutomaticAccessibilityViolations(page: Page): Promise<voi
   expect(results.violations).toEqual([]);
 }
 
-for (const route of ["/", "/signin", "/signup", "/missing-briefing-route"]) {
+for (const route of ["/", "/signin", "/signup", "/auth/recovery", "/missing-briefing-route"]) {
   test(`${route} has resilient landmarks and no automatic AA violations`, async ({ page }) => {
     await page.goto(route);
 
@@ -16,6 +16,14 @@ for (const route of ["/", "/signin", "/signup", "/missing-briefing-route"]) {
     await expectNoAutomaticAccessibilityViolations(page);
   });
 }
+
+test("password recovery without a verified link fails safely", async ({ page }) => {
+  await page.goto("/auth/recovery");
+
+  await expect(page.locator("#password-recovery-error")).toContainText("Open the password reset link");
+    await expect(page.locator("input#new-password")).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Request a new reset link" })).toHaveAttribute("href", "/signin");
+});
 
 test("skip navigation is the first keyboard stop", async ({ page }) => {
   await page.goto("/signin");
@@ -27,6 +35,34 @@ test("skip navigation is the first keyboard stop", async ({ page }) => {
 
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/#main-content$/);
+});
+
+test("pricing tabs support keyboard navigation and identify their active panel", async ({ page }) => {
+  await page.goto("/#pricing");
+
+  const subscriptionTab = page.getByRole("tab", { name: "Subscription" });
+  const packsTab = page.getByRole("tab", { name: "One-time packs" });
+  await subscriptionTab.focus();
+  await page.keyboard.press("ArrowRight");
+
+  await expect(packsTab).toBeFocused();
+  await expect(packsTab).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tabpanel", { name: "One-time packs" })).toHaveAttribute(
+    "aria-labelledby",
+    "pricing-packs-tab"
+  );
+
+  await page.keyboard.press("ArrowLeft");
+  await expect(subscriptionTab).toBeFocused();
+  await expect(subscriptionTab).toHaveAttribute("aria-selected", "true");
+});
+
+test("public pack choices carry the exact catalog plan code into signup", async ({ page }) => {
+  await page.goto("/?pricing=packs#pricing");
+
+  await expect(page.getByRole("link", { name: "Select Trial" })).toHaveAttribute("href", /plan=trial_pack/);
+  await expect(page.getByRole("link", { name: "Select Creator" })).toHaveAttribute("href", /plan=creator_pack/);
+  await expect(page.getByRole("link", { name: "Select Studio" })).toHaveAttribute("href", /plan=studio_pack/);
 });
 
 test("public routes return baseline browser security headers", async ({ request }) => {
@@ -44,7 +80,7 @@ test("public routes return baseline browser security headers", async ({ request 
 test("core public routes do not hide horizontal overflow on a narrow viewport", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 800 });
 
-  for (const route of ["/", "/signin", "/signup", "/missing-briefing-route"]) {
+  for (const route of ["/", "/signin", "/signup", "/auth/recovery", "/missing-briefing-route"]) {
     await page.goto(route);
     const dimensions = await page.evaluate(() => ({
       clientWidth: document.documentElement.clientWidth,

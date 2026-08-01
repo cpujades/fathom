@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import time
 from collections.abc import AsyncIterator, Iterator
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -21,12 +22,10 @@ from fathom.application.briefings.contract import (
 from fathom.application.guards import validate_video_duration, validate_youtube_url
 from fathom.application.usage import ensure_usage_allowed, record_usage_for_job
 from fathom.core.config import Settings
-from fathom.core.constants import (
-    SUMMARY_PROMPT_KEY_DEFAULT,
-    SUMMARY_PROMPT_KEY_EVIDENCE,
-)
-from fathom.core.errors import NotFoundError, UsageSettlementError
+from fathom.core.constants import GROQ_TRANSCRIPT_PROVIDER_MODEL, SUMMARY_PROMPT_KEY_EVIDENCE
+from fathom.core.errors import NotFoundError, RateLimitError, UsageSettlementError
 from fathom.core.logging import log_context
+from fathom.core.rate_limits import get_request_client_ip
 from fathom.crud.supabase.job_events import (
     fetch_latest_job_event_sequence,
     list_job_events_after,
@@ -44,6 +43,11 @@ from fathom.crud.supabase.jobs import (
     mark_job_succeeded,
     restore_job,
 )
+from fathom.crud.supabase.stream_leases import (
+    claim_stream_lease,
+    release_stream_lease,
+    renew_stream_lease,
+)
 from fathom.crud.supabase.summaries import fetch_summary, fetch_summary_by_keys
 from fathom.crud.supabase.transcripts import (
     fetch_transcript_by_hash,
@@ -56,7 +60,7 @@ from fathom.schemas.briefing_sessions import (
     BriefingSessionResolution,
     BriefingSessionResponse,
 )
-from fathom.services.downloader import fetch_video_metadata
+from fathom.services.downloader import fetch_video_metadata_with_deadline
 from fathom.services.summarizer import OPENROUTER_MODEL
 from fathom.services.supabase import (
     create_supabase_admin_client,
@@ -71,7 +75,7 @@ EVENT_POLL_SECONDS = 1.0
 SNAPSHOT_RECONCILE_SECONDS = 10.0
 EVENT_BATCH_LIMIT = 100
 MAX_REPLAY_EVENTS = 500
-GROQ_PROVIDER_MODEL = "groq:whisper-large-v3-turbo"
+GROQ_PROVIDER_MODEL = GROQ_TRANSCRIPT_PROVIDER_MODEL
 
 
 async def create_briefing_session(
@@ -146,7 +150,10 @@ async def _create_briefing_session(
                 resolution_type="reused_ready",
             )
 
-        metadata = await asyncio.to_thread(fetch_video_metadata, source.canonical_url)
+        metadata = await fetch_video_metadata_with_deadline(
+            source.canonical_url,
+            deadline_seconds=settings.source_metadata_deadline_seconds,
+        )
         validate_video_duration(metadata.duration_seconds)
         logger.info(
             "briefing_session.source.validated",
@@ -270,12 +277,26 @@ async def stream_briefing_session_events(
     settings: Settings,
     request: Request,
 ) -> StreamingResponse:
+    client_subject = f"ip:{get_request_client_ip(request)}"
+    async with managed_supabase_client(await create_supabase_admin_client(settings)) as admin_client:
+        stream_lease_token = await claim_stream_lease(
+            admin_client,
+            user_id=auth.user_id,
+            client_subject=client_subject,
+            max_per_user=settings.sse_max_streams_per_user,
+            max_per_subject=settings.sse_max_streams_per_ip,
+            lease_seconds=settings.sse_stream_lease_seconds,
+        )
+    if stream_lease_token is None:
+        raise RateLimitError("Too many active briefing streams. Close another stream and try again.")
+
     return StreamingResponse(
         _session_event_stream(
             session_id=session_id,
             auth=auth,
             settings=settings,
             request=request,
+            stream_lease_token=stream_lease_token,
         ),
         media_type="text/event-stream",
         headers={
@@ -292,28 +313,44 @@ async def _session_event_stream(
     auth: AuthContext,
     settings: Settings,
     request: Request,
+    stream_lease_token: str | None = None,
 ) -> AsyncIterator[str]:
     async with (
         managed_supabase_client(await create_supabase_user_client(settings, auth.access_token)) as user_client,
         managed_supabase_client(await create_supabase_admin_client(settings)) as admin_client,
     ):
-        async for event in _session_event_stream_with_clients(
-            session_id=session_id,
-            auth=auth,
-            request=request,
-            user_client=user_client,
-            admin_client=admin_client,
-        ):
-            yield event
+        try:
+            async for event in _session_event_stream_with_clients(
+                session_id=session_id,
+                auth=auth,
+                settings=settings,
+                request=request,
+                user_client=user_client,
+                admin_client=admin_client,
+                stream_lease_token=stream_lease_token,
+            ):
+                yield event
+        finally:
+            if stream_lease_token is not None:
+                try:
+                    await release_stream_lease(admin_client, lease_token=stream_lease_token)
+                except Exception:
+                    logger.warning(
+                        "briefing_session.stream.release_failed",
+                        extra={"session_id": str(session_id)},
+                        exc_info=True,
+                    )
 
 
 async def _session_event_stream_with_clients(
     *,
     session_id: UUID,
     auth: AuthContext,
+    settings: Settings,
     request: Request,
     user_client: Any,
     admin_client: Any,
+    stream_lease_token: str | None,
 ) -> AsyncIterator[str]:
     session_id_str = str(session_id)
     with log_context(user_id=auth.user_id, session_id=session_id_str):
@@ -358,8 +395,29 @@ async def _session_event_stream_with_clients(
     current_markdown = snapshot.briefing_markdown or ""
     seconds_since_snapshot = 0.0
     seconds_since_keepalive = 0.0
+    stream_started_at = time.monotonic()
+    lease_renewed_at = stream_started_at
+    lease_renewal_interval = max(10.0, settings.sse_stream_lease_seconds / 3)
 
     while True:
+        now = time.monotonic()
+        if now - stream_started_at >= settings.sse_stream_max_lifetime_seconds:
+            with log_context(user_id=auth.user_id, session_id=session_id_str):
+                logger.info("briefing_session.stream.max_lifetime_reached")
+            return
+
+        if stream_lease_token is not None and now - lease_renewed_at >= lease_renewal_interval:
+            renewed = await renew_stream_lease(
+                admin_client,
+                lease_token=stream_lease_token,
+                lease_seconds=settings.sse_stream_lease_seconds,
+            )
+            if not renewed:
+                with log_context(user_id=auth.user_id, session_id=session_id_str):
+                    logger.warning("briefing_session.stream.lease_lost")
+                return
+            lease_renewed_at = now
+
         if await request.is_disconnected():
             with log_context(user_id=auth.user_id, session_id=session_id_str):
                 logger.info("briefing_session.stream.disconnected")
@@ -664,11 +722,12 @@ async def _find_ready_cached_summary(admin_client: Any, source: NormalizedSource
         admin_client,
         transcript_id=transcript_id,
     )
-    prompt_key = SUMMARY_PROMPT_KEY_EVIDENCE if segments else SUMMARY_PROMPT_KEY_DEFAULT
+    if not segments:
+        return None
     summary = await fetch_summary_by_keys(
         admin_client,
         transcript_id=transcript_id,
-        prompt_key=prompt_key,
+        prompt_key=SUMMARY_PROMPT_KEY_EVIDENCE,
         summary_model=OPENROUTER_MODEL,
     )
     if not summary:

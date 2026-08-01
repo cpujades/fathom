@@ -16,7 +16,11 @@ timestamp links to the matching moment on YouTube. The link formatting itself
 does not call an AI provider and adds negligible latency.
 
 The same ready briefing can be read in the app, downloaded as Markdown, or
-exported through the isolated PDF path.
+exported through the bounded PDF subprocess path.
+
+If timestamped transcript segments are missing or empty, Talven fails the
+attempt and retries transcription. It never falls back to publishing an
+uncited plain-Markdown briefing.
 
 ## Create, join, reuse, and restore
 
@@ -74,19 +78,26 @@ rules, so it should not be inserted as a quick pre-pilot change.
 Talven performs two different checks:
 
 1. **Admission:** before queuing, it reads the YouTube duration and estimates
-   whether existing credits plus the configured debt allowance can cover the
-   job.
+   whether the user's current subscription and pack credits can cover the job.
+   A known video duration must fit the current positive balance; Talven does
+   not intentionally sell or advertise the debt allowance as extra usage.
 2. **Settlement:** after a valid briefing exists, one transaction consumes
-   subscription seconds first, then pack seconds, then records any permitted
+   subscription seconds first, then pack seconds, then records any uncovered
    remainder as debt.
 
-The default debt cap is 600 seconds. A projected amount above that cap is
-rejected. Exactly reaching the cap is allowed, and the account becomes blocked
-for later work until a renewal or purchase pays debt down.
+The default debt threshold is 600 seconds. It is a finalization safety buffer,
+not admission credit. It protects a completed briefing if two jobs passed the
+same earlier balance snapshot or a refund removed credit after admission.
+Reaching the threshold blocks later work until a renewal or purchase pays debt
+down.
+
+Talven rejects a source when it cannot determine a positive duration. A known
+video longer than the current balance is rejected even when the separate debt
+threshold remains unused.
 
 There is no upfront reservation today. Two concurrent jobs can both pass the
 admission snapshot before either settles. Settlement is still atomic and each
-job is charged once, but aggregate debt can exceed the admission estimate.
+job is charged once, but aggregate debt can exceed the threshold in that race.
 Upfront reservation was deliberately deferred because it changes visible
 credit timing, cancellation/refund rules, and concurrency behavior.
 
@@ -121,7 +132,12 @@ without exposing malformed JSON, ungrounded partial text, or content that may
 later fail validation. Reduced-motion preferences show it immediately.
 
 If the event stream disconnects, the browser reconnects using `Last-Event-ID`,
-replays persisted events, and reconciles with a full snapshot. If the job is
+replays a bounded persisted history, and reconciles with an authoritative full
+snapshot. Replay truncation skips directly to that snapshot rather than
+pretending every intermediate event was delivered. Active streams use expiring
+database leases: the defaults allow three per user and twelve per client IP,
+renew while connected, and close after one hour so a client must reconnect.
+If the job is
 ready but Markdown delivery remains temporarily unavailable, the UI explains
 that the briefing is safe and offers a retry that does not create or charge a
 new job.
@@ -155,4 +171,5 @@ the [deferred work register](../decisions/deferred-work.md).
   reject useful lectures, interviews, or technical videos. Validate a labeled
   set before adding a gate.
 - Podcast Q&A/chat: post-core-hardening and outside the first launch.
-- Shared SSE wake-ups and event retention: measure pilot query load first.
+- Shared SSE wake-ups and event retention: active stream leases bound clients,
+  but measure pilot query load before changing the one-second polling design.

@@ -9,6 +9,9 @@ from the repository:
 - [Security and data access](./architecture/security-and-data-access.md):
   browser permissions, backend privileges, RLS, server commands, storage,
   billing, and export boundaries.
+- [Runtime safety, in plain language](./architecture/runtime-safety-explained.md):
+  account-scoped browser caching, password recovery, worker and stream leases,
+  billing recovery, refund concurrency, debt, URLs, and retention.
 - [Briefing product behavior](./product/briefing-behavior.md): what a user sees,
   duplicate submissions, caching, charging, archive/restore, output quality,
   limits, and deliberately deferred features.
@@ -25,6 +28,11 @@ from the repository:
   and opt-in paid evaluation.
 - [Worker and billing incidents](./runbooks/worker-and-billing-incidents.md):
   operator diagnosis and reconciliation.
+- [Hosted Auth and service probes](./runbooks/hosted-auth-and-service-probes.md):
+  Supabase Dashboard configuration, real recovery-email proof, liveness,
+  readiness, rate limits, and proxy behavior.
+- [Release automation](./runbooks/release-automation.md): token ownership,
+  protected-main behavior, rotation, failure diagnosis, and security tradeoffs.
 - [Local recovery rehearsal](./runbooks/local-recovery-rehearsal.md): the
   project-specific Gate A, Gate B, and Gate C checks.
 - [Storage access boundary](./security/storage-access.md): intended Supabase

@@ -67,9 +67,9 @@ class CreateBriefingSessionTests(unittest.IsolatedAsyncioTestCase):
             text="Evidence.",
         )
 
-        for segments, expected_prompt_key in (
-            ((segment,), "briefing-v6-evidence-links"),
-            ((), "briefing-v5-youtube"),
+        for segments, expected_result in (
+            ((segment,), True),
+            ((), False),
         ):
             with (
                 patch(
@@ -92,11 +92,12 @@ class CreateBriefingSessionTests(unittest.IsolatedAsyncioTestCase):
             ):
                 result = await _find_ready_cached_summary(object(), source)
 
-            self.assertIsNotNone(result)
-            self.assertEqual(
-                fetch_summary.await_args.kwargs["prompt_key"],
-                expected_prompt_key,
-            )
+            if expected_result:
+                self.assertIsNotNone(result)
+                self.assertEqual(fetch_summary.await_args.kwargs["prompt_key"], "briefing-v6-evidence-links")
+            else:
+                self.assertIsNone(result)
+                fetch_summary.assert_not_awaited()
 
     async def test_reusable_job_requires_explicit_ready_non_empty_summary(self) -> None:
         client = object()
@@ -121,7 +122,7 @@ class CreateBriefingSessionTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_creates_job_with_atomic_server_command_after_user_scoped_lookup(self) -> None:
         auth = AuthContext(access_token="access-token", user_id="user-123")
-        settings = cast(Settings, SimpleNamespace())
+        settings = cast(Settings, SimpleNamespace(source_metadata_deadline_seconds=30))
         request = BriefingSessionCreateRequest(url="https://www.youtube.com/watch?v=dQw4w9WgXcQ")
         user_client = object()
         admin_client = object()
@@ -150,11 +151,13 @@ class CreateBriefingSessionTests(unittest.IsolatedAsyncioTestCase):
                 AsyncMock(return_value=None),
             ) as fetch_reusable_job,
             patch(
-                "fathom.application.briefings.sessions.fetch_video_metadata",
-                return_value=SimpleNamespace(
-                    video_id="dQw4w9WgXcQ",
-                    duration_seconds=1800,
-                    title="Example",
+                "fathom.application.briefings.sessions.fetch_video_metadata_with_deadline",
+                AsyncMock(
+                    return_value=SimpleNamespace(
+                        video_id="dQw4w9WgXcQ",
+                        duration_seconds=1800,
+                        title="Example",
+                    )
                 ),
             ),
             patch("fathom.application.briefings.sessions.ensure_usage_allowed", AsyncMock()),

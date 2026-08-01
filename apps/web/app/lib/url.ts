@@ -2,7 +2,7 @@ import { getOptionalPublicUrlEnv } from "@fathom/api-client/publicEnv";
 
 const DEFAULT_NEXT_PATH = "/app";
 const DEFAULT_SITE_URL = "http://localhost:3000";
-const AUTH_PLAN_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const AUTH_PLAN_PATTERN = /^[a-z0-9]+(?:[_-][a-z0-9]+)*$/;
 const MAX_AUTH_PLAN_LENGTH = 64;
 
 type AuthIntent = "paid";
@@ -142,6 +142,17 @@ export const buildAuthCallbackUrl = (
   }
   if (safeContext.plan) {
     callbackUrl.searchParams.set("plan", safeContext.plan);
+  }
+
+  return callbackUrl.toString();
+};
+
+export const buildPasswordRecoveryCallbackUrl = (nextPath?: string): string => {
+  const safeNextPath = getSafeNextPath(nextPath, DEFAULT_NEXT_PATH);
+  const callbackUrl = new URL("/auth/recovery/callback", getSiteUrl());
+
+  if (safeNextPath !== DEFAULT_NEXT_PATH) {
+    callbackUrl.searchParams.set("next", safeNextPath);
   }
 
   return callbackUrl.toString();

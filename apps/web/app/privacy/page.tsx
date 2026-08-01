@@ -26,7 +26,7 @@ export default function PrivacyPage() {
             Talven turns user-submitted public YouTube links into private written briefings. This policy explains the
             data we collect, why we collect it, and how to contact us about privacy requests.
           </p>
-          <p className={styles.updated}>Last updated: May 16, 2026</p>
+          <p className={styles.updated}>Last updated: August 1, 2026</p>
 
           <section className={styles.section}>
             <h2>Information we collect</h2>
@@ -47,16 +47,39 @@ export default function PrivacyPage() {
           <section className={styles.section}>
             <h2>Service providers</h2>
             <p>
-              Talven relies on trusted providers for authentication, storage, billing, transcription, summarization, and
-              infrastructure. These providers process information only as needed to deliver the product.
+              Talven uses Supabase for authentication, database records, and private file storage; Groq for audio
+              transcription; OpenRouter for briefing generation; and Polar for checkout, subscription, and refund
+              processing. We also retrieve the public YouTube source you submit. Polar does not receive your source
+              audio or briefing text.
+            </p>
+          </section>
+
+          <section className={styles.section}>
+            <h2>How source data moves</h2>
+            <p>
+              Talven temporarily stores downloaded source audio in private storage while Groq transcribes it. Talven tries
+              to remove that temporary audio when processing finishes, although a service or storage failure may delay the
+              cleanup. The transcript is then sent to OpenRouter to create the briefing. We may keep transcripts and
+              briefings so the same public video does not always need to be processed again. Your library, access, usage,
+              and billing records remain tied to your account.
+            </p>
+          </section>
+
+          <section className={styles.section}>
+            <h2>Retention and deletion</h2>
+            <p>
+              Removing a briefing from your library archives it; it does not permanently erase it. Talven has not yet set a
+              single deletion timetable because account, payment, security, and reusable processing records may need
+              different rules. Contact us if you want us to review the information connected to your account or help with
+              an account or data request.
             </p>
           </section>
 
           <section className={styles.section}>
             <h2>Your choices</h2>
             <p>
-              You can manage your account from the app, cancel paid access through billing controls when available, and
-              contact us to request account or data assistance.
+              You can manage your account from the app, use the billing portal for subscription controls, request eligible
+              pack refunds through the product, and contact us for account or data assistance.
             </p>
           </section>
 

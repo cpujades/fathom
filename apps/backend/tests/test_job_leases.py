@@ -4,7 +4,7 @@ import asyncio
 import unittest
 from types import SimpleNamespace
 from typing import Any, cast
-from unittest.mock import AsyncMock, MagicMock, call, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from fathom.core.config import Settings
 from fathom.crud.supabase.jobs import (
@@ -121,11 +121,9 @@ class JobLeaseCrudTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_guarded_progress_update_rejects_lost_lease(self) -> None:
         query = MagicMock()
-        query.update.return_value = query
-        query.eq.return_value = query
-        query.execute = AsyncMock(return_value=SimpleNamespace(data=[]))
+        query.execute = AsyncMock(return_value=SimpleNamespace(data=False))
         client = MagicMock()
-        client.table.return_value = query
+        client.rpc.return_value = query
 
         with self.assertRaises(JobLeaseLostError):
             await update_job_progress(
@@ -135,13 +133,13 @@ class JobLeaseCrudTests(unittest.IsolatedAsyncioTestCase):
                 stage="summarizing",
             )
 
-        self.assertEqual(
-            query.eq.call_args_list,
-            [
-                call("id", "11111111-1111-1111-1111-111111111111"),
-                call("status", "running"),
-                call("lease_token", "33333333-3333-3333-3333-333333333333"),
-            ],
+        client.rpc.assert_called_once_with(
+            "update_job_with_valid_lease",
+            {
+                "p_job_id": "11111111-1111-1111-1111-111111111111",
+                "p_lease_token": "33333333-3333-3333-3333-333333333333",
+                "p_payload": {"stage": "summarizing"},
+            },
         )
 
 

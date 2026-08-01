@@ -87,8 +87,10 @@ export function StreamingMarkdown({
   return (
     <div className={className}>
       <ReactMarkdown
+        skipHtml
         remarkPlugins={[remarkGfm]}
         components={{
+          a: ({ node: _node, ...props }) => <a {...props} target="_blank" rel="noreferrer noopener" />,
           table: ({ node: _node, ...props }) => (
             <div className={styles.tableScroll} role="region" aria-label="Scrollable briefing table" tabIndex={0}>
               <table {...props} />

@@ -64,7 +64,7 @@ export default function HeroSection({ content }: HeroSectionProps) {
           <aside className={styles.heroAside} aria-label="Briefing preview">
             <div className={styles.dossierMasthead}>
               <p className={styles.cardEyebrow}>Talven brief</p>
-              <span className={styles.dossierSeal}>Private intelligence</span>
+              <span className={styles.dossierSeal}>Source-linked briefings</span>
             </div>
             <h2 className={styles.cardTitle}>A briefing layer for the conversations worth keeping.</h2>
             <p className={styles.cardText}>

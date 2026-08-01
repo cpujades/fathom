@@ -40,6 +40,14 @@ def _get_rate_limit_ip(
         return client_host or "unknown"
 
 
+def get_request_client_ip(request: Request) -> str:
+    return _get_rate_limit_ip(
+        request,
+        trust_proxy_headers=bool(getattr(request.app.state, "trust_proxy_headers", False)),
+        trusted_proxy_networks=tuple(getattr(request.app.state, "trusted_proxy_networks", ())),
+    )
+
+
 def _is_trusted_proxy(client_host: str, trusted_proxy_networks: tuple[str, ...]) -> bool:
     try:
         client_ip = ip_address(client_host)
@@ -73,12 +81,12 @@ def _get_rate_limit_rule(request: Request, rate_limit: int) -> RateLimitRule | N
     path = request.url.path
     method = request.method.upper()
 
-    if path.startswith("/meta/"):
+    if path == "/meta/health":
         return None
     if path == "/webhooks/polar":
         return None
     if path.startswith("/briefing-sessions/") and path.endswith("/events"):
-        return None
+        return RateLimitRule(scope="event_stream", limit_per_minute=_scale_limit(rate_limit, 1))
 
     if method == "POST" and path == "/briefing-sessions":
         return RateLimitRule(scope="briefing_create", limit_per_minute=_scale_limit(rate_limit, 1, 5))

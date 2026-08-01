@@ -8,7 +8,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://talven.ai"),
   title: "Talven | Private YouTube Briefings",
-  description: "Turn long-form YouTube videos into clear, timestamped briefings built for private advantage.",
+  description: "Turn long-form YouTube videos into clear, evidence-linked briefings you can reuse.",
   applicationName: "Talven",
   alternates: {
     canonical: "/"

@@ -145,6 +145,9 @@ class WorkerShutdownSettingsTests(unittest.TestCase):
             "SUPABASE_URL": "https://example.supabase.co",
             "SUPABASE_PUBLISHABLE_KEY": "publishable",
             "SUPABASE_SECRET_KEY": "secret",
+            "APP_ENV": "local",
+            "RATE_LIMIT": "0",
+            "CORS_ALLOW_ORIGINS": "",
         }
 
     def test_shutdown_grace_has_bounded_default(self) -> None:
