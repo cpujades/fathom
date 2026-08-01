@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.20.0](https://github.com/cpujades/fathom/compare/v0.19.1...v0.20.0) (2026-08-01)
+
+_Automated release from [#151](https://github.com/cpujades/fathom/pull/151) feat: harden Talven for launch readiness_
+
+### Features
+
+- feat: harden Talven for launch readiness (b17b89d)
+
+### Bug Fixes
+
+- fix(ci): use tracked pricing contract (93d1dd3)
+- fix(test): keep subscription fixture active (527a7f7)
+- fix(billing): bound provider reconciliation (e17755f)
+
 ## [0.19.1](https://github.com/cpujades/fathom/compare/v0.19.0...v0.19.1) (2026-05-05)
 
 _Automated release from [#118](https://github.com/cpujades/fathom/pull/118) style(web): polish briefing library and reader UI_
