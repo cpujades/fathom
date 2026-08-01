@@ -115,6 +115,18 @@ Copy the frontend example file:
 cp apps/web/env.example apps/web/.env.local
 ```
 
+### Billing catalog
+
+`scripts/polar/plan_contract.json` is the tracked, non-secret source of truth
+for public plan codes, prices, quotas, and expiry rules. Frontend contract tests
+read this file in local and CI environments.
+
+`scripts/polar/plans.json` remains ignored and optional. It may contain only
+environment-specific `polar_product_id` overrides for the same plan code and
+version. The Polar sync script rejects attempts to redefine public plan fields
+through that private file, preventing local provider identifiers from becoming
+a second pricing source of truth.
+
 Required frontend public variables:
 
 - `NEXT_PUBLIC_API_BASE_URL`

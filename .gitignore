@@ -23,6 +23,7 @@ node_modules/
 .next/
 dist/
 scripts/polar/*.json
+!scripts/polar/plan_contract.json
 *.tsbuildinfo
 pnpm-debug.log*
 npm-debug.log*

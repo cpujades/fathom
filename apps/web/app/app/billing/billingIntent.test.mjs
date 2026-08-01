@@ -6,7 +6,7 @@ import { packPlans, subscriptionPlans } from "../../content/pricing.ts";
 import { resolveRequestedPlan } from "./billingIntent.ts";
 
 const catalog = JSON.parse(
-  readFileSync(new URL("../../../../../scripts/polar/plans.json", import.meta.url), "utf8")
+  readFileSync(new URL("../../../../../scripts/polar/plan_contract.json", import.meta.url), "utf8")
 );
 const plans = catalog.map((plan, index) => ({
   ...plan,

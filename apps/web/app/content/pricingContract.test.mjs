@@ -6,7 +6,7 @@ import { packPlans, subscriptionPlans } from "./pricing.ts";
 import { buildPaidCheckoutHref } from "../lib/pricingIntent.ts";
 
 const catalog = JSON.parse(
-  readFileSync(new URL("../../../../scripts/polar/plans.json", import.meta.url), "utf8")
+  readFileSync(new URL("../../../../scripts/polar/plan_contract.json", import.meta.url), "utf8")
 );
 const publicPlans = [...subscriptionPlans, ...packPlans];
 
