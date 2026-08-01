@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.20.3](https://github.com/cpujades/fathom/compare/v0.20.2...v0.20.3) (2026-08-01)
+
+_Automated release from [#162](https://github.com/cpujades/fathom/pull/162) fix: remove unwanted file_
+
+### Bug Fixes
+
+- fix: remove unwanted file (5e24677)
+
 ## [0.20.2](https://github.com/cpujades/fathom/compare/v0.20.1...v0.20.2) (2026-08-01)
 
 _Automated release from [#160](https://github.com/cpujades/fathom/pull/160) chore(deps): align frontend tooling_
