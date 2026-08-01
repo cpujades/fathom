@@ -44,3 +44,8 @@ updates:
     patterns:
       - "*"
     multi-ecosystem-group: "weekly-maintenance"
+    allow:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-minor"
+          - "version-update:semver-patch"
