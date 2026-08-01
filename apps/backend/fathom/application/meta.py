@@ -26,9 +26,12 @@ _REQUIRED_DATABASE_OBJECTS = (
     "transcript_segments_table",
     "usage_settlements_table",
     "billing_webhook_events_table",
+    "billing_maintenance_leases_table",
+    "briefing_stream_leases_table",
     "create_or_reuse_settled_job_function",
     "claim_next_settled_job_function",
     "renew_job_lease_function",
+    "update_job_with_valid_lease_function",
     "prepare_summary_function",
     "create_transcript_with_segments_function",
     "prepare_summary_pdf_function",
@@ -36,6 +39,14 @@ _REQUIRED_DATABASE_OBJECTS = (
     "fail_summary_pdf_function",
     "settle_job_usage_function",
     "apply_polar_webhook_event_function",
+    "begin_pack_refund_function",
+    "reopen_pack_refund_function",
+    "claim_billing_maintenance_lease_function",
+    "renew_billing_maintenance_lease_function",
+    "release_billing_maintenance_lease_function",
+    "claim_briefing_stream_lease_function",
+    "renew_briefing_stream_lease_function",
+    "release_briefing_stream_lease_function",
 )
 
 _SCHEMA_CHECK_SQL = """
@@ -46,6 +57,8 @@ select
   to_regclass('public.transcript_segments') is not null as transcript_segments_table,
   to_regclass('public.usage_settlements') is not null as usage_settlements_table,
   to_regclass('public.billing_webhook_events') is not null as billing_webhook_events_table,
+  to_regclass('public.billing_maintenance_leases') is not null as billing_maintenance_leases_table,
+  to_regclass('public.briefing_stream_leases') is not null as briefing_stream_leases_table,
   exists (
     select 1 from pg_proc join pg_namespace on pg_namespace.oid = pg_proc.pronamespace
     where pg_namespace.nspname = 'public' and pg_proc.proname = 'create_or_reuse_settled_job'
@@ -58,6 +71,10 @@ select
     select 1 from pg_proc join pg_namespace on pg_namespace.oid = pg_proc.pronamespace
     where pg_namespace.nspname = 'public' and pg_proc.proname = 'renew_job_lease'
   ) as renew_job_lease_function,
+  exists (
+    select 1 from pg_proc join pg_namespace on pg_namespace.oid = pg_proc.pronamespace
+    where pg_namespace.nspname = 'public' and pg_proc.proname = 'update_job_with_valid_lease'
+  ) as update_job_with_valid_lease_function,
   exists (
     select 1 from pg_proc join pg_namespace on pg_namespace.oid = pg_proc.pronamespace
     where pg_namespace.nspname = 'public' and pg_proc.proname = 'prepare_summary'
@@ -85,7 +102,39 @@ select
   exists (
     select 1 from pg_proc join pg_namespace on pg_namespace.oid = pg_proc.pronamespace
     where pg_namespace.nspname = 'public' and pg_proc.proname = 'apply_polar_webhook_event'
-  ) as apply_polar_webhook_event_function
+  ) as apply_polar_webhook_event_function,
+  exists (
+    select 1 from pg_proc join pg_namespace on pg_namespace.oid = pg_proc.pronamespace
+    where pg_namespace.nspname = 'public' and pg_proc.proname = 'begin_pack_refund'
+  ) as begin_pack_refund_function,
+  exists (
+    select 1 from pg_proc join pg_namespace on pg_namespace.oid = pg_proc.pronamespace
+    where pg_namespace.nspname = 'public' and pg_proc.proname = 'reopen_pack_refund'
+  ) as reopen_pack_refund_function,
+  exists (
+    select 1 from pg_proc join pg_namespace on pg_namespace.oid = pg_proc.pronamespace
+    where pg_namespace.nspname = 'public' and pg_proc.proname = 'claim_billing_maintenance_lease'
+  ) as claim_billing_maintenance_lease_function,
+  exists (
+    select 1 from pg_proc join pg_namespace on pg_namespace.oid = pg_proc.pronamespace
+    where pg_namespace.nspname = 'public' and pg_proc.proname = 'renew_billing_maintenance_lease'
+  ) as renew_billing_maintenance_lease_function,
+  exists (
+    select 1 from pg_proc join pg_namespace on pg_namespace.oid = pg_proc.pronamespace
+    where pg_namespace.nspname = 'public' and pg_proc.proname = 'release_billing_maintenance_lease'
+  ) as release_billing_maintenance_lease_function,
+  exists (
+    select 1 from pg_proc join pg_namespace on pg_namespace.oid = pg_proc.pronamespace
+    where pg_namespace.nspname = 'public' and pg_proc.proname = 'claim_briefing_stream_lease'
+  ) as claim_briefing_stream_lease_function,
+  exists (
+    select 1 from pg_proc join pg_namespace on pg_namespace.oid = pg_proc.pronamespace
+    where pg_namespace.nspname = 'public' and pg_proc.proname = 'renew_briefing_stream_lease'
+  ) as renew_briefing_stream_lease_function,
+  exists (
+    select 1 from pg_proc join pg_namespace on pg_namespace.oid = pg_proc.pronamespace
+    where pg_namespace.nspname = 'public' and pg_proc.proname = 'release_briefing_stream_lease'
+  ) as release_briefing_stream_lease_function
 """
 
 

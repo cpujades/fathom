@@ -25,6 +25,9 @@ def _settings() -> Settings:
             "SUPABASE_URL": "http://127.0.0.1:54321",
             "SUPABASE_PUBLISHABLE_KEY": "test-publishable",
             "SUPABASE_SECRET_KEY": "test-secret",
+            "APP_ENV": "local",
+            "RATE_LIMIT": 0,
+            "CORS_ALLOW_ORIGINS": "",
         }
     )
 

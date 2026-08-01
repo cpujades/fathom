@@ -1,6 +1,14 @@
 __pycache__/
 *.pyc
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.ty_cache/
 .venv/
+.uv-cache/
+*.egg-info/
+build/
+out/
 .env
 .env.*
 .DS_Store
@@ -11,9 +19,11 @@ __pycache__/
 .vscode/
 .playwright-mcp/
 node_modules/
+.pnpm-store/
 .next/
 dist/
 scripts/polar/*.json
+!scripts/polar/plan_contract.json
 *.tsbuildinfo
 pnpm-debug.log*
 npm-debug.log*

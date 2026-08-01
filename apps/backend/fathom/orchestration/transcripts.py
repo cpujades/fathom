@@ -4,14 +4,18 @@ import asyncio
 import hashlib
 import logging
 import tempfile
-import threading
 import time
 import uuid
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
 from fathom.core.config import Settings
-from fathom.core.constants import GROQ_MODEL, GROQ_SIGNED_URL_TTL_SECONDS, SUPABASE_GROQ_BUCKET
+from fathom.core.constants import (
+    GROQ_MODEL,
+    GROQ_SIGNED_URL_TTL_SECONDS,
+    GROQ_TRANSCRIPT_PROVIDER_MODEL,
+    SUPABASE_GROQ_BUCKET,
+)
 from fathom.crud.supabase.job_events import record_job_event_best_effort
 from fathom.crud.supabase.storage_objects import create_signed_url, delete_object_with_retry, upload_object
 from fathom.crud.supabase.transcripts import (
@@ -22,7 +26,7 @@ from fathom.crud.supabase.transcripts import (
 )
 from fathom.orchestration.observability import log_stage, log_step
 from fathom.schemas.transcripts import TranscriptionResult, TranscriptSegment
-from fathom.services.downloader import download_audio
+from fathom.services.downloader import download_audio_with_deadline
 from fathom.services.transcriber import transcribe_url_with_resilience
 from fathom.services.youtube import extract_youtube_video_id
 from supabase import AsyncClient
@@ -49,7 +53,7 @@ async def resolve_transcript(
 ) -> TranscriptResolution:
     url_hash = _hash_url(url)
     parsed_video_id = extract_youtube_video_id(urlparse(url))
-    provider_model = f"groq:{GROQ_MODEL}"
+    provider_model = GROQ_TRANSCRIPT_PROVIDER_MODEL
 
     transcript_row = None
     if parsed_video_id:
@@ -161,20 +165,17 @@ async def _create_transcript(
             level=logging.DEBUG,
         )
         download_start = time.perf_counter()
-        cancel_download = threading.Event()
         download_task = asyncio.create_task(
-            asyncio.to_thread(
-                download_audio,
+            download_audio_with_deadline(
                 url,
                 tmp_dir,
                 deadline_seconds=settings.source_download_deadline_seconds,
-                cancel_event=cancel_download,
             )
         )
         try:
             download_result = await asyncio.shield(download_task)
         except asyncio.CancelledError:
-            cancel_download.set()
+            download_task.cancel()
             try:
                 await asyncio.shield(download_task)
             except (Exception, asyncio.CancelledError):

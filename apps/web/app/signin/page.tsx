@@ -11,6 +11,7 @@ import { getSupabaseClient } from "../lib/supabaseClient";
 import {
   buildAuthCallbackUrl,
   buildAuthDestinationPath,
+  buildPasswordRecoveryCallbackUrl,
   buildSignUpPath,
   getSafeAuthIntentContext,
   getSafeNextPath
@@ -38,6 +39,10 @@ export default function SignInPage() {
   const callbackUrl = useMemo(() => {
     return buildAuthCallbackUrl(nextPath, { intent, plan });
   }, [intent, nextPath, plan]);
+
+  const passwordRecoveryCallbackUrl = useMemo(() => {
+    return buildPasswordRecoveryCallbackUrl(nextPath);
+  }, [nextPath]);
 
   const destinationPath = useMemo(() => {
     return buildAuthDestinationPath(nextPath, { intent, plan });
@@ -113,7 +118,7 @@ export default function SignInPage() {
     try {
       const supabase = getSupabaseClient();
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: callbackUrl
+        redirectTo: passwordRecoveryCallbackUrl
       });
 
       if (resetError) {

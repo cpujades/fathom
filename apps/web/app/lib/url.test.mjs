@@ -31,21 +31,21 @@ test("external, protocol-relative, and non-app destinations are rejected", () =>
 });
 
 test("paid intent and plan survive entry, callback, and destination redirects", () => {
-  const context = { intent: "paid", plan: "Creator" };
+  const context = { intent: "paid", plan: "Creator_Pack" };
   const entry = new URL(buildSignInPath("/app/billing", context), "http://localhost");
   const callback = new URL(buildAuthCallbackUrl("/app/billing", context));
 
   assert.equal(entry.pathname, "/signin");
   assert.equal(entry.searchParams.get("next"), "/app/billing");
   assert.equal(entry.searchParams.get("intent"), "paid");
-  assert.equal(entry.searchParams.get("plan"), "creator");
+  assert.equal(entry.searchParams.get("plan"), "creator_pack");
   assert.equal(callback.pathname, "/auth/callback");
   assert.equal(callback.searchParams.get("next"), "/app/billing");
   assert.equal(callback.searchParams.get("intent"), "paid");
-  assert.equal(callback.searchParams.get("plan"), "creator");
+  assert.equal(callback.searchParams.get("plan"), "creator_pack");
   assert.equal(
     buildAuthDestinationPath("/app/billing", context),
-    "/app/billing?intent=paid&plan=creator"
+    "/app/billing?intent=paid&plan=creator_pack"
   );
 });
 

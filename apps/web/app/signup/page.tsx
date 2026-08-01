@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import styles from "../auth/auth.module.css";
 import { mapAuthCallbackErrorCode, mapAuthError } from "../lib/authErrors";
+import { getPasswordPolicyError } from "../lib/authPolicy";
 import { getSupabaseClient } from "../lib/supabaseClient";
 import {
   buildAuthCallbackUrl,
@@ -70,9 +71,12 @@ export default function SignUpPage() {
         return;
       }
 
-      if (mode === "password" && (!password || password.length < 12 || !/\d/.test(password))) {
-        setError("Password must be at least 12 characters and include a number.");
-        return;
+      if (mode === "password") {
+        const passwordError = getPasswordPolicyError(password);
+        if (passwordError) {
+          setError(passwordError);
+          return;
+        }
       }
 
       const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
@@ -171,7 +175,7 @@ export default function SignUpPage() {
           </div>
           <h1 className={styles.panelTitle}>Create your account</h1>
           <p className={styles.panelText}>
-            Turn long-form YouTube videos into concise, actionable briefings built for private advantage.
+            Turn long-form YouTube videos into concise, evidence-linked briefings you can reuse.
           </p>
           <ul className={styles.panelList}>
             <li>Begin with included monthly usage</li>
@@ -295,6 +299,11 @@ export default function SignUpPage() {
             <Image className={styles.googleIcon} src="/google-logo.webp" alt="" aria-hidden="true" width={18} height={18} />
             Continue with Google
           </button>
+
+          <p className={styles.legalNotice}>
+            By continuing, you agree to the <Link href="/terms">Terms</Link> and acknowledge the{" "}
+            <Link href="/privacy">Privacy Policy</Link>.
+          </p>
 
           <div className={styles.links}>
             <span>

@@ -38,7 +38,14 @@
 }
 
 .commandField {
-  display: block;
+  display: grid;
+  gap: 0.38rem;
+}
+
+.commandLabel {
+  color: #435247;
+  font-size: 0.8rem;
+  font-weight: 700;
 }
 
 .commandInput {
@@ -85,34 +92,35 @@
   white-space: nowrap;
 }
 
+.commandMetaRow p,
+.commandMetaRow span,
+.usageRefreshNote {
+  margin: 0;
+}
+
+.usageRefreshNote {
+  color: #667267;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
 .quotaBadge {
-  position: relative;
-  width: 38px;
-  height: 38px;
+  min-width: 58px;
+  min-height: 44px;
+  padding: 0.45rem 0.68rem;
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  border: 1px solid rgba(36, 58, 47, 0.1);
   border-radius: 999px;
   background: rgba(248, 244, 236, 0.5);
   color: #17382b;
 }
 
-.quotaRing {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background:
-    radial-gradient(circle at center, rgba(248, 244, 236, 0.98) 66%, transparent 68%),
-    conic-gradient(rgba(45, 98, 75, 0.92) var(--quota-percent), rgba(36, 58, 47, 0.11) 0);
-  box-shadow: inset 0 0 0 1px rgba(36, 58, 47, 0.06);
-}
-
 .quotaValue {
-  position: relative;
-  z-index: 1;
   color: #17382b;
-  font-size: 0.54rem;
+  font-size: 0.74rem;
   font-weight: 760;
   line-height: 1;
   white-space: nowrap;
@@ -178,11 +186,10 @@
   }
 
   .quotaBadge {
-    width: 36px;
-    height: 36px;
+    min-height: 44px;
   }
 
   .quotaValue {
-    font-size: 0.52rem;
+    font-size: 0.72rem;
   }
 }

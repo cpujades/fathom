@@ -25,11 +25,13 @@ select is(
         'api_rate_limit_buckets',
         'usage_settlements',
         'transcript_segments',
-        'job_events'
+        'job_events',
+        'billing_maintenance_leases',
+        'briefing_stream_leases'
       )
       and pg_class.relrowsecurity
   ),
-  14::bigint,
+  16::bigint,
   'every application table has row-level security enabled'
 );
 
@@ -51,7 +53,9 @@ select is(
         ('api_rate_limit_buckets'),
         ('usage_settlements'),
         ('transcript_segments'),
-        ('job_events')
+        ('job_events'),
+        ('billing_maintenance_leases'),
+        ('briefing_stream_leases')
     ) as application_tables(table_name)
     where pg_catalog.has_table_privilege(
       'authenticated',
@@ -102,7 +106,9 @@ select is(
         ('api_rate_limit_buckets'),
         ('usage_settlements'),
         ('transcript_segments'),
-        ('job_events')
+        ('job_events'),
+        ('billing_maintenance_leases'),
+        ('briefing_stream_leases')
     ) as application_tables(table_name)
     where pg_catalog.has_table_privilege('authenticated', 'public.' || table_name, 'insert')
       or pg_catalog.has_table_privilege('authenticated', 'public.' || table_name, 'update')
@@ -130,7 +136,9 @@ select is(
         ('api_rate_limit_buckets'),
         ('usage_settlements'),
         ('transcript_segments'),
-        ('job_events')
+        ('job_events'),
+        ('billing_maintenance_leases'),
+        ('briefing_stream_leases')
     ) as application_tables(table_name)
     where pg_catalog.has_table_privilege('anon', 'public.' || table_name, 'select')
       or pg_catalog.has_table_privilege('anon', 'public.' || table_name, 'insert')

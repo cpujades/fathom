@@ -1,6 +1,7 @@
 type Plan = {
   tag: string;
   name: string;
+  planCode: string;
   price: string;
   hours: string;
   features: string[];
@@ -22,6 +23,7 @@ const packPlans: Plan[] = [
   {
     tag: "Trial pack",
     name: "Trial",
+    planCode: "trial_pack",
     price: "$5",
     hours: "3 hours",
     features: [
@@ -33,6 +35,7 @@ const packPlans: Plan[] = [
   {
     tag: "Creator pack",
     name: "Creator",
+    planCode: "creator_pack",
     price: "$15",
     hours: "10 hours",
     features: [
@@ -45,6 +48,7 @@ const packPlans: Plan[] = [
   {
     tag: "Studio pack",
     name: "Studio",
+    planCode: "studio_pack",
     price: "$50",
     hours: "40 hours",
     features: [
@@ -59,6 +63,7 @@ const subscriptionPlans: Plan[] = [
   {
     tag: "Free",
     name: "Free",
+    planCode: "free",
     price: "$0",
     hours: "1 hour / month",
     features: ["Summaries + PDF export", "Email + magic link", "Monthly reset"]
@@ -66,6 +71,7 @@ const subscriptionPlans: Plan[] = [
   {
     tag: "Starter",
     name: "Starter",
+    planCode: "starter",
     price: "$9",
     hours: "6 hours / month",
     features: [
@@ -78,6 +84,7 @@ const subscriptionPlans: Plan[] = [
   {
     tag: "Pro",
     name: "Pro",
+    planCode: "pro",
     price: "$19",
     hours: "15 hours / month",
     features: ["Higher monthly hours", "Rollover up to 2x monthly limit", "PDF + Markdown exports"]
@@ -85,6 +92,7 @@ const subscriptionPlans: Plan[] = [
   {
     tag: "Agency",
     name: "Agency",
+    planCode: "agency",
     price: "$49",
     hours: "50 hours / month",
     features: [
@@ -104,9 +112,7 @@ const pricingCopy: Record<"packs" | "subscriptions", PricingCopy> = {
     secondary_cta: "Start with a free briefing",
     notes_label: "Reserve notes",
     footnote:
-      "Credits remain valid for 6 months. Top up before expiry and the remaining time rolls into a fresh 6-month window.",
-    footnoteMuted:
-      "Auto-refill (coming soon): buy another pack when you drop under 1 hour and unlock +10% bonus credits."
+      "Credits remain valid for 6 months. Top up before expiry and the remaining time rolls into a fresh 6-month window."
   },
   subscriptions: {
     section_label: "Standing access",

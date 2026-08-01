@@ -58,8 +58,8 @@ async def handle_polar_webhook(payload: bytes, headers: Mapping[str, str], setti
     event_id, event_type, data = extract_event_fields(event, headers)
     with log_context(provider_event_id=event_id, provider_event_type=event_type):
         async with managed_supabase_client(await create_supabase_admin_client(settings)) as admin_client:
-            event_at = _extract_event_time(event, data, headers)
-            resource_type, resource_id, normalized_payload = _normalize_event_payload(event_type, data)
+            event_at = extract_event_time(event, data, headers)
+            resource_type, resource_id, normalized_payload = normalize_event_payload(event_type, data)
             result = await apply_polar_webhook_transaction(
                 admin_client,
                 event_id=event_id,
@@ -88,20 +88,18 @@ async def handle_polar_webhook(payload: bytes, headers: Mapping[str, str], setti
             )
 
 
-def _extract_event_time(
+def extract_event_time(
     event: dict[str, Any],
     data: dict[str, Any],
     headers: Mapping[str, str],
 ) -> datetime:
-    for value in (
-        event.get("timestamp"),
-        data.get("modified_at"),
-        data.get("updated_at"),
-        data.get("created_at"),
-    ):
-        parsed = parse_dt(value)
-        if parsed:
-            return parsed.astimezone(UTC)
+    event_timestamp = parse_dt(event.get("timestamp"))
+    if event_timestamp:
+        return event_timestamp.astimezone(UTC)
+
+    provider_timestamp = extract_provider_event_time(data)
+    if provider_timestamp:
+        return provider_timestamp
 
     header_value = headers.get("webhook-timestamp") or headers.get("svix-timestamp")
     if header_value:
@@ -115,7 +113,16 @@ def _extract_event_time(
     return datetime.now(UTC)
 
 
-def _normalize_event_payload(
+def extract_provider_event_time(data: dict[str, Any]) -> datetime | None:
+    """Return an ordered provider timestamp, without inventing a local fallback."""
+    for value in (data.get("modified_at"), data.get("updated_at"), data.get("created_at")):
+        parsed = parse_dt(value)
+        if parsed:
+            return parsed.astimezone(UTC)
+    return None
+
+
+def normalize_event_payload(
     event_type: str,
     data: dict[str, Any],
 ) -> tuple[str | None, str | None, dict[str, Any]]:

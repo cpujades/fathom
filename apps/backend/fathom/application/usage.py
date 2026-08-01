@@ -469,17 +469,17 @@ async def ensure_usage_allowed(
     duration_seconds: int | None,
     settings: Settings,
 ) -> None:
+    if duration_seconds is None or duration_seconds <= 0:
+        raise InvalidRequestError("We couldn't determine this video's length. Try another public YouTube video.")
+
     snapshot = await get_usage_snapshot(user_id, settings)
     if snapshot.is_blocked:
         raise InvalidRequestError("Your account is temporarily blocked due to negative balance. Please top up credits.")
 
     available_now = snapshot.subscription_remaining + snapshot.pack_remaining
-    current_debt = snapshot.debt_seconds
 
-    if duration_seconds and duration_seconds > 0:
-        projected_debt = current_debt + max(duration_seconds - available_now, 0)
-        if projected_debt > settings.billing_debt_cap_seconds:
-            raise InvalidRequestError("Insufficient credits for this video. Please upgrade or buy a pack.")
+    if available_now <= 0:
+        raise InvalidRequestError("You have no remaining video time. Please upgrade or buy a pack to continue.")
 
-    if duration_seconds is None and available_now <= 0 and current_debt >= settings.billing_debt_cap_seconds:
-        raise InvalidRequestError("You have no remaining credits. Please upgrade to continue.")
+    if duration_seconds > available_now:
+        raise InvalidRequestError("Insufficient credits for this video. Please upgrade or buy a pack.")

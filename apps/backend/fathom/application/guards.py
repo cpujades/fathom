@@ -38,7 +38,7 @@ def validate_youtube_url(url: str) -> None:
 
 
 def validate_video_duration(duration_seconds: int | None) -> None:
-    if duration_seconds is None:
-        return
+    if duration_seconds is None or duration_seconds <= 0:
+        raise InvalidRequestError("We couldn't determine this video's length. Try another public YouTube video.")
     if duration_seconds > MAX_VIDEO_DURATION_SECONDS:
         raise InvalidRequestError("Video exceeds maximum allowed duration.")

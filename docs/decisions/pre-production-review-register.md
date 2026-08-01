@@ -44,14 +44,14 @@ deliberate and easy to revisit.
 | Area | Current decision or evidence | Remaining proof or decision | Status |
 | --- | --- | --- | --- |
 | Supported source | Public YouTube URLs, with honest YouTube-specific copy | Human-test invalid, private, removed, age/region-restricted, short, silent, and non-podcast sources; keep messages useful rather than technical | Pilot proof needed |
-| Authentication intent | Preserve the submitted URL and safe destination through sign-in and payment redirects | Test real Supabase email/OAuth links and real Polar return URLs on the exact candidate origins | Pilot proof needed |
+| Authentication intent | Preserve the submitted URL and safe destination through sign-in, recovery, and payment redirects; password recovery validates a verified recovery session and the 12-character-plus-digit contract | Test real Supabase email/OAuth/recovery links and real Polar return URLs on the exact candidate origins; confirm hosted Auth policy matches code | Verified in code; pilot proof needed |
 | Duplicate submission | Same user joins active work or reuses ready/archived work without a second charge; different users own separate jobs and settlements | Confirm wording and perceived fairness in human testing | Accepted |
 | Archive and deletion | Archive removes a briefing from the active library and restore returns it; it is not permanent deletion | Define account/data erasure and retention promises before publishing privacy terms | Public-launch decision |
 | Credit order | Consume subscription allowance first, then packs, then permitted debt | Confirm this order in pricing/account copy and test the real billing catalog | Accepted |
-| Debt | Default maximum is 600 seconds; reaching it blocks later uncovered work until credits pay it down | Confirm whether debt should remain at paid public launch and expose balance clearly enough for support | Accepted for pilot |
+| Debt | A known source must fit the current positive balance. The 600-second default threshold is a settlement safety buffer for races or small finalization differences, not intentionally spendable credit; reaching it blocks later work until credits pay it down | Measure how often pilot concurrency or metadata differences create debt and keep the balance/recovery copy clear | Accepted for pilot |
 | Finalization | A generated briefing stays hidden until its single atomic settlement succeeds; retryable failures say the account update is pending | Human-test delayed settlement and exhausted-retry language | Verified in code; pilot UX proof needed |
-| Streaming and recovery | Validate the complete briefing, then reveal it progressively; replay persisted events after reconnect and fall back to snapshots | Test weak-network and mobile reconnect behavior with real candidate latency | Verified in code; pilot UX proof needed |
-| Exports | Markdown and isolated PDF use the same ready briefing; PDF overload returns a stable retryable message | Human-test export naming, timestamp links, layout, and the busy/retry experience | Verified in code; pilot UX proof needed |
+| Streaming and recovery | Validate the complete briefing, then reveal it progressively; replay bounded persisted events after reconnect; reconcile with snapshots; cap active streams using renewable database leases | Test weak-network, forced one-hour reconnect, cap behavior, and mobile recovery with real candidate latency | Verified in code; pilot UX proof needed |
+| Exports | Markdown and the sanitized PDF subprocess use the same ready briefing; PDF overload returns a stable retryable message | Human-test export naming, timestamp links, layout, and the busy/retry experience | Verified in code; pilot UX proof needed |
 | Tone and accessibility | Route, loading, empty, error, keyboard, focus, announcement, and reduced-motion behavior have focused tests | Complete a human desktop/mobile screen-reader and visual pass for brand voice, contrast, overflow, and comprehension | Pilot proof needed |
 
 ## Technical and operational review
@@ -64,14 +64,14 @@ deliberate and easy to revisit.
 | Provider quality and privacy | Groq transcription and OpenRouter summary calls are bounded, classified, retried, and tested through fake adapters | Run a capped representative real-provider set; measure latency, cost, timestamp quality, refusal/failure behavior, and verify provider retention/privacy settings | Pilot proof needed |
 | Retry deadlines | Retries occur only for transient/rate-limit failures, with bounded backoff and an overall stage deadline | Tune from measured provider percentiles rather than guesses; specifically review the summary 600-second request and 1,805-second stage ceilings after the real-provider rehearsal | Accepted for proof; metrics decision follows |
 | Briefing quality | Structured output, evidence validation, timestamp links, deterministic rendering, injection canaries, and free structural evaluations are automated | Run the capped paid evaluation and human rubric when the prompt/model/contract changes and before a release candidate | Verified in code; candidate proof needed |
-| Event load | Each open in-progress session performs about one event query per second and periodic snapshot reconciliation | Measure concurrent viewers and database load; introduce shared wake-ups only if the pilot shows pressure | Accepted for bounded pilot |
-| API rate limiting | Database-backed per-IP/scope limits protect sensitive endpoints | Configure trusted proxies correctly and load-test effective client-IP handling on the chosen ingress | Environment proof needed |
-| PDF capacity | A per-process semaphore allows two concurrent renders, with caching, single-flight generation, strict resource isolation, and a short busy response | Measure CPU, memory, render time, and busy rate in the chosen container size before raising the limit; scale processes/pods deliberately | Accepted default; environment proof needed |
+| Event load | Each open in-progress session performs about one event query per second and periodic snapshot reconciliation; renewable database leases cap simultaneous streams | Measure concurrent viewers and database load; introduce shared wake-ups only if the pilot shows pressure | Accepted for bounded pilot |
+| API rate limiting | Database-backed per-IP/scope limits protect sensitive endpoints, including stream opens and readiness; only liveness and signed Polar webhooks are exempt | Configure trusted proxies correctly and load-test effective client-IP handling on the chosen ingress | Verified in code; environment proof needed |
+| PDF capacity | A per-process semaphore allows two concurrent renders, with caching, single-flight generation, denied resource fetches, a secret-minimized subprocess, and a short busy response | Measure CPU, memory, render time, and busy rate in the chosen container; run non-root with platform CPU/memory/network/filesystem controls | Accepted default; environment proof needed |
 | Logs and incidents | Correlation IDs and structured lifecycle logs cover request, job, lease, summary, settlement, webhook, shutdown, and recovery; diagnostics avoid transcript content | Select a log destination, access/retention policy, alerts, and an operator before unattended use | Pilot operational prerequisite |
 | Backups and recovery | Local recovery and reconciliation workflows are documented and tested | Enable database/storage backups and prove a restore in the selected environment | Pilot operational prerequisite |
 | CORS and site origins | Configuration validates explicit frontend/API/Supabase origins; production must not rely on localhost defaults | Set and verify the exact candidate origins, redirect allowlist, cookies, and payment URLs | Candidate configuration prerequisite |
 | Content Security Policy | Security headers are present and dangerous export inputs are isolated; the current Next.js policy retains a documented inline-script allowance | Revisit nonce/hash CSP with hosting and caching design before public launch | Accepted for pilot; public-launch decision |
-| Release workflows | PR validation, staging deployment after merge, and deliberate production promotion exist | Review the exact candidate workflow run, migration output, artifact provenance, and rollback/restore steps; rebuild nothing without evidence of a defect | Candidate operational proof |
+| Release workflows | PR validation, staging migration deployment, and deliberate production promotion exist; third-party actions and the Supabase CLI are immutable-version pinned; release authentication falls back to the scoped repository token | Review the exact candidate workflow run, branch-protection compatibility, migration output, artifact provenance, and rollback/restore steps; application hosting remains intentionally unselected | Verified in code; candidate operational proof |
 
 ## Gates for the next candidate
 
@@ -95,6 +95,9 @@ deliberate and easy to revisit.
 - Human desktop/mobile accessibility and user-language review passes.
 - Exact origins, redirects, secrets, logs, alerts, backups, restore, privacy,
   and support ownership are configured and verified.
+- Hosted Supabase Auth matches the tracked local password policy, exact callback
+  URLs are allowed, production SMTP is configured, and a real confirmation and
+  password-reset email both complete on the candidate domain.
 
 ### Paid public-launch gate
 

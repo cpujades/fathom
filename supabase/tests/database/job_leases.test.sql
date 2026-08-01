@@ -2,7 +2,7 @@ begin;
 
 set local search_path = extensions, public, pg_catalog;
 
-select plan(18);
+select plan(25);
 
 select ok(
   not has_function_privilege('authenticated', 'public.renew_job_lease(uuid,uuid,interval)', 'execute'),
@@ -11,6 +11,22 @@ select ok(
 select ok(
   has_function_privilege('service_role', 'public.renew_job_lease(uuid,uuid,interval)', 'execute'),
   'service role can renew worker leases'
+);
+select ok(
+  not has_function_privilege(
+    'authenticated',
+    'public.update_job_with_valid_lease(uuid,uuid,jsonb)',
+    'execute'
+  ),
+  'authenticated users cannot mutate jobs through worker lease fencing'
+);
+select ok(
+  has_function_privilege(
+    'service_role',
+    'public.update_job_with_valid_lease(uuid,uuid,jsonb)',
+    'execute'
+  ),
+  'service role can mutate jobs through worker lease fencing'
 );
 
 insert into public.jobs (id, user_id, status, url, source_key, stage, progress)
@@ -39,6 +55,37 @@ select ok((select heartbeat_at is not null from claimed_job), 'claim records a h
 select ok(
   (select lease_expires_at > heartbeat_at from claimed_job),
   'claim sets a future lease expiry'
+);
+select ok(
+  public.update_job_with_valid_lease(
+    '10000000-0000-0000-0000-000000000001',
+    (select lease_token from claimed_job),
+    '{"stage":"transcribing","progress":40}'::jsonb
+  ),
+  'the current lease owner can update worker-owned fields'
+);
+select is(
+  (select progress from public.jobs where id = '10000000-0000-0000-0000-000000000001'),
+  40,
+  'a fenced update persists its payload'
+);
+select ok(
+  not public.update_job_with_valid_lease(
+    '10000000-0000-0000-0000-000000000001',
+    '30000000-0000-0000-0000-000000000001',
+    '{"progress":50}'::jsonb
+  ),
+  'a stale or foreign lease token cannot update the job'
+);
+select throws_ok(
+  $$select public.update_job_with_valid_lease(
+    '10000000-0000-0000-0000-000000000001',
+    (select lease_token from claimed_job),
+    '{"user_id":"30000000-0000-0000-0000-000000000001"}'::jsonb
+  )$$,
+  '22023',
+  'leased job update contains an unsupported field',
+  'the fenced update rejects fields outside worker ownership'
 );
 
 insert into public.jobs (
@@ -105,6 +152,15 @@ select ok(
 update public.jobs
 set lease_expires_at = pg_catalog.now() - interval '1 second'
 where id = '10000000-0000-0000-0000-000000000001';
+
+select ok(
+  not public.update_job_with_valid_lease(
+    '10000000-0000-0000-0000-000000000001',
+    (select lease_token from claimed_job),
+    '{"progress":60}'::jsonb
+  ),
+  'an expired lease cannot update the job'
+);
 
 select is(
   public.requeue_stale_jobs(interval '5 minutes'),

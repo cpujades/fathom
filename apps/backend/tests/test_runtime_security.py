@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 import unittest
+from unittest.mock import patch
 
 from pydantic import ValidationError
 from starlette.responses import Response
@@ -16,7 +18,25 @@ def _settings_values(**overrides: object) -> dict[str, object]:
         "SUPABASE_URL": "https://project.supabase.co",
         "SUPABASE_PUBLISHABLE_KEY": "test-publishable",
         "SUPABASE_SECRET_KEY": "test-secret",
+        "APP_ENV": "local",
+        "RATE_LIMIT": 0,
+        "CORS_ALLOW_ORIGINS": "",
     }
+    values.update(overrides)
+    return values
+
+
+def _strict_settings_values(**overrides: object) -> dict[str, object]:
+    values = _settings_values(
+        APP_ENV="production",
+        RATE_LIMIT=60,
+        CORS_ALLOW_ORIGINS="https://app.talven.ai",
+        SUPABASE_DB_HOST="db.project.supabase.co",
+        POLAR_SERVER="production",
+        POLAR_SUCCESS_URL="https://app.talven.ai/billing/success",
+        POLAR_CHECKOUT_RETURN_URL="https://app.talven.ai/billing",
+        POLAR_PORTAL_RETURN_URL="https://app.talven.ai/billing",
+    )
     values.update(overrides)
     return values
 
@@ -70,9 +90,7 @@ class RuntimeSecuritySettingsTests(unittest.TestCase):
 
     def test_hosted_runtime_accepts_exact_https_origins(self) -> None:
         settings = Settings.model_validate(
-            _settings_values(
-                APP_ENV="production",
-                RATE_LIMIT=60,
+            _strict_settings_values(
                 CORS_ALLOW_ORIGINS=("https://app.talven.ai/, https://admin.talven.ai"),
             )
         )
@@ -109,6 +127,36 @@ class RuntimeSecuritySettingsTests(unittest.TestCase):
             settings.trusted_proxy_networks,
             ["10.0.0.4/32", "2001:db8::/32"],
         )
+
+    def test_comma_separated_lists_load_from_real_environment_sources(self) -> None:
+        environment = {
+            key: str(value)
+            for key, value in _strict_settings_values(
+                CORS_ALLOW_ORIGINS="https://app.talven.ai, https://admin.talven.ai",
+                TRUST_PROXY_HEADERS=True,
+                TRUSTED_PROXY_NETWORKS="10.0.0.4, 2001:db8::/32",
+            ).items()
+        }
+        with patch.dict(os.environ, environment, clear=True):
+            settings = Settings(_env_file=None)
+
+        self.assertEqual(settings.cors_allow_origins, ["https://app.talven.ai", "https://admin.talven.ai"])
+        self.assertEqual(settings.trusted_proxy_networks, ["10.0.0.4/32", "2001:db8::/32"])
+
+    def test_hosted_runtime_rejects_insecure_service_urls_and_database_hosts(self) -> None:
+        invalid_values = (
+            {"SUPABASE_URL": "http://project.supabase.co"},
+            {"SUPABASE_URL": "https://localhost"},
+            {"SUPABASE_DB_HOST": "127.0.0.1"},
+            {"POLAR_SUCCESS_URL": "http://app.talven.ai/billing"},
+        )
+        for overrides in invalid_values:
+            with self.subTest(overrides=overrides), self.assertRaises(ValidationError):
+                Settings.model_validate(_strict_settings_values(**overrides))
+
+    def test_production_runtime_rejects_polar_sandbox(self) -> None:
+        with self.assertRaisesRegex(ValidationError, "POLAR_SERVER must be production"):
+            Settings.model_validate(_strict_settings_values(POLAR_SERVER="sandbox"))
 
 
 class SecurityHeaderTests(unittest.TestCase):

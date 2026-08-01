@@ -2,9 +2,20 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import type { User } from "@supabase/supabase-js";
+import type { Session, User } from "@supabase/supabase-js";
 import { createApiClient } from "@fathom/api-client";
 
+import {
+  assertAuthenticatedRequestScopeCurrent,
+  cacheUsageSnapshot,
+  captureAuthenticatedRequestScope,
+  getCachedUsageSnapshot,
+  getUsageBroadcastChannelName,
+  getUsageStorageKey,
+  isAuthenticatedDataScopeChangedError,
+  resetAuthenticatedAppDataCache,
+  type UsageSnapshot
+} from "../lib/appDataCache";
 import { getSupabaseClient } from "../lib/supabaseClient";
 import { buildSignInPath, getCurrentAppPath } from "../lib/url";
 
@@ -14,35 +25,31 @@ type AppShellContextValue = {
   loading: boolean;
   remainingSeconds: number | null;
   refreshUsage: () => Promise<void>;
-  setRemainingSeconds: (value: number | null) => void;
+  setRemainingSeconds: (userId: string, value: number | null) => void;
   signOut: () => Promise<void>;
   user: User | null;
+};
+
+type ActiveSessionIdentity = {
+  accessToken: string;
+  userId: string;
 };
 
 const AppShellContext = createContext<AppShellContextValue | null>(null);
 
 const PREFETCH_ROUTES = ["/app", "/app/briefings", "/app/billing", "/app/account", "/app/briefings/new"];
 const USAGE_CACHE_TTL_MS = 30_000;
-const USAGE_BROADCAST_CHANNEL = "talven:usage";
-const USAGE_STORAGE_KEY = "talven:usage-snapshot";
 const DEFAULT_APP_PATH = "/app";
 
-type UsageSnapshot = {
-  fetchedAt: number;
-  remainingSeconds: number | null;
-};
+type UsageRefreshResult = "ok" | "unauthorized" | "error" | "stale";
 
-let usageCache: UsageSnapshot | null = null;
-
-type UsageRefreshResult = "ok" | "unauthorized" | "error";
-
-function publishUsageSnapshot(snapshot: UsageSnapshot) {
+function publishUsageSnapshot(userId: string, snapshot: UsageSnapshot) {
   if (typeof window === "undefined" || snapshot.remainingSeconds === null) {
     return;
   }
 
   try {
-    const channel = new BroadcastChannel(USAGE_BROADCAST_CHANNEL);
+    const channel = new BroadcastChannel(getUsageBroadcastChannelName(userId));
     channel.postMessage(snapshot);
     channel.close();
   } catch {
@@ -50,7 +57,7 @@ function publishUsageSnapshot(snapshot: UsageSnapshot) {
   }
 
   try {
-    window.localStorage.setItem(USAGE_STORAGE_KEY, JSON.stringify(snapshot));
+    window.localStorage.setItem(getUsageStorageKey(userId), JSON.stringify(snapshot));
   } catch {
     // Ignore private browsing or storage quota failures.
   }
@@ -75,34 +82,72 @@ function parseUsageSnapshot(value: unknown): UsageSnapshot | null {
   };
 }
 
+function readStoredUsageSnapshot(userId: string): UsageSnapshot | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  try {
+    const value = window.localStorage.getItem(getUsageStorageKey(userId));
+    return value ? parseUsageSnapshot(JSON.parse(value)) : null;
+  } catch {
+    return null;
+  }
+}
+
 export function AppShellProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
-  const hydratedTokenRef = useRef<string | null>(null);
+  const activeSessionRef = useRef<ActiveSessionIdentity | null>(null);
+  const authTransitionRef = useRef(0);
+  const [sessionGeneration, setSessionGeneration] = useState(0);
   const [user, setUser] = useState<User | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [authenticated, setAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [remainingSeconds, setRemainingSecondsState] = useState<number | null>(usageCache?.remainingSeconds ?? null);
+  const [remainingSeconds, setRemainingSecondsState] = useState<number | null>(null);
 
-  const setRemainingSeconds = useCallback((value: number | null) => {
-    const snapshot = {
-      fetchedAt: Date.now(),
-      remainingSeconds: value
-    };
-    usageCache = snapshot;
-    setRemainingSecondsState(value);
-    publishUsageSnapshot(snapshot);
+  const commitUsageSnapshot = useCallback((userId: string, snapshot: UsageSnapshot): boolean => {
+    if (!cacheUsageSnapshot(userId, snapshot)) {
+      return false;
+    }
+    setRemainingSecondsState(snapshot.remainingSeconds);
+    publishUsageSnapshot(userId, snapshot);
+    return true;
+  }, []);
+
+  const setRemainingSeconds = useCallback(
+    (userId: string, value: number | null) => {
+      commitUsageSnapshot(userId, {
+        fetchedAt: Date.now(),
+        remainingSeconds: value
+      });
+    },
+    [commitUsageSnapshot]
+  );
+
+  const applyAuthSession = useCallback((session: Session | null) => {
+    const userId = session?.user.id ?? null;
+    resetAuthenticatedAppDataCache(userId);
+    activeSessionRef.current = session
+      ? { accessToken: session.access_token, userId: session.user.id }
+      : null;
+    setAuthenticated(Boolean(session));
+    setUser(session?.user ?? null);
+    setAccessToken(session?.access_token ?? null);
+    setRemainingSecondsState(null);
+    setSessionGeneration((generation) => generation + 1);
   }, []);
 
   const redirectToSignIn = useCallback(() => {
     router.replace(buildSignInPath(getCurrentAppPath(DEFAULT_APP_PATH)));
   }, [router]);
 
-  const refreshUsageForToken = useCallback(
-    async (token: string): Promise<UsageRefreshResult> => {
+  const refreshUsageForSession = useCallback(
+    async (userId: string, token: string): Promise<UsageRefreshResult> => {
       try {
+        const requestScope = captureAuthenticatedRequestScope(userId);
         const api = createApiClient(token);
         const { data, error, response } = await api.GET("/billing/usage");
+        assertAuthenticatedRequestScopeCurrent(requestScope);
 
         if (error) {
           if (response?.status === 401 || response?.status === 403) {
@@ -111,33 +156,34 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
           return "error";
         }
 
-        setRemainingSeconds(data?.total_remaining_seconds ?? null);
+        commitUsageSnapshot(userId, {
+          fetchedAt: Date.now(),
+          remainingSeconds: data?.total_remaining_seconds ?? null
+        });
         return "ok";
-      } catch {
-        return "error";
+      } catch (error) {
+        return isAuthenticatedDataScopeChangedError(error) ? "stale" : "error";
       }
     },
-    [setRemainingSeconds]
+    [commitUsageSnapshot]
   );
 
   const refreshUsage = useCallback(async () => {
-    const token = hydratedTokenRef.current ?? accessToken;
-    if (!token) {
+    const identity = activeSessionRef.current;
+    if (!identity) {
       return;
     }
 
-    const refreshResult = await refreshUsageForToken(token);
-    if (refreshResult === "unauthorized") {
-      hydratedTokenRef.current = null;
-      setAuthenticated(false);
-      setUser(null);
-      setAccessToken(null);
-      setRemainingSecondsState(null);
+    const refreshResult = await refreshUsageForSession(identity.userId, identity.accessToken);
+    if (refreshResult === "unauthorized" && activeSessionRef.current?.userId === identity.userId) {
+      authTransitionRef.current += 1;
+      applyAuthSession(null);
+      setLoading(false);
       redirectToSignIn();
     } else if (refreshResult === "error") {
-      setRemainingSeconds(null);
+      setRemainingSeconds(identity.userId, null);
     }
-  }, [accessToken, redirectToSignIn, refreshUsageForToken, setRemainingSeconds]);
+  }, [applyAuthSession, redirectToSignIn, refreshUsageForSession, setRemainingSeconds]);
 
   useEffect(() => {
     for (const route of PREFETCH_ROUTES) {
@@ -146,21 +192,28 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
   }, [router]);
 
   useEffect(() => {
+    const userId = user?.id;
+    if (!userId) {
+      return;
+    }
+
     const applyUsageSnapshot = (snapshot: UsageSnapshot | null) => {
       if (!snapshot) {
         return;
       }
-      if (usageCache && snapshot.fetchedAt < usageCache.fetchedAt) {
+      const current = getCachedUsageSnapshot(userId);
+      if (current && snapshot.fetchedAt < current.fetchedAt) {
         return;
       }
-
-      usageCache = snapshot;
-      setRemainingSecondsState(snapshot.remainingSeconds);
+      if (cacheUsageSnapshot(userId, snapshot)) {
+        setRemainingSecondsState(snapshot.remainingSeconds);
+      }
     };
 
     let channel: BroadcastChannel | null = null;
+    const storageKey = getUsageStorageKey(userId);
     const handleStorage = (event: StorageEvent) => {
-      if (event.key !== USAGE_STORAGE_KEY || !event.newValue) {
+      if (event.key !== storageKey || !event.newValue) {
         return;
       }
 
@@ -173,7 +226,7 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
 
     if (typeof window !== "undefined") {
       try {
-        channel = new BroadcastChannel(USAGE_BROADCAST_CHANNEL);
+        channel = new BroadcastChannel(getUsageBroadcastChannelName(userId));
         channel.onmessage = (event: MessageEvent<unknown>) => {
           applyUsageSnapshot(parseUsageSnapshot(event.data));
         };
@@ -188,67 +241,59 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
       channel?.close();
       window.removeEventListener("storage", handleStorage);
     };
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => {
     let active = true;
     const supabase = getSupabaseClient();
 
+    const settleSession = async (session: Session | null, transitionId: number) => {
+      if (!active || transitionId !== authTransitionRef.current) {
+        return;
+      }
+
+      applyAuthSession(session);
+      if (!session) {
+        setLoading(false);
+        redirectToSignIn();
+        return;
+      }
+
+      const userId = session.user.id;
+      const storedSnapshot = readStoredUsageSnapshot(userId);
+      if (storedSnapshot && Date.now() - storedSnapshot.fetchedAt < USAGE_CACHE_TTL_MS) {
+        commitUsageSnapshot(userId, storedSnapshot);
+        setLoading(false);
+        return;
+      }
+
+      const refreshResult = await refreshUsageForSession(userId, session.access_token);
+      if (!active || transitionId !== authTransitionRef.current || refreshResult === "stale") {
+        return;
+      }
+      if (refreshResult === "unauthorized") {
+        authTransitionRef.current += 1;
+        applyAuthSession(null);
+        setLoading(false);
+        redirectToSignIn();
+        return;
+      }
+      if (refreshResult === "error") {
+        setRemainingSeconds(userId, null);
+      }
+      setLoading(false);
+    };
+
     const syncFromSession = async () => {
+      const transitionId = ++authTransitionRef.current;
       try {
         const { data: sessionData } = await supabase.auth.getSession();
-        const session = sessionData.session;
-
-        if (!active) {
-          return;
-        }
-
-        if (!session) {
-          setAuthenticated(false);
-          setUser(null);
-          setAccessToken(null);
-          setRemainingSecondsState(null);
-          setLoading(false);
-          redirectToSignIn();
-          return;
-        }
-
-        setAuthenticated(true);
-        setUser(session.user);
-        setAccessToken(session.access_token);
-        hydratedTokenRef.current = session.access_token;
-
-        const cacheIsFresh = usageCache && Date.now() - usageCache.fetchedAt < USAGE_CACHE_TTL_MS;
-        if (cacheIsFresh) {
-          setRemainingSecondsState(usageCache?.remainingSeconds ?? null);
-          setLoading(false);
-        } else {
-          const refreshResult = await refreshUsageForToken(session.access_token);
-          if (refreshResult === "unauthorized") {
-            setAuthenticated(false);
-            setUser(null);
-            setAccessToken(null);
-            setRemainingSecondsState(null);
-            setLoading(false);
-            redirectToSignIn();
-            return;
-          }
-          if (refreshResult === "error") {
-            setRemainingSeconds(null);
-          }
-          if (!active) {
-            return;
-          }
-          setLoading(false);
-        }
+        await settleSession(sessionData.session, transitionId);
       } catch {
-        if (!active) {
+        if (!active || transitionId !== authTransitionRef.current) {
           return;
         }
-        setAuthenticated(false);
-        setUser(null);
-        setAccessToken(null);
-        setRemainingSecondsState(null);
+        applyAuthSession(null);
         setLoading(false);
         redirectToSignIn();
       }
@@ -256,67 +301,33 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
 
     void syncFromSession();
 
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!active) {
-        return;
-      }
-
-      if (event === "INITIAL_SESSION") {
-        return;
-      }
-
-      if (!session) {
-        hydratedTokenRef.current = null;
-        setAuthenticated(false);
-        setUser(null);
-        setAccessToken(null);
-        setRemainingSecondsState(null);
-        redirectToSignIn();
-        return;
-      }
-
-      setAuthenticated(true);
-      setUser(session.user);
-      setAccessToken(session.access_token);
-
-      const tokenChanged = hydratedTokenRef.current !== session.access_token;
-      const cacheIsFresh = usageCache && Date.now() - usageCache.fetchedAt < USAGE_CACHE_TTL_MS;
-      if (tokenChanged || !cacheIsFresh) {
-        const refreshResult = await refreshUsageForToken(session.access_token);
-        if (refreshResult === "unauthorized") {
-          hydratedTokenRef.current = null;
-          setAuthenticated(false);
-          setUser(null);
-          setAccessToken(null);
-          setRemainingSecondsState(null);
-          redirectToSignIn();
-          return;
-        }
-        if (refreshResult === "error") {
-          setRemainingSeconds(null);
-        }
-      } else {
-        setRemainingSecondsState(usageCache?.remainingSeconds ?? null);
-      }
-      hydratedTokenRef.current = session.access_token;
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      const transitionId = ++authTransitionRef.current;
+      void settleSession(session, transitionId);
     });
 
     return () => {
       active = false;
+      authTransitionRef.current += 1;
       authListener.subscription.unsubscribe();
     };
-  }, [redirectToSignIn, refreshUsageForToken, setRemainingSeconds]);
+  }, [applyAuthSession, commitUsageSnapshot, redirectToSignIn, refreshUsageForSession, setRemainingSeconds]);
 
   const signOut = useCallback(async () => {
-    const supabase = getSupabaseClient();
-    await supabase.auth.signOut();
-    usageCache = null;
-    setAuthenticated(false);
-    setUser(null);
-    setAccessToken(null);
-    setRemainingSecondsState(null);
+    const transitionId = ++authTransitionRef.current;
+    applyAuthSession(null);
+    setLoading(false);
     router.replace("/signin");
-  }, [router]);
+
+    const supabase = getSupabaseClient();
+    try {
+      await supabase.auth.signOut();
+    } finally {
+      if (transitionId === authTransitionRef.current) {
+        resetAuthenticatedAppDataCache(null);
+      }
+    }
+  }, [applyAuthSession, router]);
 
   const value = useMemo<AppShellContextValue>(
     () => ({
@@ -332,7 +343,11 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
     [accessToken, authenticated, loading, refreshUsage, remainingSeconds, setRemainingSeconds, signOut, user]
   );
 
-  return <AppShellContext.Provider value={value}>{children}</AppShellContext.Provider>;
+  return (
+    <AppShellContext.Provider key={sessionGeneration} value={value}>
+      {children}
+    </AppShellContext.Provider>
+  );
 }
 
 export function useAppShell(): AppShellContextValue {

@@ -29,7 +29,7 @@ segments.
 
 Anonymous users have no application-table privileges.
 
-RLS is enabled on all 14 current public application tables. `FORCE ROW LEVEL
+RLS is enabled on all 16 current public application tables. `FORCE ROW LEVEL
 SECURITY` is intentionally not enabled because trusted table owners and the
 service role run server operations. Security therefore depends on keeping
 server credentials server-only.
@@ -58,9 +58,10 @@ Sensitive multi-row operations are database functions with:
 - explicit grants to `service_role`; and
 - no execution grant for `anon` or `authenticated`.
 
-The active server commands cover lease-aware claims, idempotent session
-creation, summary ownership, usage settlement, webhook application, and PDF
-generation claims.
+The active server commands cover lease-aware job and stream claims, idempotent
+session creation, summary ownership, usage settlement, atomic refund admission,
+ordered webhook application, billing-maintenance ownership, and PDF generation
+claims.
 
 Two settlement-exempt compatibility functions remain because the newer
 wrappers call them internally, but direct `service_role` execution is revoked.
@@ -104,6 +105,12 @@ PDF input is untrusted. Rendering:
 - has a hard deadline and a process-local concurrency cap; and
 - uses a database claim so only one API instance renders one summary/version.
 
+The renderer subprocess receives a minimal environment without application
+secrets. This is application-level containment, not a separate operating-system
+security boundary: production must still run the API as a non-root identity in
+a constrained container/service, with bounded CPU and memory and no unnecessary
+network or filesystem access.
+
 Polar requests require HTTPS. Automatic redirects are disabled; only a bounded
 307/308 redirect to the same origin is accepted, so the bearer token cannot be
 forwarded to another host. Responses are size-bounded, and provider IDs are
@@ -111,16 +118,24 @@ encoded as one URL path segment.
 
 ## Verification
 
-Last fresh verification: July 30, 2026.
+Last full clean-database verification: July 30, 2026. Focused July 31 billing
+verification applied the new migration and passed its live concurrency and
+pgTAP suites; the exact release candidate must still repeat the full clean
+database gate.
 
-- All 31 migrations applied from an empty disposable local Supabase database.
-- All 10 pgTAP suites passed.
+- The July 30 baseline applied all then-current migrations from an empty
+  disposable local Supabase database and passed all then-current pgTAP suites.
+- The July 31 refund/recovery migration passed 51 focused pgTAP assertions and
+  five live concurrency tests.
 - The suites cover RLS/ACLs, cross-tenant reads, storage denial, job leases,
   idempotent creation, summary lifecycle, settlement, webhook ordering, event
   replay, and PDF generation fencing.
-- The disposable database and only its data volume were removed afterward.
-- The pre-existing local Fathom database was not reset.
+- During the July 31 exact-candidate retry, only the stopped disposable database
+  container was removed and recreated; its persisted local volume was preserved.
+  Docker Desktop then stalled while starting the replacement container, so the
+  full clean-database gate remains explicitly pending.
+- No shared or hosted database was reset or deleted.
 
 Important remaining non-code controls include service-key management, hosted
-backup and restore proof, retention/privacy decisions, real-provider data
-settings, and operator access controls.
+backup and restore proof, retention/privacy approval, real-provider data
+settings, CAPTCHA/bot controls, and operator access controls.

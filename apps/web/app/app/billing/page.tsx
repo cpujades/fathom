@@ -3,6 +3,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import * as Dialog from "@radix-ui/react-dialog";
 import type {
   BillingAccountResponse,
   BillingOrderHistoryEntry,
@@ -19,8 +20,15 @@ import styles from "./billing.module.css";
 import { formatDate, formatDuration } from "../../lib/format";
 import { getApiErrorMessage } from "../../lib/apiErrors";
 import { getAccountLabel } from "../../lib/accountLabel";
-import { getCachedBillingSnapshot, hasFreshBillingCache, loadBillingSnapshot } from "../../lib/appDataCache";
+import {
+  assertAuthenticatedRequestScopeCurrent,
+  captureAuthenticatedRequestScope,
+  getCachedBillingSnapshot,
+  hasFreshBillingCache,
+  loadBillingSnapshot
+} from "../../lib/appDataCache";
 import { resolveRequestedPlan } from "./billingIntent";
+import { applyPendingRefundHold, getDisplayedPacks } from "./billingPresentation";
 
 type PlanGroup = {
   key: "subscription" | "pack";
@@ -150,11 +158,12 @@ const findRecentOrder = (
 function BillingPageContent() {
   const searchParams = useSearchParams();
   const { accessToken, loading: shellLoading, remainingSeconds, setRemainingSeconds, signOut, user } = useAppShell();
+  const userId = user?.id ?? null;
   const checkoutStatus = searchParams.get("checkout");
   const customerSessionToken = searchParams.get("customer_session_token");
   const requestedIntent = searchParams.get("intent");
   const requestedPlanCode = searchParams.get("plan");
-  const cachedBillingSnapshot = getCachedBillingSnapshot();
+  const cachedBillingSnapshot = userId ? getCachedBillingSnapshot(userId) : null;
 
   const [plans, setPlans] = useState<PlanResponse[]>(cachedBillingSnapshot?.plansData ?? []);
   const [usage, setUsage] = useState<UsageOverviewResponse | null>(cachedBillingSnapshot?.usageData ?? null);
@@ -164,6 +173,7 @@ function BillingPageContent() {
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
   const [refundLoading, setRefundLoading] = useState<string | null>(null);
+  const [refundTarget, setRefundTarget] = useState<PackBillingState | null>(null);
   const [offerMode, setOfferMode] = useState<"subscription" | "pack">("subscription");
 
   const [purchaseSync, setPurchaseSync] = useState<PurchaseSyncState | null>(null);
@@ -177,7 +187,7 @@ function BillingPageContent() {
 
   const loadBilling = useCallback(
     async (showLoading: boolean) => {
-      if (!accessToken) {
+      if (!accessToken || !userId) {
         return null;
       }
 
@@ -186,11 +196,11 @@ function BillingPageContent() {
       }
 
       try {
-        const snapshot = await loadBillingSnapshot(accessToken);
+        const snapshot = await loadBillingSnapshot(userId, accessToken);
         setPlans(snapshot.plansData);
         setUsage(snapshot.usageData);
         setAccount(snapshot.accountData);
-        setRemainingSeconds(snapshot.usageData?.total_remaining_seconds ?? null);
+        setRemainingSeconds(userId, snapshot.usageData?.total_remaining_seconds ?? null);
         setError(null);
         return snapshot;
       } catch (err) {
@@ -202,17 +212,17 @@ function BillingPageContent() {
         }
       }
     },
-    [accessToken, setRemainingSeconds]
+    [accessToken, setRemainingSeconds, userId]
   );
 
   useEffect(() => {
-    if (!accessToken) {
+    if (!accessToken || !userId) {
       return;
     }
 
-    const cacheIsFresh = hasFreshBillingCache();
+    const cacheIsFresh = hasFreshBillingCache(userId);
     if (cacheIsFresh) {
-      const nextSnapshot = getCachedBillingSnapshot();
+      const nextSnapshot = getCachedBillingSnapshot(userId);
       setPlans(nextSnapshot?.plansData ?? []);
       setUsage(nextSnapshot?.usageData ?? null);
       setAccount(nextSnapshot?.accountData ?? null);
@@ -222,7 +232,7 @@ function BillingPageContent() {
     }
 
     void loadBilling(cachedBillingSnapshot === null);
-  }, [accessToken, cachedBillingSnapshot, loadBilling]);
+  }, [accessToken, cachedBillingSnapshot, loadBilling, userId]);
 
   useEffect(() => {
     if (checkoutStatus !== "success") {
@@ -328,9 +338,11 @@ function BillingPageContent() {
     return () => window.cancelAnimationFrame(frameId);
   }, [offerMode, requestedPlan]);
 
+  const displayedPacks = useMemo(() => getDisplayedPacks(account?.packs ?? []), [account?.packs]);
+
   const activePackCount = useMemo(() => {
-    return (account?.packs ?? []).filter((pack) => pack.remaining_seconds > 0 && pack.status !== "refunded").length;
-  }, [account?.packs]);
+    return displayedPacks.filter((pack) => pack.remaining_seconds > 0 && pack.status === "paid").length;
+  }, [displayedPacks]);
 
   const currentSubscriptionPlan = useMemo(() => {
     const planName = account?.subscription.plan_name ?? usage?.subscription_plan_name ?? null;
@@ -350,12 +362,12 @@ function BillingPageContent() {
     }
 
     const subscriptionQuotaSeconds = currentSubscriptionPlan?.quota_seconds ?? usage.subscription_remaining_seconds;
-    const activePackAllowanceSeconds = (account?.packs ?? [])
-      .filter((pack) => pack.status !== "refunded" && pack.remaining_seconds > 0)
+    const activePackAllowanceSeconds = displayedPacks
+      .filter((pack) => pack.status === "paid" && pack.remaining_seconds > 0)
       .reduce((total, pack) => total + pack.granted_seconds, 0);
 
     return Math.max(subscriptionQuotaSeconds + activePackAllowanceSeconds, usage.total_remaining_seconds);
-  }, [account?.packs, currentSubscriptionPlan?.quota_seconds, usage]);
+  }, [currentSubscriptionPlan?.quota_seconds, displayedPacks, usage]);
 
   const quotaAvailablePercent = useMemo(() => {
     if (!usage || quotaCapacitySeconds <= 0) {
@@ -404,16 +416,18 @@ function BillingPageContent() {
     setError(null);
 
     try {
-      if (!accessToken) {
+      if (!accessToken || !userId) {
         return;
       }
 
+      const requestScope = captureAuthenticatedRequestScope(userId);
       const api = createApiClient(accessToken);
       const { data, error: apiError } = await api.POST("/billing/checkout", {
         body: {
           plan_id: planId
         }
       });
+      assertAuthenticatedRequestScopeCurrent(requestScope);
 
       if (apiError) {
         setError(getApiErrorMessage(apiError, "Unable to start checkout."));
@@ -439,12 +453,14 @@ function BillingPageContent() {
     setError(null);
 
     try {
-      if (!accessToken) {
+      if (!accessToken || !userId) {
         return;
       }
 
+      const requestScope = captureAuthenticatedRequestScope(userId);
       const api = createApiClient(accessToken);
       const { data, error: apiError } = await api.POST("/billing/portal");
+      assertAuthenticatedRequestScopeCurrent(requestScope);
 
       if (apiError) {
         setError(getApiErrorMessage(apiError, "Unable to open billing portal."));
@@ -461,31 +477,39 @@ function BillingPageContent() {
     }
   };
 
-  const handleRefund = async (polarOrderId: string) => {
+  const handleRefund = async (polarOrderId: string): Promise<boolean> => {
     if (refundLoading) {
-      return;
+      return false;
     }
 
     setRefundLoading(polarOrderId);
     setError(null);
 
     try {
-      if (!accessToken) {
-        return;
+      if (!accessToken || !userId) {
+        return false;
       }
 
+      const requestScope = captureAuthenticatedRequestScope(userId);
       const api = createApiClient(accessToken);
-      const { error: apiError } = await api.POST("/billing/packs/{polar_order_id}/refund", {
+      const { data, error: apiError } = await api.POST("/billing/packs/{polar_order_id}/refund", {
         params: {
           path: {
             polar_order_id: polarOrderId
           }
         }
       });
+      assertAuthenticatedRequestScopeCurrent(requestScope);
 
       if (apiError) {
         setError(getApiErrorMessage(apiError, "Unable to request pack refund."));
-        return;
+        return false;
+      }
+
+      if (usage && data?.remaining_seconds_before_refund) {
+        const nextUsage = applyPendingRefundHold(usage, data.remaining_seconds_before_refund);
+        setUsage(nextUsage);
+        setRemainingSeconds(userId, nextUsage.total_remaining_seconds);
       }
 
       setAccount((previous) => {
@@ -570,10 +594,23 @@ function BillingPageContent() {
           );
         }
       }, 2500);
+      return true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong.");
+      setError(getApiErrorMessage(err, "Unable to request pack refund."));
+      return false;
     } finally {
       setRefundLoading(null);
+    }
+  };
+
+  const handleConfirmRefund = async () => {
+    if (!refundTarget) {
+      return;
+    }
+
+    const requested = await handleRefund(refundTarget.polar_order_id);
+    if (requested) {
+      setRefundTarget(null);
     }
   };
 
@@ -594,8 +631,12 @@ function BillingPageContent() {
       <button
         className={chrome.secondaryButton}
         type="button"
-        onClick={() => handleRefund(pack.polar_order_id)}
-        disabled={refundLoading === pack.polar_order_id}
+        onClick={() => {
+          setError(null);
+          setRefundTarget(pack);
+        }}
+        disabled={refundLoading !== null}
+        aria-label={`Refund ${pack.plan_name ?? "pack"} for ${formatPrice(pack.refundable_amount_cents, pack.currency, null)}`}
       >
         {refundLoading === pack.polar_order_id
           ? "Requesting refund..."
@@ -690,6 +731,8 @@ function BillingPageContent() {
             className={`${chrome.notice} ${styles.pageColumn} ${
               purchaseSync.status === "delayed" ? chrome.noticeWarning : chrome.noticeInfo
             }`}
+            role="status"
+            aria-live="polite"
           >
             <h2 className={chrome.noticeTitle}>Purchase status</h2>
             <p className={chrome.noticeText}>
@@ -719,6 +762,8 @@ function BillingPageContent() {
             className={`${chrome.notice} ${styles.pageColumn} ${
               refundSync.status === "delayed" ? chrome.noticeWarning : chrome.noticeInfo
             }`}
+            role="status"
+            aria-live="polite"
           >
             <h2 className={chrome.noticeTitle}>Refund status</h2>
             <p className={chrome.noticeText}>
@@ -767,6 +812,19 @@ function BillingPageContent() {
             </div>
             <span className={getStatusTone(account?.subscription.status ?? null)}>{subscriptionStatusText}</span>
           </div>
+
+          {usage && usage.debt_seconds > 0 ? (
+            <div
+              className={`${chrome.notice} ${usage.is_blocked ? chrome.noticeWarning : chrome.noticeInfo}`}
+              role={usage.is_blocked ? "alert" : "status"}
+            >
+              <h3 className={chrome.noticeTitle}>{usage.is_blocked ? "Briefing creation paused" : "Outstanding balance"}</h3>
+              <p className={chrome.noticeText}>
+                {formatDuration(usage.debt_seconds)} is owed. New credits repay this amount first.
+                {usage.is_blocked ? " Add video time to continue creating briefings." : " Talven checks each source length before starting."}
+              </p>
+            </div>
+          ) : null}
 
           {usage && quotaAvailablePercent !== null ? (
             <div className={styles.accessMeter}>
@@ -823,10 +881,11 @@ function BillingPageContent() {
             </div>
           </div>
 
-          <div className={styles.offerSwitch}>
+          <div className={styles.offerSwitch} role="group" aria-label="Billing offer type">
             <button
               className={`${styles.offerSwitchButton} ${offerMode === "subscription" ? styles.offerSwitchButtonActive : ""}`}
               type="button"
+              aria-pressed={offerMode === "subscription"}
               onClick={() => setOfferMode("subscription")}
             >
               <span className={styles.offerSwitchLabel}>Monthly subscriptions</span>
@@ -834,6 +893,7 @@ function BillingPageContent() {
             <button
               className={`${styles.offerSwitchButton} ${offerMode === "pack" ? styles.offerSwitchButtonActive : ""}`}
               type="button"
+              aria-pressed={offerMode === "pack"}
               onClick={() => setOfferMode("pack")}
             >
               <span className={styles.offerSwitchLabel}>One-time packs</span>
@@ -862,7 +922,7 @@ function BillingPageContent() {
                     <div className={styles.planCardBody}>
                       <div>
                         <div className={styles.planHeading}>
-                          <p className={styles.planName}>{plan.name}</p>
+                          <h3 className={styles.planName}>{plan.name}</h3>
                           {isRequestedPlan ? (
                             <span className={styles.planBadge}>Selected</span>
                           ) : planBadge ? (
@@ -882,15 +942,15 @@ function BillingPageContent() {
                       className={isCurrentSubscription ? chrome.ghostButton : chrome.primaryButton}
                       type="button"
                       onClick={() => handleCheckout(plan.plan_id)}
-                      disabled={checkoutLoading === plan.plan_id || isCurrentSubscription}
+                      disabled={checkoutLoading !== null || isCurrentSubscription}
                     >
                       {checkoutLoading === plan.plan_id
                         ? "Opening checkout..."
                         : isCurrentSubscription
                           ? "Current plan"
                           : visiblePlanGroup.key === "subscription"
-                            ? "Upgrade now"
-                            : "Buy pack"}
+                            ? `Choose ${plan.name}`
+                            : `Buy ${plan.name}`}
                     </button>
                   </article>
                 );
@@ -911,19 +971,24 @@ function BillingPageContent() {
             <details className={styles.detailDisclosure} open={activePackCount > 0}>
               <summary className={styles.detailSummary}>
                 <span>Purchased packs</span>
-                <span className={styles.detailCount}>{account?.packs.length ?? 0}</span>
+                <span className={styles.detailCount}>{displayedPacks.length}</span>
               </summary>
 
-              {!account || account.packs.length === 0 ? (
+              {!account || displayedPacks.length === 0 ? (
                 <p className={chrome.emptyState}>No packs purchased yet.</p>
               ) : (
                 <div className={chrome.list}>
-                  {account.packs.map((pack) => (
-                    <article className={chrome.listRow} key={pack.polar_order_id}>
+                  {displayedPacks.map((pack) => (
+                    <article
+                      className={`${chrome.listRow} ${pack.status === "refund_pending" ? styles.packPending : ""}`}
+                      key={pack.polar_order_id}
+                    >
                       <div className={chrome.listPrimary}>
                         <p className={chrome.listTitle}>{pack.plan_name ?? "Pack"}</p>
                         <p className={chrome.listMeta}>
-                          {formatDuration(pack.remaining_seconds)} left · Expires {formatDate(pack.expires_at)}
+                          {pack.status === "refund_pending"
+                            ? `${formatDuration(pack.remaining_seconds)} held while the refund is pending`
+                            : `${formatDuration(pack.remaining_seconds)} left · Expires ${formatDate(pack.expires_at)}`}
                         </p>
                         <p className={chrome.listMeta}>
                           Used {formatDuration(pack.consumed_seconds)} / {formatDuration(pack.granted_seconds)}
@@ -969,6 +1034,66 @@ function BillingPageContent() {
           </div>
         </section>
       </main>
+
+      <Dialog.Root
+        open={refundTarget !== null}
+        onOpenChange={(open) => {
+          if (!open && refundLoading === null) {
+            setRefundTarget(null);
+          }
+        }}
+      >
+        <Dialog.Portal>
+          <Dialog.Overlay className={styles.refundDialogOverlay} />
+          <Dialog.Content className={styles.refundDialogContent}>
+            <Dialog.Title className={styles.refundDialogTitle}>Confirm pack refund</Dialog.Title>
+            <Dialog.Description className={styles.refundDialogDescription}>
+              Review the amount and credit change before sending this request to the payment provider.
+            </Dialog.Description>
+            {refundTarget ? (
+              <div className={styles.refundDialogDetails}>
+                <dl>
+                  <div>
+                    <dt>Pack</dt>
+                    <dd>{refundTarget.plan_name ?? "Pack"}</dd>
+                  </div>
+                  <div>
+                    <dt>Refund</dt>
+                    <dd>{formatPrice(refundTarget.refundable_amount_cents, refundTarget.currency, null)}</dd>
+                  </div>
+                  <div>
+                    <dt>Video time removed</dt>
+                    <dd>{formatDuration(refundTarget.remaining_seconds)}</dd>
+                  </div>
+                </dl>
+                <p className={styles.refundDialogWarning}>
+                  This prorated refund makes the remaining pack time unavailable as soon as the request starts. Used time is not refunded, and the request cannot be undone in Talven.
+                </p>
+                {error ? (
+                  <p className={styles.refundDialogError} role="alert">
+                    {error}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+            <div className={styles.refundDialogActions}>
+              <Dialog.Close asChild>
+                <button className={chrome.secondaryButton} type="button" disabled={refundLoading !== null}>
+                  Keep pack
+                </button>
+              </Dialog.Close>
+              <button
+                className={`${chrome.primaryButton} ${styles.refundConfirmButton}`}
+                type="button"
+                onClick={() => void handleConfirmRefund()}
+                disabled={!refundTarget || refundLoading !== null}
+              >
+                {refundLoading ? "Requesting refund..." : "Confirm refund"}
+              </button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   );
 }

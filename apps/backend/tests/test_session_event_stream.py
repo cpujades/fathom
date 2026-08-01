@@ -9,8 +9,9 @@ from uuid import UUID
 from starlette.requests import Request
 
 from fathom.api.deps.auth import AuthContext
-from fathom.application.briefings.sessions import _session_event_stream
+from fathom.application.briefings.sessions import _session_event_stream, stream_briefing_session_events
 from fathom.core.config import Settings
+from fathom.core.errors import RateLimitError
 from fathom.schemas.briefing_sessions import BriefingSessionResponse
 
 SESSION_ID = UUID("11111111-1111-1111-1111-111111111111")
@@ -40,9 +41,65 @@ def _snapshot(*, state: str, markdown: str | None = None) -> BriefingSessionResp
 class SessionEventStreamTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.auth = AuthContext(access_token="access-token", user_id="user-1")
-        self.settings = cast(Settings, SimpleNamespace())
+        self.settings = cast(
+            Settings,
+            SimpleNamespace(
+                sse_stream_lease_seconds=90,
+                sse_stream_max_lifetime_seconds=3600,
+            ),
+        )
         self.user_client = object()
         self.admin_client = object()
+
+    async def test_stream_capacity_is_rejected_before_response_starts(self) -> None:
+        settings = cast(
+            Settings,
+            SimpleNamespace(
+                sse_max_streams_per_user=3,
+                sse_max_streams_per_ip=12,
+                sse_stream_lease_seconds=90,
+            ),
+        )
+        request = cast(
+            Request,
+            SimpleNamespace(
+                app=SimpleNamespace(
+                    state=SimpleNamespace(
+                        trust_proxy_headers=False,
+                        trusted_proxy_networks=(),
+                    )
+                ),
+                client=SimpleNamespace(host="203.0.113.4"),
+                headers={},
+            ),
+        )
+
+        with (
+            patch(
+                "fathom.application.briefings.sessions.create_supabase_admin_client",
+                AsyncMock(return_value=self.admin_client),
+            ),
+            patch(
+                "fathom.application.briefings.sessions.claim_stream_lease",
+                AsyncMock(return_value=None),
+            ) as claim,
+            self.assertRaisesRegex(RateLimitError, "Too many active briefing streams"),
+        ):
+            await stream_briefing_session_events(
+                session_id=SESSION_ID,
+                auth=self.auth,
+                settings=settings,
+                request=request,
+            )
+
+        claim.assert_awaited_once_with(
+            self.admin_client,
+            user_id="user-1",
+            client_subject="ip:203.0.113.4",
+            max_per_user=3,
+            max_per_subject=12,
+            lease_seconds=90,
+        )
 
     async def test_reconnect_replays_stable_ids_before_snapshot(self) -> None:
         request = SimpleNamespace(

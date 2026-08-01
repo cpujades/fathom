@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import asyncio
 import json
-from collections.abc import AsyncIterator
 from typing import Any
 
 from openai import (
@@ -16,7 +14,7 @@ from openai import (
 from pydantic import ValidationError
 
 from fathom.core.config import DEFAULT_PROVIDER_SUMMARY_DEADLINE_SECONDS
-from fathom.core.constants import EVIDENCE_SYSTEM_PROMPT, SYSTEM_PROMPT
+from fathom.core.constants import EVIDENCE_SYSTEM_PROMPT
 from fathom.schemas.briefing_contract import (
     BriefingContract,
     BriefingContractError,
@@ -38,7 +36,7 @@ from fathom.services.provider_resilience import (
 OPENROUTER_MODEL = "x-ai/grok-4.3"
 
 # OpenRouter metadata headers (optional but recommended)
-OPENROUTER_APP_NAME = "fathom"
+OPENROUTER_APP_NAME = "Talven"
 
 
 class SummarizationError(ProviderOperationError):
@@ -151,116 +149,6 @@ async def summarize_transcript_with_evidence(
                 max_attempts=max_attempts,
             ),
         )
-
-
-async def summarize_transcript(
-    transcript: str,
-    api_key: str,
-    *,
-    deadline_seconds: float = DEFAULT_PROVIDER_SUMMARY_DEADLINE_SECONDS,
-) -> str:
-    if not api_key:
-        raise SummarizationError("Missing OPENROUTER_API_KEY.")
-
-    client = AsyncOpenAI(
-        api_key=api_key,
-        base_url="https://openrouter.ai/api/v1",
-        max_retries=0,
-        timeout=600,
-        default_headers={
-            "X-Title": OPENROUTER_APP_NAME,
-        },
-    )
-
-    async def operation() -> str:
-        response = await client.chat.completions.create(
-            model=OPENROUTER_MODEL,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": transcript},
-            ],
-            temperature=0.2,
-        )
-
-        content: Any = response.choices[0].message.content if response.choices else None
-        if not isinstance(content, str) or not content.strip():
-            raise SummarizationError(
-                "Empty summary response.",
-                kind=ProviderFailureKind.TRANSIENT,
-            )
-        return content.strip()
-
-    adapter = CallableProviderAdapter(
-        provider="openrouter",
-        stage="summarizing",
-        operation=operation,
-        error_classifier=_classify_openrouter_error,
-        deadline_error_factory=_summary_deadline_error,
-    )
-    async with client:
-        return await call_with_resilience(
-            adapter,
-            RetryPolicy(deadline_seconds=deadline_seconds),
-        )
-
-
-async def stream_summarize_transcript(
-    transcript: str,
-    api_key: str,
-    *,
-    deadline_seconds: float = DEFAULT_PROVIDER_SUMMARY_DEADLINE_SECONDS,
-) -> AsyncIterator[str]:
-    if not api_key:
-        raise SummarizationError("Missing OPENROUTER_API_KEY.")
-
-    client = AsyncOpenAI(
-        api_key=api_key,
-        base_url="https://openrouter.ai/api/v1",
-        max_retries=0,
-        timeout=600,
-        default_headers={
-            "X-Title": OPENROUTER_APP_NAME,
-        },
-    )
-
-    async def open_stream() -> Any:
-        return await client.chat.completions.create(
-            model=OPENROUTER_MODEL,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": transcript},
-            ],
-            temperature=0,
-            stream=True,
-        )
-
-    adapter = CallableProviderAdapter(
-        provider="openrouter",
-        stage="summarizing",
-        operation=open_stream,
-        error_classifier=_classify_openrouter_error,
-        deadline_error_factory=_summary_deadline_error,
-    )
-    try:
-        async with client, asyncio.timeout(deadline_seconds):
-            stream = await call_with_resilience(
-                adapter,
-                RetryPolicy(deadline_seconds=deadline_seconds),
-            )
-            async for chunk in stream:
-                if not chunk.choices:
-                    continue
-                delta = getattr(chunk.choices[0].delta, "content", None)
-                if isinstance(delta, str) and delta:
-                    yield delta
-    except asyncio.CancelledError:
-        raise
-    except TimeoutError as exc:
-        raise _summary_deadline_error() from exc
-    except ProviderOperationError:
-        raise
-    except Exception as exc:
-        raise _classify_openrouter_error(exc) from exc
 
 
 def _classify_openrouter_error(exc: Exception) -> SummarizationError:

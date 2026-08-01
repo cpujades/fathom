@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import asyncio
+import json
+import os
 import pathlib
+import sys
 import threading
 import time
 import uuid
@@ -15,6 +19,18 @@ from fathom.core.errors import ExternalServiceError
 
 MAX_AUDIO_FILE_BYTES = 100_000_000
 DOWNLOAD_REQUEST_TIMEOUT_SECONDS = 60
+YOUTUBE_WORKER_MAX_RESPONSE_BYTES = 64_000
+_YOUTUBE_WORKER_ENV_KEYS = (
+    "DYLD_FALLBACK_LIBRARY_PATH",
+    "DYLD_LIBRARY_PATH",
+    "LANG",
+    "LC_ALL",
+    "LD_LIBRARY_PATH",
+    "PATH",
+    "PYTHONPATH",
+    "SSL_CERT_FILE",
+    "VIRTUAL_ENV",
+)
 
 
 class DownloadError(ExternalServiceError):
@@ -60,6 +76,119 @@ class VideoMetadata:
     video_id: str | None
     duration_seconds: int | None
     title: str | None
+
+
+async def fetch_video_metadata_with_deadline(
+    url: str,
+    *,
+    deadline_seconds: float,
+) -> VideoMetadata:
+    payload = await _run_youtube_worker(
+        {"operation": "metadata", "url": url},
+        deadline_seconds=deadline_seconds,
+    )
+    return VideoMetadata(
+        video_id=_optional_str(payload.get("video_id")),
+        duration_seconds=_optional_int(payload.get("duration_seconds")),
+        title=_optional_str(payload.get("title")),
+    )
+
+
+async def download_audio_with_deadline(
+    url: str,
+    output_dir: str,
+    *,
+    max_bytes: int = MAX_AUDIO_FILE_BYTES,
+    deadline_seconds: float = DEFAULT_SOURCE_DOWNLOAD_DEADLINE_SECONDS,
+) -> DownloadResult:
+    payload = await _run_youtube_worker(
+        {
+            "operation": "download",
+            "url": url,
+            "output_dir": output_dir,
+            "max_bytes": max_bytes,
+            "deadline_seconds": deadline_seconds,
+        },
+        deadline_seconds=deadline_seconds,
+    )
+    keywords = payload.get("keywords")
+    return DownloadResult(
+        path=pathlib.Path(str(payload["path"])),
+        video_id=_optional_str(payload.get("video_id")),
+        mime_type=_optional_str(payload.get("mime_type")),
+        subtype=_optional_str(payload.get("subtype")),
+        filesize_bytes=_optional_int(payload.get("filesize_bytes")),
+        title=_optional_str(payload.get("title")),
+        author=_optional_str(payload.get("author")),
+        description=_optional_str(payload.get("description")),
+        keywords=[str(item) for item in keywords] if isinstance(keywords, list) else None,
+        views=_optional_int(payload.get("views")),
+        likes=_optional_int(payload.get("likes")),
+        length_seconds=_optional_int(payload.get("length_seconds")),
+    )
+
+
+async def _run_youtube_worker(request: dict[str, object], *, deadline_seconds: float) -> dict[str, object]:
+    if deadline_seconds <= 0:
+        raise ValueError("deadline_seconds must be greater than zero")
+
+    process = await asyncio.create_subprocess_exec(
+        sys.executable,
+        "-m",
+        "fathom.services.youtube_worker",
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        env=_youtube_worker_environment(),
+    )
+    try:
+        async with asyncio.timeout(deadline_seconds):
+            stdout, _stderr = await process.communicate(json.dumps(request).encode("utf-8"))
+    except TimeoutError as exc:
+        await _terminate_worker(process)
+        raise DownloadError("YouTube source request deadline exceeded.") from exc
+    except asyncio.CancelledError:
+        await asyncio.shield(_terminate_worker(process))
+        raise
+
+    if len(stdout) > YOUTUBE_WORKER_MAX_RESPONSE_BYTES:
+        raise DownloadError("YouTube source request failed.")
+    try:
+        response = json.loads(stdout)
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise DownloadError("YouTube source returned an invalid response.") from exc
+    if not isinstance(response, dict):
+        raise DownloadError("YouTube source returned an invalid response.")
+    if process.returncode not in {0, None} and response.get("ok") is not False:
+        raise DownloadError("YouTube source request failed.")
+    if response.get("ok") is not True:
+        detail = response.get("detail")
+        raise DownloadError(str(detail) if isinstance(detail, str) else "YouTube source request failed.")
+    result = response.get("result")
+    if not isinstance(result, dict):
+        raise DownloadError("YouTube source returned an invalid response.")
+    return result
+
+
+async def _terminate_worker(process: asyncio.subprocess.Process) -> None:
+    if process.returncode is None:
+        try:
+            process.kill()
+        except ProcessLookupError:
+            pass
+    await process.wait()
+
+
+def _youtube_worker_environment() -> dict[str, str]:
+    return {key: os.environ[key] for key in _YOUTUBE_WORKER_ENV_KEYS if key in os.environ}
+
+
+def _optional_str(value: object) -> str | None:
+    return value if isinstance(value, str) else None
+
+
+def _optional_int(value: object) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
 
 
 class _DownloadLimitExceeded(Exception):

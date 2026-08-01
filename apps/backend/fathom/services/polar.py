@@ -174,7 +174,7 @@ def _polar_request(
         "Authorization": f"Bearer {token}",
         "Accept": "application/json",
         "Content-Type": "application/json",
-        "User-Agent": "Fathom-Backend/1.0",
+        "User-Agent": "Talven-Backend/1.0",
     }
     if payload is not None:
         data = json.dumps(payload).encode("utf-8")

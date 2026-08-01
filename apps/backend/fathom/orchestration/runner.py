@@ -371,7 +371,9 @@ async def _run_scheduled_maintenance(
     settings: Settings,
     last_sweep_at: float,
     last_billing_maintenance_at: float,
-) -> tuple[float, float]:
+    billing_maintenance_task: asyncio.Task[dict[str, int]] | None,
+) -> tuple[float, float, asyncio.Task[dict[str, int]] | None]:
+    billing_maintenance_task = _drain_billing_maintenance_task(billing_maintenance_task)
     now = time.monotonic()
     if now - last_sweep_at >= WORKER_SWEEP_INTERVAL_SECONDS:
         requeued_jobs = await requeue_stale_jobs(admin_client, stale_after_seconds=WORKER_STALE_AFTER_SECONDS)
@@ -386,11 +388,42 @@ async def _run_scheduled_maintenance(
         )
         last_sweep_at = now
 
-    if now - last_billing_maintenance_at >= WORKER_BILLING_MAINTENANCE_INTERVAL_SECONDS:
-        await run_billing_maintenance(admin_client, settings=settings)
+    if (
+        billing_maintenance_task is None
+        and now - last_billing_maintenance_at >= WORKER_BILLING_MAINTENANCE_INTERVAL_SECONDS
+    ):
+        billing_maintenance_task = asyncio.create_task(
+            run_billing_maintenance(admin_client, settings=settings),
+            name="billing-maintenance",
+        )
         last_billing_maintenance_at = now
 
-    return last_sweep_at, last_billing_maintenance_at
+    return last_sweep_at, last_billing_maintenance_at, billing_maintenance_task
+
+
+def _drain_billing_maintenance_task(
+    task: asyncio.Task[dict[str, int]] | None,
+) -> asyncio.Task[dict[str, int]] | None:
+    if task is None or not task.done():
+        return task
+
+    try:
+        task.result()
+    except asyncio.CancelledError:
+        logger.info("billing.maintenance.cancelled")
+    except Exception:
+        logger.exception("billing.maintenance.crashed")
+    return None
+
+
+async def _shutdown_billing_maintenance_task(task: asyncio.Task[dict[str, int]] | None) -> None:
+    if task is None:
+        return
+
+    if not task.done():
+        task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
+    _drain_billing_maintenance_task(task)
 
 
 async def _shutdown_running_tasks(
@@ -448,6 +481,7 @@ async def _run_loop_with_client(
     max_concurrent_jobs = max(1, settings.worker_max_concurrent_jobs)
     notify_timeout_seconds = WORKER_JOB_NOTIFY_TIMEOUT_SECONDS
     running_tasks: set[asyncio.Task[None]] = set()
+    billing_maintenance_task: asyncio.Task[dict[str, int]] | None = None
     last_sweep_at = 0.0
     last_billing_maintenance_at = 0.0
 
@@ -458,11 +492,16 @@ async def _run_loop_with_client(
                     logger.info("worker.job_listener.ready", extra={"channel": "job_created"})
                     while not shutdown_event.is_set():
                         _drain_completed_tasks(running_tasks)
-                        last_sweep_at, last_billing_maintenance_at = await _run_scheduled_maintenance(
+                        (
+                            last_sweep_at,
+                            last_billing_maintenance_at,
+                            billing_maintenance_task,
+                        ) = await _run_scheduled_maintenance(
                             admin_client,
                             settings=settings,
                             last_sweep_at=last_sweep_at,
                             last_billing_maintenance_at=last_billing_maintenance_at,
+                            billing_maintenance_task=billing_maintenance_task,
                         )
                         while not shutdown_event.is_set() and len(running_tasks) < max_concurrent_jobs:
                             job = await claim_next_job(
@@ -500,6 +539,7 @@ async def _run_loop_with_client(
                 if not shutdown_event.is_set():
                     await asyncio.sleep(WORKER_IDLE_SLEEP_SECONDS)
     finally:
+        await _shutdown_billing_maintenance_task(billing_maintenance_task)
         await _shutdown_running_tasks(
             running_tasks,
             grace_seconds=settings.worker_shutdown_grace_seconds,

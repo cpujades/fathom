@@ -24,6 +24,7 @@ import {
   getCachedBriefings,
   hasFreshBriefingsCache,
   invalidateBriefingsCache,
+  isAuthenticatedDataScopeChangedError,
   loadBriefings,
   prefetchSessionSnapshot
 } from "../../lib/appDataCache";
@@ -128,8 +129,9 @@ function getStatusLabel(loading: boolean, shellLoading: boolean, totalCount: num
 
 export default function BriefingsPage() {
   const router = useRouter();
-  const cachedBriefings = getCachedBriefings();
   const { accessToken, loading: shellLoading, remainingSeconds, signOut, user } = useAppShell();
+  const userId = user?.id ?? null;
+  const cachedBriefings = userId ? getCachedBriefings(userId) : null;
 
   const [briefings, setBriefings] = useState<BriefingListResponse>(cachedBriefings ?? EMPTY_BRIEFINGS_RESPONSE);
   const [loading, setLoading] = useState(() => cachedBriefings === null);
@@ -151,14 +153,14 @@ export default function BriefingsPage() {
   );
 
   useEffect(() => {
-    if (!accessToken) {
+    if (!accessToken || !userId) {
       return;
     }
 
     let active = true;
     const usingDefaultQuery = !deferredSearch && sort === "newest";
-    if (usingDefaultQuery && hasFreshBriefingsCache()) {
-      const nextCachedBriefings = getCachedBriefings();
+    if (usingDefaultQuery && hasFreshBriefingsCache(userId)) {
+      const nextCachedBriefings = getCachedBriefings(userId);
       if (nextCachedBriefings) {
         setBriefings(nextCachedBriefings);
         setLoading(false);
@@ -172,7 +174,7 @@ export default function BriefingsPage() {
 
     const syncBriefings = async () => {
       try {
-        const response = await loadBriefings(accessToken, {
+        const response = await loadBriefings(userId, accessToken, {
           limit: DEFAULT_BRIEFINGS_LIMIT,
           offset: 0,
           query: deferredSearch,
@@ -199,10 +201,10 @@ export default function BriefingsPage() {
     return () => {
       active = false;
     };
-  }, [accessToken, deferredSearch, sort]);
+  }, [accessToken, deferredSearch, sort, userId]);
 
   useEffect(() => {
-    if (!accessToken || activeBriefingCount === 0) {
+    if (!accessToken || !userId || activeBriefingCount === 0) {
       return;
     }
 
@@ -214,7 +216,7 @@ export default function BriefingsPage() {
       }
 
       refreshing = true;
-      void loadBriefings(accessToken, {
+      void loadBriefings(userId, accessToken, {
         limit: Math.max(DEFAULT_BRIEFINGS_LIMIT, briefings.items.length),
         offset: 0,
         query: deferredSearch,
@@ -238,7 +240,7 @@ export default function BriefingsPage() {
       active = false;
       window.clearInterval(intervalId);
     };
-  }, [accessToken, activeBriefingCount, briefings.items.length, deferredSearch, sort]);
+  }, [accessToken, activeBriefingCount, briefings.items.length, deferredSearch, sort, userId]);
 
   const hasFilters = deferredSearch.length > 0 || sort !== "newest";
   const helperText = useMemo(() => {
@@ -257,15 +259,15 @@ export default function BriefingsPage() {
 
   const prefetchBriefing = (entry: BriefingListItem) => {
     const sessionId = getSessionIdFromPath(entry.session_path);
-    if (!accessToken || !sessionId) {
+    if (!accessToken || !userId || !sessionId) {
       return;
     }
 
-    void prefetchSessionSnapshot(accessToken, sessionId);
+    void prefetchSessionSnapshot(userId, accessToken, sessionId);
   };
 
   const openBriefing = async (event: MouseEvent<HTMLAnchorElement>, entry: BriefingListItem) => {
-    if (!accessToken || openingSessionId) {
+    if (!accessToken || !userId || openingSessionId) {
       return;
     }
 
@@ -277,22 +279,24 @@ export default function BriefingsPage() {
     event.preventDefault();
     setOpeningSessionId(entry.session_id);
     try {
-      await prefetchSessionSnapshot(accessToken, sessionId);
-    } catch {
+      await prefetchSessionSnapshot(userId, accessToken, sessionId);
+    } catch (error) {
+      if (isAuthenticatedDataScopeChangedError(error)) {
+        return;
+      }
       // Navigation should still work if the warm prefetch misses.
-    } finally {
-      router.push(entry.session_path);
     }
+    router.push(entry.session_path);
   };
 
   const handleLoadMore = async () => {
-    if (!accessToken || loadingMore || !briefings.has_more) {
+    if (!accessToken || !userId || loadingMore || !briefings.has_more) {
       return;
     }
 
     setLoadingMore(true);
     try {
-      const response = await loadBriefings(accessToken, {
+      const response = await loadBriefings(userId, accessToken, {
         limit: DEFAULT_BRIEFINGS_LIMIT,
         offset: briefings.items.length,
         query: deferredSearch,
@@ -313,7 +317,7 @@ export default function BriefingsPage() {
   };
 
   const handleDeleteBriefing = async (entry: BriefingListItem) => {
-    if (!accessToken || deletingSessionId) {
+    if (!accessToken || !userId || deletingSessionId) {
       return;
     }
 
@@ -333,7 +337,7 @@ export default function BriefingsPage() {
         throw deleteError;
       }
 
-      invalidateBriefingsCache();
+      invalidateBriefingsCache(userId);
       setBriefings((current) => {
         const nextItems = current.items.filter((item) => item.session_id !== entry.session_id);
         const nextTotalCount = Math.max(current.total_count - 1, 0);

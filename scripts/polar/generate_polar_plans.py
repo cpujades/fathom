@@ -19,8 +19,22 @@ _env_file = _project_root / ".env"
 if _env_file.exists():
     load_dotenv(_env_file)
 
-PLANS_PATH = Path(__file__).parent / "plans.json"
+PLAN_CONTRACT_PATH = Path(__file__).parent / "plan_contract.json"
+POLAR_PRODUCT_OVERRIDES_PATH = Path(__file__).parent / "plans.json"
 OUTPUT_JSON = Path(__file__).parent / "plan_seed.json"
+
+_PUBLIC_PLAN_FIELDS = (
+    "plan_code",
+    "version",
+    "name",
+    "plan_type",
+    "currency",
+    "amount_cents",
+    "billing_interval",
+    "quota_seconds",
+    "rollover_cap_seconds",
+    "pack_expiry_days",
+)
 
 
 @dataclass
@@ -39,12 +53,39 @@ class PlanRow:
     is_active: bool = True
 
 
-def _load_plans() -> list[dict[str, Any]]:
-    raw = PLANS_PATH.read_text(encoding="utf-8")
+def _load_plan_array(path: Path) -> list[dict[str, Any]]:
+    raw = path.read_text(encoding="utf-8")
     plans = json.loads(raw)
     if not isinstance(plans, list) or not plans:
-        raise ValueError("plans.json must be a non-empty array.")
+        raise ValueError(f"{path.name} must be a non-empty array.")
+    if not all(isinstance(plan, dict) for plan in plans):
+        raise ValueError(f"{path.name} must contain only plan objects.")
     return plans
+
+
+def _load_plans() -> list[dict[str, Any]]:
+    contract = _load_plan_array(PLAN_CONTRACT_PATH)
+    if not POLAR_PRODUCT_OVERRIDES_PATH.exists():
+        return contract
+
+    contract_by_key = {(str(plan.get("plan_code")), int(plan.get("version", 1))): plan for plan in contract}
+    for override in _load_plan_array(POLAR_PRODUCT_OVERRIDES_PATH):
+        key = (str(override.get("plan_code")), int(override.get("version", 1)))
+        plan = contract_by_key.get(key)
+        if plan is None:
+            raise ValueError(f"plans.json contains unknown plan {key[0]}@v{key[1]}.")
+
+        for field in _PUBLIC_PLAN_FIELDS:
+            if field in override and override[field] != plan.get(field):
+                raise ValueError(f"plans.json may only override polar_product_id; {key[0]}@v{key[1]} changes {field}.")
+
+        product_id = override.get("polar_product_id")
+        if product_id is not None and (not isinstance(product_id, str) or not product_id.strip()):
+            raise ValueError(f"Plan {key[0]}@v{key[1]} has an invalid polar_product_id override.")
+        if product_id:
+            plan["polar_product_id"] = product_id
+
+    return contract
 
 
 def _api_base(server: str) -> str:
@@ -74,7 +115,7 @@ def _polar_request(
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
             "Accept": "application/json",
-            "User-Agent": "Fathom-PolarSync/1.0",
+            "User-Agent": "Talven-PolarSync/1.0",
         },
         data=data,
     )
@@ -115,7 +156,7 @@ def _create_polar_product(
 
     payload: dict[str, Any] = {
         "name": plan.name,
-        "description": f"Fathom plan {plan.plan_code} v{plan.version}",
+        "description": f"Talven plan {plan.plan_code} v{plan.version}",
         "is_recurring": is_subscription,
         "prices": [price_payload],
         "metadata": {
@@ -375,7 +416,7 @@ def main() -> None:
     parser.add_argument(
         "--deactivate-missing",
         action="store_true",
-        help="Mark DB plans as inactive when their plan_code is missing from plans.json.",
+        help="Mark DB plans as inactive when their plan_code is missing from plan_contract.json.",
     )
     parser.add_argument(
         "--server",

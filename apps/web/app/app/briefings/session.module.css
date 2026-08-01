@@ -1278,6 +1278,14 @@
   overflow-wrap: anywhere;
 }
 
+.takeawayBody {
+  min-width: 0;
+}
+
+.takeawayBody p {
+  margin: 0;
+}
+
 .deepReadMarkdown {
   max-width: 66ch;
 }

@@ -15,7 +15,7 @@ from fathom.schemas.transcripts import (
     TranscriptSegment,
     resolve_transcript_citation,
 )
-from fathom.services.transcriber import _extract_groq_transcription
+from fathom.services.transcriber import TranscriptionError, _extract_groq_transcription
 from supabase import AsyncClient
 
 
@@ -75,13 +75,13 @@ class TranscriptCitationTests(unittest.TestCase):
 
 
 class TranscriptProviderParsingTests(unittest.TestCase):
-    def test_legacy_or_degraded_response_keeps_full_text_without_fabricated_segments(
-        self,
-    ) -> None:
-        result = _extract_groq_transcription(SimpleNamespace(text="Compatible full transcript"))
+    def test_degraded_response_without_segments_fails_closed(self) -> None:
+        with self.assertRaisesRegex(TranscriptionError, "missing timestamp segments"):
+            _extract_groq_transcription(SimpleNamespace(text="Compatible full transcript"))
 
-        self.assertEqual(result.text, "Compatible full transcript")
-        self.assertEqual(result.segments, ())
+    def test_empty_segment_collection_fails_closed(self) -> None:
+        with self.assertRaisesRegex(TranscriptionError, "no timestamp segments"):
+            _extract_groq_transcription(SimpleNamespace(text="Compatible full transcript", segments=[]))
 
 
 class TranscriptEvidenceCrudTests(unittest.IsolatedAsyncioTestCase):

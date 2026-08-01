@@ -3,30 +3,17 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useTransition } from "react";
+import { type KeyboardEvent, useEffect, useState, useTransition } from "react";
 
 import { packPlans, pricingCopy, subscriptionPlans } from "../content/pricing";
 import { trackMarketingEvent } from "../lib/marketingEvents";
+import { buildPaidCheckoutHref } from "../lib/pricingIntent";
 import styles from "./pricing-toggle-section.module.css";
 
 type BillingMode = "subscriptions" | "packs";
 
 type PricingToggleSectionProps = {
   mode: BillingMode;
-};
-
-const slugify = (value: string): string => {
-  return value.trim().toLowerCase().replace(/\s+/g, "-");
-};
-
-const buildPaidCheckoutHref = (planName: string): string => {
-  const params = new URLSearchParams({
-    next: "/app/billing",
-    intent: "paid",
-    plan: slugify(planName)
-  });
-
-  return `/signup?${params.toString()}`;
 };
 
 export default function PricingToggleSection({ mode }: PricingToggleSectionProps) {
@@ -55,7 +42,7 @@ export default function PricingToggleSection({ mode }: PricingToggleSectionProps
       section: "pricing",
       cta: ctaName,
       mode: activeMode,
-      plan: slugify(planName ?? highlightedPlan?.name ?? "starter")
+      plan: planName ?? highlightedPlan?.planCode ?? "starter"
     });
   };
 
@@ -91,35 +78,69 @@ export default function PricingToggleSection({ mode }: PricingToggleSectionProps
     navigate();
   };
 
+  const handleTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, currentMode: BillingMode) => {
+    let nextMode: BillingMode | null = null;
+    if (event.key === "Home") {
+      nextMode = "subscriptions";
+    } else if (event.key === "End") {
+      nextMode = "packs";
+    } else if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+      nextMode = currentMode === "subscriptions" ? "packs" : "subscriptions";
+    }
+
+    if (!nextMode) {
+      return;
+    }
+
+    event.preventDefault();
+    handleModeChange(nextMode);
+    event.currentTarget.parentElement
+      ?.querySelector<HTMLButtonElement>(`[data-pricing-mode="${nextMode}"]`)
+      ?.focus();
+  };
+
   return (
     <div className={styles.wrap} data-pending={isPending ? "true" : "false"}>
       <div className={styles.toggle} role="tablist" aria-label="Billing mode">
         <button
+          aria-controls="pricing-subscriptions-panel"
           type="button"
+          id="pricing-subscriptions-tab"
           role="tab"
           aria-selected={activeMode === "subscriptions"}
+          tabIndex={activeMode === "subscriptions" ? 0 : -1}
+          data-pricing-mode="subscriptions"
           className={activeMode === "subscriptions" ? styles.toggleActive : styles.toggleButton}
           onClick={() => handleModeChange("subscriptions")}
+          onKeyDown={(event) => handleTabKeyDown(event, "subscriptions")}
         >
           Subscription
         </button>
         <button
+          aria-controls="pricing-packs-panel"
           type="button"
+          id="pricing-packs-tab"
           role="tab"
           aria-selected={activeMode === "packs"}
+          tabIndex={activeMode === "packs" ? 0 : -1}
+          data-pricing-mode="packs"
           className={activeMode === "packs" ? styles.toggleActive : styles.toggleButton}
           onClick={() => handleModeChange("packs")}
+          onKeyDown={(event) => handleTabKeyDown(event, "packs")}
         >
           One-time packs
         </button>
       </div>
 
       <div className={styles.modeViewport}>
-        <AnimatePresence mode="sync" initial={false}>
+        <AnimatePresence mode="wait" initial={false}>
           <motion.div
+            aria-labelledby={`pricing-${activeMode}-tab`}
+            id={`pricing-${activeMode}-panel`}
             key={activeMode}
             className={styles.modeStage}
             data-mode={activeMode}
+            role="tabpanel"
             initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.995 }}
             animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, scale: 1 }}
             exit={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, scale: 0.995 }}
@@ -142,13 +163,15 @@ export default function PricingToggleSection({ mode }: PricingToggleSectionProps
                 const cardHref =
                   activeMode === "subscriptions" && plan.name.toLowerCase() === "free"
                     ? "/signup"
-                    : buildPaidCheckoutHref(plan.name);
+                    : buildPaidCheckoutHref(plan.planCode);
                 const cardCtaLabel =
-                  activeMode === "subscriptions" && plan.name.toLowerCase() === "free" ? "Open free access" : "Select access";
+                  activeMode === "subscriptions" && plan.name.toLowerCase() === "free"
+                    ? "Open free access"
+                    : `Select ${plan.name}`;
 
                 return (
                   <motion.article
-                    key={plan.name}
+                    key={plan.planCode}
                     className={isFeatured ? styles.planCardFeatured : styles.planCard}
                     initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.988 }}
                     animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, scale: 1 }}
@@ -180,7 +203,7 @@ export default function PricingToggleSection({ mode }: PricingToggleSectionProps
                       href={cardHref}
                       className={isFeatured ? styles.cardCtaPrimary : styles.cardCtaGhost}
                       onClick={() => {
-                        trackPricingCtaClick("card", plan.name);
+                        trackPricingCtaClick("card", plan.planCode);
                       }}
                     >
                       {cardCtaLabel}
@@ -221,10 +244,10 @@ export default function PricingToggleSection({ mode }: PricingToggleSectionProps
               }}
             >
               <Link
-                href={activeMode === "subscriptions" ? buildPaidCheckoutHref(highlightedPlan.name) : "/signup"}
+                href={activeMode === "subscriptions" ? buildPaidCheckoutHref(highlightedPlan.planCode) : "/signup"}
                 className={styles.secondaryLink}
                 onClick={() => {
-                  trackPricingCtaClick("secondary", highlightedPlan.name);
+                  trackPricingCtaClick("secondary", highlightedPlan.planCode);
                 }}
               >
                 {copy.secondary_cta}

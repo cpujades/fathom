@@ -6,15 +6,22 @@ from typing import Any
 
 from fathom.services.pdf import (
     _PDF_WORKER_ERROR_PREFIX,
+    MAX_PDF_MARKDOWN_BYTES,
+    MAX_PDF_TITLE_BYTES,
     PDF_RENDER_FAILED_MESSAGE,
     PDFError,
     markdown_to_pdf_bytes,
 )
 
+MAX_PDF_WORKER_REQUEST_BYTES = MAX_PDF_MARKDOWN_BYTES + MAX_PDF_TITLE_BYTES + 4096
+
 
 def main() -> int:
     try:
-        request = json.loads(sys.stdin.buffer.read())
+        raw_request = sys.stdin.buffer.read(MAX_PDF_WORKER_REQUEST_BYTES + 1)
+        if len(raw_request) > MAX_PDF_WORKER_REQUEST_BYTES:
+            raise PDFError(PDF_RENDER_FAILED_MESSAGE)
+        request = json.loads(raw_request)
         if not isinstance(request, dict):
             raise PDFError(PDF_RENDER_FAILED_MESSAGE)
         markdown = request.get("markdown")

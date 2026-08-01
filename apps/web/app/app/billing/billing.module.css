@@ -139,7 +139,7 @@
 }
 
 .offerSwitchButton {
-  min-height: auto;
+  min-height: 44px;
   border: 0;
   border-radius: 0;
   padding: 0.1rem 0 0.38rem;
@@ -244,6 +244,123 @@
   min-width: 0;
 }
 
+.refundDialogOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(18, 28, 23, 0.48);
+  backdrop-filter: blur(4px);
+}
+
+.refundDialogContent {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  z-index: 81;
+  width: min(520px, calc(100vw - 2rem));
+  max-height: calc(100svh - 2rem);
+  overflow-y: auto;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(36, 58, 47, 0.14);
+  border-radius: 20px;
+  padding: 1.3rem;
+  background: #faf7f1;
+  color: #18211d;
+  box-shadow: 0 28px 80px rgba(18, 28, 23, 0.3);
+}
+
+.refundDialogTitle {
+  margin: 0;
+  font-size: 1.35rem;
+  line-height: 1.2;
+}
+
+.refundDialogDescription {
+  margin: 0.55rem 0 0;
+  color: #435247;
+  line-height: 1.55;
+}
+
+.refundDialogDetails {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1.15rem;
+}
+
+.refundDialogDetails dl {
+  display: grid;
+  gap: 0.6rem;
+  margin: 0;
+}
+
+.refundDialogDetails dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid rgba(36, 58, 47, 0.1);
+}
+
+.refundDialogDetails dt {
+  color: #667267;
+  font-size: 0.82rem;
+}
+
+.refundDialogDetails dd {
+  margin: 0;
+  font-weight: 750;
+  text-align: right;
+}
+
+.refundDialogWarning {
+  margin: 0;
+  border-radius: 14px;
+  padding: 0.8rem 0.9rem;
+  background: rgba(155, 58, 54, 0.08);
+  color: #713330;
+  font-size: 0.86rem;
+  line-height: 1.52;
+}
+
+.refundDialogError {
+  margin: 0;
+  color: #713330;
+  font-size: 0.86rem;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.refundConfirmButton {
+  border-color: #7b2c2a;
+  background: #7b2c2a;
+  color: #fffaf4;
+}
+
+.refundConfirmButton:hover:not(:disabled) {
+  background: #642321;
+}
+
+.refundDialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.7rem;
+  margin-top: 1.2rem;
+}
+
+@media (max-width: 520px) {
+  .refundDialogContent {
+    padding: 1rem;
+  }
+
+  .refundDialogActions {
+    flex-direction: column-reverse;
+  }
+
+  .refundDialogActions button {
+    width: 100%;
+  }
+}
+
 .planBadge {
   flex: 0 0 auto;
   max-width: 100%;
@@ -289,6 +406,12 @@
 
 .detailDisclosure[open] {
   padding-bottom: 0.45rem;
+}
+
+.packPending {
+  border-color: rgba(102, 114, 103, 0.14);
+  background: rgba(102, 114, 103, 0.055);
+  opacity: 0.72;
 }
 
 .detailSummary {

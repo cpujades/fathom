@@ -93,20 +93,35 @@ class RateLimitSubjectTests(unittest.TestCase):
 
 
 class RateLimitRuleTests(unittest.TestCase):
-    def test_exempts_meta_routes(self) -> None:
+    def test_exempts_liveness_route(self) -> None:
         request = _request(path="/meta/health")
 
         self.assertIsNone(_get_rate_limit_rule(request, 60))
+
+    def test_rate_limits_readiness_route(self) -> None:
+        request = _request(path="/meta/ready")
+
+        rule = _get_rate_limit_rule(request, 60)
+
+        self.assertIsNotNone(rule)
+        assert rule is not None
+        self.assertEqual(rule.scope, "read")
+        self.assertEqual(rule.limit_per_minute, 240)
 
     def test_exempts_polar_webhooks(self) -> None:
         request = _request(path="/webhooks/polar", method="POST")
 
         self.assertIsNone(_get_rate_limit_rule(request, 60))
 
-    def test_exempts_briefing_session_events(self) -> None:
+    def test_rate_limits_briefing_session_events(self) -> None:
         request = _request(path="/briefing-sessions/123/events")
 
-        self.assertIsNone(_get_rate_limit_rule(request, 60))
+        rule = _get_rate_limit_rule(request, 60)
+
+        self.assertIsNotNone(rule)
+        assert rule is not None
+        self.assertEqual(rule.scope, "event_stream")
+        self.assertEqual(rule.limit_per_minute, 60)
 
     def test_uses_strict_limit_for_briefing_creation(self) -> None:
         request = _request(path="/briefing-sessions", method="POST")

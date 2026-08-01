@@ -11,7 +11,12 @@ import { useAppShell } from "../../../components/AppShellProvider";
 import chrome from "../../../components/app-chrome.module.css";
 import { getApiErrorMessage } from "../../../lib/apiErrors";
 import { getAccountLabel } from "../../../lib/accountLabel";
-import { cacheSessionSnapshot, invalidateBriefingsCache } from "../../../lib/appDataCache";
+import {
+  assertAuthenticatedRequestScopeCurrent,
+  cacheSessionSnapshot,
+  captureAuthenticatedRequestScope,
+  invalidateBriefingsCache
+} from "../../../lib/appDataCache";
 import { buildSignInPath } from "../../../lib/url";
 import { isCreditOrPaymentError } from "../sessionPresentation";
 import styles from "../session.module.css";
@@ -53,6 +58,7 @@ function BriefingCreatePageContent() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { accessToken, loading, remainingSeconds, signOut, user } = useAppShell();
+  const userId = user?.id ?? null;
   const initialUrl = useMemo(() => searchParams.get("url")?.trim() ?? "", [searchParams]);
   const [draftUrl, setDraftUrl] = useState(initialUrl);
   const [error, setError] = useState<string | null>(null);
@@ -72,7 +78,7 @@ function BriefingCreatePageContent() {
 
   const startSession = useCallback(
     async (rawUrl: string) => {
-      if (!accessToken || submitting) {
+      if (!accessToken || !userId || submitting) {
         return;
       }
 
@@ -88,12 +94,14 @@ function BriefingCreatePageContent() {
       setPhase("creating");
 
       try {
+        const requestScope = captureAuthenticatedRequestScope(userId);
         const api = createApiClient(accessToken);
         const { data, error: apiError } = await api.POST("/briefing-sessions", {
           body: {
             url: normalizedUrl
           }
         });
+        assertAuthenticatedRequestScopeCurrent(requestScope);
 
         if (apiError) {
           setPhase("error");
@@ -103,8 +111,8 @@ function BriefingCreatePageContent() {
 
         if (data?.session_id) {
           setPhase("opening");
-          cacheSessionSnapshot(data);
-          invalidateBriefingsCache();
+          cacheSessionSnapshot(userId, data);
+          invalidateBriefingsCache(userId);
           router.replace(`/app/briefings/sessions/${data.session_id}`);
           return;
         }
@@ -118,7 +126,7 @@ function BriefingCreatePageContent() {
         setSubmitting(false);
       }
     },
-    [accessToken, router, submitting]
+    [accessToken, router, submitting, userId]
   );
 
   useEffect(() => {

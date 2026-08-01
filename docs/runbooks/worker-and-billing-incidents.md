@@ -43,10 +43,14 @@ authorization headers, raw webhooks, transcripts, or briefing content.
 
 1. Check the bounded webhook counts and provider-event IDs.
 2. Check worker logs for `billing.maintenance.completed`.
+   A worker that logs `billing.maintenance.lease_not_acquired` skipped safely
+   because another worker owns the distributed maintenance pass.
 3. Inspect the corresponding `billing_orders` row and the latest
    `billing_webhook_events` row for that Polar order.
 4. Compare the local order state against the provider order in Polar.
    - If Polar already shows a refunded amount, the next maintenance pass should converge the local row.
+   - If Polar still shows `paid`, the maintenance pass reopens the pack through
+     the transactional refund command; do not flip the order or lot manually.
 
 ## Subscription state looks wrong
 
@@ -54,6 +58,8 @@ authorization headers, raw webhooks, transcripts, or briefing content.
 2. Check worker logs for `billing.maintenance.completed`.
 3. Compare the local entitlement state with the latest Polar subscription state.
 4. If webhook delivery was delayed or duplicated, rely on reconciliation rather than manual local edits.
+   Reconciliation is applied through the same provider timestamp fence and
+   resource lock as a normal webhook.
 
 ## Webhook replay
 
@@ -92,6 +98,8 @@ Use the existing worker recovery loop as the only repair path:
 1. Save a before snapshot.
 2. Run one intended worker for one stale-job sweep and one billing-maintenance
    interval.
+   Multiple worker replicas are safe, but only the current distributed lease
+   owner runs billing maintenance; the others skip that interval.
 3. Stop or leave that worker running normally; do not launch repeated manual
    maintenance loops.
 4. Save an after snapshot and compare counts and IDs.
@@ -133,6 +141,9 @@ Use the existing worker recovery loop as the only repair path:
   Its subscription, pack, and newly incurred debt components must add up to the
   job duration. Linked `usage_ledger` rows are unique per settlement and source.
 - Settlement is post-processing, as before: admission does not reserve credit.
+  Admission requires a positive balance and a known source duration must fit
+  the current balance. Debt is only a finalization safety buffer for balance
+  races or duration differences; it is not intentionally spendable usage.
   The command consumes subscription credit first, then eligible pack credit,
   then records uncovered duration as debt. Refund-pending packs remain excluded.
 - Credit-lot mutations, debt, the entitlement snapshot, settlement audit row,
