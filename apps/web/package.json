@@ -43,14 +43,14 @@
     "@axe-core/playwright": "4.12.1",
     "@playwright/test": "1.62.0",
     "@tailwindcss/postcss": "^4.3.3",
-    "@types/node": "25.6.0",
+    "@types/node": "24.13.3",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
     "@types/react-syntax-highlighter": "^15.5.13",
     "autoprefixer": "^10.5.4",
     "eslint": "^9.39.5",
-    "eslint-config-next": "16.1.6",
-    "postcss": "8.5.24",
+    "eslint-config-next": "16.2.12",
+    "postcss": "8.5.25",
     "tailwindcss": "^4.3.3",
     "typescript": "6.0.2"
   }
