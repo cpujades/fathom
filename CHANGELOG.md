@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.20.1](https://github.com/cpujades/fathom/compare/v0.20.0...v0.20.1) (2026-08-01)
+
+_Automated release from [#154](https://github.com/cpujades/fathom/pull/154) chore(deps): consolidate routine dependency updates_
+
+### Bug Fixes
+
+- fix(deps): restrict action updates to minor and patch (3e864f9)
+
+### Chores
+
+- chore(deps): consolidate routine dependency updates (325ff7a)
+
 ## [0.20.0](https://github.com/cpujades/fathom/compare/v0.19.1...v0.20.0) (2026-08-01)
 
 _Automated release from [#151](https://github.com/cpujades/fathom/pull/151) feat: harden Talven for launch readiness_
