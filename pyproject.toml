@@ -28,7 +28,7 @@ dev = [
   # Lint/format
   "ruff==0.16.0",
   # Type-checking
-  "ty==0.0.8",
+  "ty==0.0.64",
   # Git hooks runner
   "pre-commit==4.6.1",
 ]
