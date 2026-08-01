@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.20.2](https://github.com/cpujades/fathom/compare/v0.20.1...v0.20.2) (2026-08-01)
+
+_Automated release from [#160](https://github.com/cpujades/fathom/pull/160) chore(deps): align frontend tooling_
+
+### Chores
+
+- chore(deps): align frontend tooling (983c5a7)
+
 ## [0.20.1](https://github.com/cpujades/fathom/compare/v0.20.0...v0.20.1) (2026-08-01)
 
 _Automated release from [#154](https://github.com/cpujades/fathom/pull/154) chore(deps): consolidate routine dependency updates_
