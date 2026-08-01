@@ -463,8 +463,8 @@ select public.apply_polar_webhook_event(
     'user_id', '91000000-0000-0000-0000-000000000004',
     'product_id', 'prod_subscription_replay',
     'status', 'active',
-    'period_start', '2026-07-01T00:00:00+00:00',
-    'period_end', '2026-08-01T00:00:00+00:00'
+    'period_start', '2099-07-01T00:00:00+00:00',
+    'period_end', '2099-08-01T00:00:00+00:00'
   ),
   600
 ) as result;
@@ -488,7 +488,7 @@ select is(
     select status
     from public.credit_lots
     where lot_type = 'subscription_cycle'
-      and source_key = 'sub_replay_001:2026-07-01T00:00:00+00:00'
+      and source_key = 'sub_replay_001:2099-07-01T00:00:00+00:00'
   ),
   'active',
   'active subscription owns one current cycle lot'
@@ -506,8 +506,8 @@ select public.apply_polar_webhook_event(
     'user_id', '91000000-0000-0000-0000-000000000004',
     'product_id', 'prod_subscription_replay',
     'status', 'revoked',
-    'period_start', '2026-07-01T00:00:00+00:00',
-    'period_end', '2026-08-01T00:00:00+00:00'
+    'period_start', '2099-07-01T00:00:00+00:00',
+    'period_end', '2099-08-01T00:00:00+00:00'
   ),
   600
 ) as result;
@@ -539,8 +539,8 @@ select public.apply_polar_webhook_event(
     'user_id', '91000000-0000-0000-0000-000000000004',
     'product_id', 'prod_subscription_replay',
     'status', 'revoked',
-    'period_start', '2026-07-01T00:00:00+00:00',
-    'period_end', '2026-08-01T00:00:00+00:00'
+    'period_start', '2099-07-01T00:00:00+00:00',
+    'period_end', '2099-08-01T00:00:00+00:00'
   ),
   600
 ) as result;
@@ -564,7 +564,7 @@ select is(
     select status
     from public.credit_lots
     where lot_type = 'subscription_cycle'
-      and source_key = 'sub_replay_001:2026-07-01T00:00:00+00:00'
+      and source_key = 'sub_replay_001:2099-07-01T00:00:00+00:00'
   ),
   'expired',
   'revoked subscription expires the current cycle lot'
@@ -582,8 +582,8 @@ select public.apply_polar_webhook_event(
     'user_id', '91000000-0000-0000-0000-000000000004',
     'product_id', 'prod_subscription_replay',
     'status', 'active',
-    'period_start', '2026-07-01T00:00:00+00:00',
-    'period_end', '2026-08-01T00:00:00+00:00'
+    'period_start', '2099-07-01T00:00:00+00:00',
+    'period_end', '2099-08-01T00:00:00+00:00'
   ),
   600
 ) as result;
