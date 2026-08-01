@@ -15,6 +15,8 @@ from fathom.core.config import (
 from fathom.orchestration.runner import (
     _run_job_with_heartbeat,
     _run_loop,
+    _run_scheduled_maintenance,
+    _shutdown_billing_maintenance_task,
     _shutdown_running_tasks,
     _wait_for_job_notification,
 )
@@ -135,6 +137,84 @@ class WorkerShutdownTests(unittest.IsolatedAsyncioTestCase):
             await _run_loop(settings, shutdown_event=shutdown_event)
 
         claim.assert_not_awaited()
+
+    async def test_billing_maintenance_runs_without_delaying_worker_loop(self) -> None:
+        started = asyncio.Event()
+        release = asyncio.Event()
+
+        async def run_maintenance(*_args: object, **_kwargs: object) -> dict[str, int]:
+            started.set()
+            await release.wait()
+            return {"maintenance_skipped": 0}
+
+        settings = cast(Settings, SimpleNamespace())
+        admin_client = cast(AsyncClient, object())
+        with (
+            patch("fathom.orchestration.runner.time.monotonic", return_value=100.0),
+            patch("fathom.orchestration.runner.run_billing_maintenance", side_effect=run_maintenance),
+        ):
+            _, last_billing_at, task = await _run_scheduled_maintenance(
+                admin_client,
+                settings=settings,
+                last_sweep_at=100.0,
+                last_billing_maintenance_at=0.0,
+                billing_maintenance_task=None,
+            )
+
+        await started.wait()
+        self.assertEqual(last_billing_at, 100.0)
+        self.assertIsNotNone(task)
+        assert task is not None
+        self.assertFalse(task.done())
+
+        release.set()
+        await task
+
+    async def test_billing_maintenance_passes_never_overlap(self) -> None:
+        release = asyncio.Event()
+
+        async def existing_maintenance() -> dict[str, int]:
+            await release.wait()
+            return {"maintenance_skipped": 0}
+
+        existing_task = asyncio.create_task(existing_maintenance())
+        settings = cast(Settings, SimpleNamespace())
+        admin_client = cast(AsyncClient, object())
+        with (
+            patch("fathom.orchestration.runner.time.monotonic", return_value=100.0),
+            patch("fathom.orchestration.runner.run_billing_maintenance", AsyncMock()) as run_maintenance,
+        ):
+            _, last_billing_at, returned_task = await _run_scheduled_maintenance(
+                admin_client,
+                settings=settings,
+                last_sweep_at=100.0,
+                last_billing_maintenance_at=0.0,
+                billing_maintenance_task=existing_task,
+            )
+
+        self.assertEqual(last_billing_at, 0.0)
+        self.assertIs(returned_task, existing_task)
+        run_maintenance.assert_not_called()
+
+        release.set()
+        await existing_task
+
+    async def test_shutdown_cancels_billing_maintenance(self) -> None:
+        cancelled = asyncio.Event()
+
+        async def blocked_maintenance() -> dict[str, int]:
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cancelled.set()
+
+        task = asyncio.create_task(blocked_maintenance())
+        await asyncio.sleep(0)
+
+        await _shutdown_billing_maintenance_task(task)
+
+        self.assertTrue(task.cancelled())
+        self.assertTrue(cancelled.is_set())
 
 
 class WorkerShutdownSettingsTests(unittest.TestCase):

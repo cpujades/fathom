@@ -14,13 +14,13 @@ from fathom.crud.supabase.billing import (
     apply_polar_webhook_transaction,
     claim_billing_maintenance_lease,
     get_billing_webhook_diagnostics,
-    list_latest_subscription_orders_for_users,
     list_refund_pending_pack_orders,
     list_subscription_entitlements_for_reconciliation,
     reclaim_stale_webhook_processing,
     release_billing_maintenance_lease,
     renew_billing_maintenance_lease,
     reopen_pack_refund,
+    schedule_subscription_reconciliation,
 )
 from fathom.crud.supabase.jobs import requeue_unsettled_jobs
 from fathom.services import polar
@@ -30,8 +30,10 @@ logger = logging.getLogger(__name__)
 WEBHOOK_PROCESSING_STALE_MINUTES = 5
 REFUND_PENDING_RECONCILIATION_GRACE_SECONDS = 60
 REFUND_PENDING_RECONCILIATION_LIMIT = 100
-SUBSCRIPTION_RECONCILIATION_GRACE_SECONDS = 300
-SUBSCRIPTION_RECONCILIATION_LIMIT = 100
+SUBSCRIPTION_RECONCILIATION_INTERVAL = timedelta(hours=6)
+SUBSCRIPTION_RECONCILIATION_RETRY_DELAY = timedelta(minutes=15)
+SUBSCRIPTION_RECONCILIATION_LIMIT = 20
+TERMINAL_SUBSCRIPTION_STATUSES = frozenset({"revoked", "ended", "inactive"})
 BILLING_MAINTENANCE_LEASE_NAME = "billing-recovery"
 BILLING_MAINTENANCE_LEASE_SECONDS = 120
 BILLING_MAINTENANCE_HEARTBEAT_SECONDS = 30
@@ -234,14 +236,11 @@ async def reconcile_subscription_entitlements(
     *,
     settings: Settings,
 ) -> int:
+    now = datetime.now(UTC)
     entitlements = await list_subscription_entitlements_for_reconciliation(
         admin_client,
-        updated_before=datetime.now(UTC) - timedelta(seconds=SUBSCRIPTION_RECONCILIATION_GRACE_SECONDS),
+        due_at=now,
         limit=SUBSCRIPTION_RECONCILIATION_LIMIT,
-    )
-    latest_orders_by_user = await list_latest_subscription_orders_for_users(
-        admin_client,
-        user_ids={str(entitlement.get("user_id") or "") for entitlement in entitlements if entitlement.get("user_id")},
     )
 
     reconciled = 0
@@ -250,14 +249,14 @@ async def reconcile_subscription_entitlements(
         if not user_id:
             continue
 
-        latest_order = latest_orders_by_user.get(user_id)
-        subscription_id = as_str(latest_order.get("polar_subscription_id")) if latest_order else None
+        subscription_id = as_str(entitlement.get("polar_subscription_id"))
         if not subscription_id:
             continue
 
         try:
             provider_subscription = await polar.get_subscription(settings, subscription_id=subscription_id)
         except Exception:
+            await _schedule_subscription_reconciliation_retry(admin_client, user_id=user_id)
             logger.warning(
                 "billing.subscription.reconcile_failed",
                 exc_info=True,
@@ -267,6 +266,7 @@ async def reconcile_subscription_entitlements(
 
         event_at = extract_provider_event_time(provider_subscription)
         if event_at is None:
+            await _schedule_subscription_reconciliation_retry(admin_client, user_id=user_id)
             logger.warning(
                 "billing.subscription.reconcile_missing_provider_timestamp",
                 extra={"user_id": user_id, "polar_subscription_id": subscription_id},
@@ -277,6 +277,7 @@ async def reconcile_subscription_entitlements(
             provider_subscription,
         )
         if resource_type != "subscription" or not resource_id:
+            await _schedule_subscription_reconciliation_retry(admin_client, user_id=user_id)
             logger.warning(
                 "billing.subscription.reconcile_invalid_provider_state",
                 extra={"user_id": user_id, "polar_subscription_id": subscription_id},
@@ -293,8 +294,20 @@ async def reconcile_subscription_entitlements(
             debt_cap_seconds=settings.billing_debt_cap_seconds,
         )
         if str(result.get("resolution_type") or "") in {"processed", "already_processed"}:
+            provider_status = as_str(payload.get("status")) or "unknown"
+            next_reconcile_at = (
+                None
+                if provider_status in TERMINAL_SUBSCRIPTION_STATUSES
+                else datetime.now(UTC) + SUBSCRIPTION_RECONCILIATION_INTERVAL
+            )
+            await schedule_subscription_reconciliation(
+                admin_client,
+                user_id=user_id,
+                next_reconcile_at=next_reconcile_at,
+            )
             reconciled += 1
         else:
+            await _schedule_subscription_reconciliation_retry(admin_client, user_id=user_id)
             logger.warning(
                 "billing.subscription.reconcile_transaction_unresolved",
                 extra={
@@ -306,6 +319,14 @@ async def reconcile_subscription_entitlements(
             )
 
     return reconciled
+
+
+async def _schedule_subscription_reconciliation_retry(admin_client: Any, *, user_id: str) -> None:
+    await schedule_subscription_reconciliation(
+        admin_client,
+        user_id=user_id,
+        next_reconcile_at=datetime.now(UTC) + SUBSCRIPTION_RECONCILIATION_RETRY_DELAY,
+    )
 
 
 def _reconciliation_event_id(resource_type: str, resource_id: str, event_at: datetime) -> str:

@@ -44,7 +44,7 @@ unrelated mutable data into one large row.
 | `summaries` | Reusable briefing content and its pending/ready/failed generation ownership |
 | `job_events` | Durable progress history for disconnect and replay recovery |
 | `plans` | Subscription and pack product definitions |
-| `entitlements` | Current per-user subscription, balance, debt, and blocking snapshot |
+| `entitlements` | Current per-user subscription, balance, debt, blocking snapshot, and next targeted provider-audit time |
 | `credit_lots` | Individual subscription-cycle and pack grants, consumption, expiry, and refund state |
 | `usage_ledger` | Immutable credit and debt movements for audit and reconciliation |
 | `usage_settlements` | The unique, atomic final charge for one successful job |

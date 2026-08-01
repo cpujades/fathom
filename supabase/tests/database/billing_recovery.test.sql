@@ -2,7 +2,26 @@ begin;
 
 set local search_path = extensions, public, pg_catalog;
 
-select plan(51);
+select plan(56);
+
+select has_column(
+  'public',
+  'entitlements',
+  'next_subscription_reconcile_at',
+  'subscriptions persist their next provider audit time'
+);
+select has_index(
+  'public',
+  'entitlements',
+  'entitlements_subscription_reconcile_due_idx',
+  'due subscription audits have a bounded lookup index'
+);
+select has_trigger(
+  'public',
+  'entitlements',
+  'schedule_subscription_reconciliation',
+  'subscription state changes schedule or disable provider audits'
+);
 
 select has_table(
   'public',
@@ -248,6 +267,34 @@ select is(
 
 insert into public.entitlements (user_id)
 values ('12000000-0000-0000-0000-000000000001');
+
+update public.entitlements
+set polar_subscription_id = 'sub_reconcile_schedule_001',
+    subscription_status = 'active'
+where user_id = '12000000-0000-0000-0000-000000000001';
+
+select ok(
+  (
+    select next_subscription_reconcile_at
+    from public.entitlements
+    where user_id = '12000000-0000-0000-0000-000000000001'
+  ) >= pg_catalog.now() + interval '5 hours 59 minutes',
+  'active subscription changes schedule a delayed provider audit'
+);
+
+update public.entitlements
+set subscription_status = 'revoked'
+where user_id = '12000000-0000-0000-0000-000000000001';
+
+select is(
+  (
+    select next_subscription_reconcile_at
+    from public.entitlements
+    where user_id = '12000000-0000-0000-0000-000000000001'
+  ),
+  null::timestamptz,
+  'terminal subscriptions disable future provider polling'
+);
 
 insert into public.billing_orders (
   polar_order_id,

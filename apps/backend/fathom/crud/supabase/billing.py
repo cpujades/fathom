@@ -30,7 +30,7 @@ ENTITLEMENT_SELECT_FIELDS = (
     "user_id,subscription_plan_id,subscription_status,period_start,period_end,"
     "subscription_cycle_grant_seconds,subscription_rollover_seconds,subscription_available_seconds,"
     "pack_available_seconds,pack_expires_at,debt_seconds,is_blocked,last_balance_sync_at,"
-    "polar_subscription_id,provider_event_at,provider_event_id"
+    "polar_subscription_id,provider_event_at,provider_event_id,next_subscription_reconcile_at"
 )
 
 PACK_REFUND_RESOLUTIONS = {
@@ -583,16 +583,17 @@ async def list_refund_pending_pack_orders(
 async def list_subscription_entitlements_for_reconciliation(
     client: AsyncClient,
     *,
-    updated_before: datetime,
+    due_at: datetime,
     limit: int,
 ) -> list[dict[str, Any]]:
     try:
         response = (
             await client.table("entitlements")
             .select(ENTITLEMENT_SELECT_FIELDS)
-            .not_.is_("subscription_plan_id", "null")
-            .lt("last_balance_sync_at", updated_before.isoformat())
-            .order("last_balance_sync_at", desc=False)
+            .not_.is_("polar_subscription_id", "null")
+            .not_.is_("next_subscription_reconcile_at", "null")
+            .lte("next_subscription_reconcile_at", due_at.isoformat())
+            .order("next_subscription_reconcile_at", desc=False)
             .limit(limit)
             .execute()
         )
@@ -602,35 +603,27 @@ async def list_subscription_entitlements_for_reconciliation(
     return [cast(dict[str, Any], row) for row in (response.data or []) if isinstance(row, dict)]
 
 
-async def list_latest_subscription_orders_for_users(
+async def schedule_subscription_reconciliation(
     client: AsyncClient,
     *,
-    user_ids: set[str],
-) -> dict[str, dict[str, Any]]:
-    if not user_ids:
-        return {}
-
+    user_id: str,
+    next_reconcile_at: datetime | None,
+) -> None:
     try:
-        response = (
-            await client.table("billing_orders")
-            .select(ORDER_SELECT_FIELDS)
-            .in_("user_id", list(user_ids))
-            .not_.is_("polar_subscription_id", "null")
-            .neq("plan_type", "pack")
-            .order("created_at", desc=True)
+        await (
+            client.table("entitlements")
+            .update(
+                {
+                    "next_subscription_reconcile_at": (
+                        next_reconcile_at.isoformat() if next_reconcile_at is not None else None
+                    )
+                }
+            )
+            .eq("user_id", user_id)
             .execute()
         )
     except APIError as exc:
-        raise_for_postgrest_error(exc, "Failed to list latest subscription orders for users.")
-
-    latest_by_user: dict[str, dict[str, Any]] = {}
-    for row in response.data or []:
-        if not isinstance(row, dict):
-            continue
-        user_id = str(row.get("user_id") or "")
-        if user_id and user_id not in latest_by_user:
-            latest_by_user[user_id] = cast(dict[str, Any], row)
-    return latest_by_user
+        raise_for_postgrest_error(exc, "Failed to schedule subscription reconciliation.")
 
 
 async def fetch_pack_lots_by_order_ids(

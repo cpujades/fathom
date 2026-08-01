@@ -89,7 +89,9 @@ production must configure a positive value.
 Polar normally tells Talven about billing changes using webhooks. Webhooks can
 arrive late, arrive twice, or be missed during an outage. The existing worker
 loop schedules a billing-maintenance pass every 60 seconds; this is not a
-separate dedicated billing process. The pass checks for:
+separate dedicated billing process. The pass runs as one supervised background
+task, so a slow Polar response does not pause normal briefing job claims. The
+pass checks for:
 
 - unfinished webhook processing;
 - refunds that stayed pending;
@@ -100,6 +102,20 @@ Ordinary queued/running job recovery has its own worker lifecycle and stale-job
 sweep. The billing-maintenance pass does not poll or reprocess every normal
 briefing once per minute.
 
+The 60-second tick is only a cheap opportunity to find work that is due. It
+does not mean every subscription is sent to Polar once per minute:
+
+- webhooks remain the immediate, event-driven path;
+- a healthy non-terminal subscription is audited at most once every six hours;
+- a failed provider audit is eligible again after 15 minutes, not every minute;
+- each pass claims at most 20 due subscriptions; and
+- revoked, ended, and inactive subscriptions are removed from provider polling.
+
+The next audit time is stored in Postgres. It survives restarts, is shared by
+all worker replicas, and prevents an old or newly started worker from forgetting
+the delay. This is intentionally a targeted safety net rather than continuous
+polling of healthy accounts.
+
 Example: Polar completes a refund, but Talven is restarting when the webhook
 arrives. The pack remains `refund_pending`. A later maintenance pass asks Polar
 for the order, sees the refunded amount, and safely converges the local record.
@@ -107,7 +123,9 @@ for the order, sees the refunded amount, and safely converges the local record.
 Several workers may run, but a 120-second database lease lets only one perform
 this maintenance at a time. It renews every 30 seconds. If that worker crashes,
 another worker may continue after expiry. This avoids two workers applying the
-same repair concurrently.
+same repair concurrently. The in-process task is also single-flight: a new pass
+is not started while the previous one is still running, and shutdown cancels it
+cleanly before the shared database client closes.
 
 ## Refund state and spendable balance
 

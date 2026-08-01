@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import unittest
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import AsyncMock, patch
@@ -291,11 +291,15 @@ class BillingRecoveryTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch(
                 "fathom.application.billing.recovery.list_subscription_entitlements_for_reconciliation",
-                AsyncMock(return_value=[{"user_id": "user_123", "subscription_status": "active"}]),
-            ),
-            patch(
-                "fathom.application.billing.recovery.list_latest_subscription_orders_for_users",
-                AsyncMock(return_value={"user_123": {"polar_subscription_id": "sub_123"}}),
+                AsyncMock(
+                    return_value=[
+                        {
+                            "user_id": "user_123",
+                            "subscription_status": "active",
+                            "polar_subscription_id": "sub_123",
+                        }
+                    ]
+                ),
             ),
             patch(
                 "fathom.application.billing.recovery.polar.get_subscription",
@@ -305,7 +309,12 @@ class BillingRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 "fathom.application.billing.recovery.apply_polar_webhook_transaction",
                 AsyncMock(return_value={"resolution_type": "processed", "outcome": "applied"}),
             ) as apply_transaction,
+            patch(
+                "fathom.application.billing.recovery.schedule_subscription_reconciliation",
+                AsyncMock(),
+            ) as schedule_reconciliation,
         ):
+            started_at = datetime.now(UTC)
             reconciled = await reconcile_subscription_entitlements(
                 self.admin_client,
                 settings=self.settings,
@@ -320,16 +329,17 @@ class BillingRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(kwargs["resource_id"], "sub_123")
         self.assertEqual(kwargs["payload"]["status"], "past_due")
         self.assertTrue(kwargs["event_id"].startswith("reconcile:subscription:sub_123:"))
+        schedule_reconciliation.assert_awaited_once()
+        assert schedule_reconciliation.await_args is not None
+        schedule_kwargs = schedule_reconciliation.await_args.kwargs
+        self.assertEqual(schedule_kwargs["user_id"], "user_123")
+        self.assertGreaterEqual(schedule_kwargs["next_reconcile_at"], started_at + timedelta(hours=6))
 
     async def test_subscription_without_provider_order_id_is_skipped(self) -> None:
         with (
             patch(
                 "fathom.application.billing.recovery.list_subscription_entitlements_for_reconciliation",
                 AsyncMock(return_value=[{"user_id": "user_123", "subscription_status": "active"}]),
-            ),
-            patch(
-                "fathom.application.billing.recovery.list_latest_subscription_orders_for_users",
-                AsyncMock(return_value={}),
             ),
             patch("fathom.application.billing.recovery.polar.get_subscription", AsyncMock()) as get_subscription,
         ):
@@ -340,3 +350,75 @@ class BillingRecoveryTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(reconciled, 0)
         get_subscription.assert_not_awaited()
+
+    async def test_subscription_provider_failure_is_retried_later(self) -> None:
+        with (
+            patch(
+                "fathom.application.billing.recovery.list_subscription_entitlements_for_reconciliation",
+                AsyncMock(return_value=[{"user_id": "user_123", "polar_subscription_id": "sub_123"}]),
+            ),
+            patch(
+                "fathom.application.billing.recovery.polar.get_subscription",
+                AsyncMock(side_effect=ExternalServiceError("Polar unavailable")),
+            ),
+            patch(
+                "fathom.application.billing.recovery.schedule_subscription_reconciliation",
+                AsyncMock(),
+            ) as schedule_reconciliation,
+            patch(
+                "fathom.application.billing.recovery.apply_polar_webhook_transaction",
+                AsyncMock(),
+            ) as apply_transaction,
+        ):
+            started_at = datetime.now(UTC)
+            reconciled = await reconcile_subscription_entitlements(
+                self.admin_client,
+                settings=self.settings,
+            )
+
+        self.assertEqual(reconciled, 0)
+        apply_transaction.assert_not_awaited()
+        schedule_reconciliation.assert_awaited_once()
+        assert schedule_reconciliation.await_args is not None
+        next_reconcile_at = schedule_reconciliation.await_args.kwargs["next_reconcile_at"]
+        self.assertGreaterEqual(next_reconcile_at, started_at + timedelta(minutes=15))
+
+    async def test_terminal_subscription_disables_future_provider_polling(self) -> None:
+        provider_subscription = {
+            "id": "sub_123",
+            "customer_external_id": "user_123",
+            "product_id": "prod_123",
+            "status": "revoked",
+            "current_period_start": "2026-04-01T00:00:00+00:00",
+            "current_period_end": "2026-05-01T00:00:00+00:00",
+            "modified_at": "2026-05-02T00:00:00+00:00",
+        }
+        with (
+            patch(
+                "fathom.application.billing.recovery.list_subscription_entitlements_for_reconciliation",
+                AsyncMock(return_value=[{"user_id": "user_123", "polar_subscription_id": "sub_123"}]),
+            ),
+            patch(
+                "fathom.application.billing.recovery.polar.get_subscription",
+                AsyncMock(return_value=provider_subscription),
+            ),
+            patch(
+                "fathom.application.billing.recovery.apply_polar_webhook_transaction",
+                AsyncMock(return_value={"resolution_type": "processed", "outcome": "applied"}),
+            ),
+            patch(
+                "fathom.application.billing.recovery.schedule_subscription_reconciliation",
+                AsyncMock(),
+            ) as schedule_reconciliation,
+        ):
+            reconciled = await reconcile_subscription_entitlements(
+                self.admin_client,
+                settings=self.settings,
+            )
+
+        self.assertEqual(reconciled, 1)
+        schedule_reconciliation.assert_awaited_once_with(
+            self.admin_client,
+            user_id="user_123",
+            next_reconcile_at=None,
+        )
