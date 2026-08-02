@@ -9,6 +9,10 @@ type BriefingSessionState = BriefingSessionResponse["state"];
 type BriefingSessionResolution = BriefingSessionResponse["resolution_type"];
 type BriefingResponse = components["schemas"]["BriefingResponse"];
 type BriefingPdfResponse = components["schemas"]["BriefingPdfResponse"];
+type BriefingListItem = components["schemas"]["BriefingListItem"];
+type BriefingListResponse = components["schemas"]["BriefingListResponse"];
+type BriefingListSort = BriefingListResponse["sort"];
+type BriefingSourceFilter = BriefingListResponse["source_type"];
 type PlanResponse = components["schemas"]["PlanResponse"];
 type UsageOverviewResponse = components["schemas"]["UsageOverviewResponse"];
 type UsageHistoryEntry = components["schemas"]["UsageHistoryEntry"];
@@ -29,6 +33,10 @@ type ApiErrorBody = ErrorResponse | HTTPValidationError;
 export type {
   ApiErrorBody,
   BriefingPdfResponse,
+  BriefingListItem,
+  BriefingListResponse,
+  BriefingListSort,
+  BriefingSourceFilter,
   BriefingResponse,
   BriefingSessionCreateRequest,
   BriefingSessionResolution,

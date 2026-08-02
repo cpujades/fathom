@@ -6,10 +6,11 @@ from typing import cast
 from unittest.mock import AsyncMock, patch
 from uuid import UUID
 
-from starlette.requests import Request
-
-from fathom.api.deps.auth import AuthContext
-from fathom.application.briefings.sessions import _session_event_stream, stream_briefing_session_events
+from fathom.application.briefings.sessions.streaming import (
+    session_event_stream as _session_event_stream,
+)
+from fathom.application.briefings.sessions.streaming import stream_briefing_session_events
+from fathom.application.identity import AuthenticatedUser
 from fathom.core.config import Settings
 from fathom.core.errors import RateLimitError
 from fathom.schemas.briefing_sessions import BriefingSessionResponse
@@ -40,7 +41,7 @@ def _snapshot(*, state: str, markdown: str | None = None) -> BriefingSessionResp
 
 class SessionEventStreamTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
-        self.auth = AuthContext(access_token="access-token", user_id="user-1")
+        self.auth = AuthenticatedUser(access_token="access-token", user_id="user-1")
         self.settings = cast(
             Settings,
             SimpleNamespace(
@@ -60,27 +61,13 @@ class SessionEventStreamTests(unittest.IsolatedAsyncioTestCase):
                 sse_stream_lease_seconds=90,
             ),
         )
-        request = cast(
-            Request,
-            SimpleNamespace(
-                app=SimpleNamespace(
-                    state=SimpleNamespace(
-                        trust_proxy_headers=False,
-                        trusted_proxy_networks=(),
-                    )
-                ),
-                client=SimpleNamespace(host="203.0.113.4"),
-                headers={},
-            ),
-        )
-
         with (
             patch(
-                "fathom.application.briefings.sessions.create_supabase_admin_client",
+                "fathom.application.briefings.sessions.streaming.create_supabase_admin_client",
                 AsyncMock(return_value=self.admin_client),
             ),
             patch(
-                "fathom.application.briefings.sessions.claim_stream_lease",
+                "fathom.application.briefings.sessions.streaming.claim_stream_lease",
                 AsyncMock(return_value=None),
             ) as claim,
             self.assertRaisesRegex(RateLimitError, "Too many active briefing streams"),
@@ -89,7 +76,9 @@ class SessionEventStreamTests(unittest.IsolatedAsyncioTestCase):
                 session_id=SESSION_ID,
                 auth=self.auth,
                 settings=settings,
-                request=request,
+                client_subject="ip:203.0.113.4",
+                last_event_id=None,
+                is_disconnected=AsyncMock(return_value=False),
             )
 
         claim.assert_awaited_once_with(
@@ -128,24 +117,24 @@ class SessionEventStreamTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch(
-                "fathom.application.briefings.sessions.create_supabase_user_client",
+                "fathom.application.briefings.sessions.streaming.create_supabase_user_client",
                 AsyncMock(return_value=self.user_client),
             ),
             patch(
-                "fathom.application.briefings.sessions.create_supabase_admin_client",
+                "fathom.application.briefings.sessions.streaming.create_supabase_admin_client",
                 AsyncMock(return_value=self.admin_client),
             ),
-            patch("fathom.application.briefings.sessions.fetch_job", AsyncMock(return_value=job)),
+            patch("fathom.application.briefings.sessions.streaming.fetch_job", AsyncMock(return_value=job)),
             patch(
-                "fathom.application.briefings.sessions.fetch_latest_job_event_sequence",
+                "fathom.application.briefings.sessions.streaming.fetch_latest_job_event_sequence",
                 AsyncMock(return_value=10),
             ),
             patch(
-                "fathom.application.briefings.sessions.list_job_events_after",
+                "fathom.application.briefings.sessions.streaming.list_job_events_after",
                 AsyncMock(return_value=replay),
             ) as list_after,
             patch(
-                "fathom.application.briefings.sessions._build_session_snapshot",
+                "fathom.application.briefings.sessions.streaming.build_session_snapshot",
                 AsyncMock(return_value=_snapshot(state="transcribing")),
             ),
         ):
@@ -155,7 +144,8 @@ class SessionEventStreamTests(unittest.IsolatedAsyncioTestCase):
                     session_id=SESSION_ID,
                     auth=self.auth,
                     settings=self.settings,
-                    request=cast(Request, request),
+                    last_event_id=request.headers.get("last-event-id"),
+                    is_disconnected=request.is_disconnected,
                 )
             ]
 
@@ -179,24 +169,24 @@ class SessionEventStreamTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch(
-                "fathom.application.briefings.sessions.create_supabase_user_client",
+                "fathom.application.briefings.sessions.streaming.create_supabase_user_client",
                 AsyncMock(return_value=self.user_client),
             ),
             patch(
-                "fathom.application.briefings.sessions.create_supabase_admin_client",
+                "fathom.application.briefings.sessions.streaming.create_supabase_admin_client",
                 AsyncMock(return_value=self.admin_client),
             ),
-            patch("fathom.application.briefings.sessions.fetch_job", AsyncMock(return_value=job)),
+            patch("fathom.application.briefings.sessions.streaming.fetch_job", AsyncMock(return_value=job)),
             patch(
-                "fathom.application.briefings.sessions.fetch_latest_job_event_sequence",
+                "fathom.application.briefings.sessions.streaming.fetch_latest_job_event_sequence",
                 AsyncMock(return_value=37),
             ),
             patch(
-                "fathom.application.briefings.sessions.list_job_events_after",
+                "fathom.application.briefings.sessions.streaming.list_job_events_after",
                 AsyncMock(),
             ) as list_after,
             patch(
-                "fathom.application.briefings.sessions._build_session_snapshot",
+                "fathom.application.briefings.sessions.streaming.build_session_snapshot",
                 AsyncMock(return_value=_snapshot(state="transcribing")),
             ),
         ):
@@ -206,7 +196,8 @@ class SessionEventStreamTests(unittest.IsolatedAsyncioTestCase):
                     session_id=SESSION_ID,
                     auth=self.auth,
                     settings=self.settings,
-                    request=cast(Request, request),
+                    last_event_id=request.headers.get("last-event-id"),
+                    is_disconnected=request.is_disconnected,
                 )
             ]
 
@@ -225,23 +216,23 @@ class SessionEventStreamTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch(
-                "fathom.application.briefings.sessions.create_supabase_user_client",
+                "fathom.application.briefings.sessions.streaming.create_supabase_user_client",
                 AsyncMock(return_value=self.user_client),
             ),
             patch(
-                "fathom.application.briefings.sessions.create_supabase_admin_client",
+                "fathom.application.briefings.sessions.streaming.create_supabase_admin_client",
                 AsyncMock(return_value=self.admin_client),
             ),
             patch(
-                "fathom.application.briefings.sessions.fetch_job",
+                "fathom.application.briefings.sessions.streaming.fetch_job",
                 AsyncMock(side_effect=[active_job, ready_job]),
             ),
             patch(
-                "fathom.application.briefings.sessions.fetch_latest_job_event_sequence",
+                "fathom.application.briefings.sessions.streaming.fetch_latest_job_event_sequence",
                 AsyncMock(side_effect=[40, 41]),
             ),
             patch(
-                "fathom.application.briefings.sessions.list_job_events_after",
+                "fathom.application.briefings.sessions.streaming.list_job_events_after",
                 AsyncMock(
                     return_value=[
                         {
@@ -254,7 +245,7 @@ class SessionEventStreamTests(unittest.IsolatedAsyncioTestCase):
                 ),
             ),
             patch(
-                "fathom.application.briefings.sessions._build_session_snapshot",
+                "fathom.application.briefings.sessions.streaming.build_session_snapshot",
                 AsyncMock(
                     side_effect=[
                         _snapshot(state="transcribing"),
@@ -262,7 +253,7 @@ class SessionEventStreamTests(unittest.IsolatedAsyncioTestCase):
                     ]
                 ),
             ),
-            patch("fathom.application.briefings.sessions.asyncio.sleep", AsyncMock()),
+            patch("fathom.application.briefings.sessions.streaming.asyncio.sleep", AsyncMock()),
         ):
             chunks = [
                 chunk
@@ -270,7 +261,8 @@ class SessionEventStreamTests(unittest.IsolatedAsyncioTestCase):
                     session_id=SESSION_ID,
                     auth=self.auth,
                     settings=self.settings,
-                    request=cast(Request, request),
+                    last_event_id=request.headers.get("last-event-id"),
+                    is_disconnected=request.is_disconnected,
                 )
             ]
 
@@ -292,24 +284,24 @@ class SessionEventStreamTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch(
-                "fathom.application.briefings.sessions.create_supabase_user_client",
+                "fathom.application.briefings.sessions.streaming.create_supabase_user_client",
                 AsyncMock(return_value=self.user_client),
             ),
             patch(
-                "fathom.application.briefings.sessions.create_supabase_admin_client",
+                "fathom.application.briefings.sessions.streaming.create_supabase_admin_client",
                 AsyncMock(return_value=self.admin_client),
             ),
-            patch("fathom.application.briefings.sessions.fetch_job", AsyncMock(return_value=ready_job)),
+            patch("fathom.application.briefings.sessions.streaming.fetch_job", AsyncMock(return_value=ready_job)),
             patch(
-                "fathom.application.briefings.sessions.fetch_latest_job_event_sequence",
+                "fathom.application.briefings.sessions.streaming.fetch_latest_job_event_sequence",
                 AsyncMock(return_value=52),
             ),
             patch(
-                "fathom.application.briefings.sessions.list_job_events_after",
+                "fathom.application.briefings.sessions.streaming.list_job_events_after",
                 AsyncMock(),
             ) as list_after,
             patch(
-                "fathom.application.briefings.sessions._build_session_snapshot",
+                "fathom.application.briefings.sessions.streaming.build_session_snapshot",
                 AsyncMock(return_value=_snapshot(state="ready", markdown="# Complete")),
             ),
         ):
@@ -319,7 +311,8 @@ class SessionEventStreamTests(unittest.IsolatedAsyncioTestCase):
                     session_id=SESSION_ID,
                     auth=self.auth,
                     settings=self.settings,
-                    request=cast(Request, request),
+                    last_event_id=request.headers.get("last-event-id"),
+                    is_disconnected=request.is_disconnected,
                 )
             ]
 

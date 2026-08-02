@@ -3,6 +3,22 @@
 These pages describe the product as it behaves now. Start here after time away
 from the repository:
 
+- [Local development from a fresh clone](./getting-started/local-development.md):
+  prerequisites, local Supabase, environment mapping, plan provisioning, Auth,
+  readiness, and the first briefing journey.
+- [Environment configuration](./reference/environment.md): the personal
+  environment model, localhost convention, every runtime variable, and the
+  limits of local code against hosted staging or production.
+- [Repository and code map](./architecture/repository-and-code-map.md): why this
+  is one monorepo, what `apps` and `packages` mean, root-file responsibilities,
+  and where backend and frontend code belongs.
+- [API contract and client generation](./architecture/api-contract.md): the
+  generated REST client, CI drift checks, and runtime-validated SSE events.
+- [Frontend, authentication, and user flows](./architecture/frontend-auth-and-user-flows.md):
+  browser routes, safe redirects, session ownership, briefing creation,
+  streaming, library, billing, and account-scoped caches.
+- [HTTP API reference](./reference/http-api.md): authentication, endpoint
+  inventory, error contract, rate-limit pointers, and example requests.
 - [System and job lifecycle](./architecture/system-and-job-lifecycle.md):
   services, request flow, database queue, workers, leases, retries, shutdown,
   events, and recovery.
@@ -52,9 +68,11 @@ rehearsal.
 ## Where checks run
 
 - The pre-commit hook stays fast: syntax, accidental-secret/large-file checks,
-  Ruff, formatting, and backend type checking.
-- Pull-request CI is the mandatory shared gate: backend tests, frontend lint,
-  type checking, unit/browser accessibility tests, and production build.
+  Ruff, formatting, and strict backend type checking.
+- Pull-request CI is the mandatory shared gate: it runs the direct backend
+  checks and every CI-suitable pre-commit hook again, then backend tests,
+  frontend lint/type checks, unit/browser accessibility tests, and the
+  production build. Only the local `no-commit-to-branch` hook is skipped in CI.
 - A PR that changes `supabase/**` also starts a clean local database, applies
   every migration, runs the database suites, and lints the resulting schema.
 - Gate C remains an explicit local/staging rehearsal because it needs an

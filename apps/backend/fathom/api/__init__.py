@@ -1,5 +1,5 @@
 """API package."""
 
-from importlib.metadata import version
+from fathom import __version__
 
-__version__ = version("fathom")
+__all__ = ["__version__"]

@@ -8,7 +8,7 @@ import { createApiClient, type UsageOverviewResponse } from "@fathom/api-client"
 
 import { AppShellHeader } from "../components/AppShellHeader";
 import { useAppShell } from "../components/AppShellProvider";
-import chrome from "../components/app-chrome.module.css";
+import chrome from "../components/app-chrome";
 import { getAccountLabel } from "../lib/accountLabel";
 import {
   assertAuthenticatedRequestScopeCurrent,

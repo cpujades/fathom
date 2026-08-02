@@ -16,6 +16,7 @@ from xml.etree.ElementTree import Element
 from markdown import Markdown
 from markdown.extensions import Extension
 from markdown.treeprocessors import Treeprocessor
+from typing_extensions import override
 
 from fathom.core.errors import ExternalServiceError, NotReadyError
 
@@ -462,6 +463,7 @@ def _deny_resource_fetch(
 
 
 class _SafePdfHtmlTreeprocessor(Treeprocessor):
+    @override
     def run(self, root: Element) -> Element:
         for element in root.iter():
             tag = str(element.tag)
@@ -485,6 +487,7 @@ class _SafePdfHtmlTreeprocessor(Treeprocessor):
 
 
 class _SafePdfHtmlExtension(Extension):
+    @override
     def extendMarkdown(self, md: Markdown) -> None:  # noqa: N802 - Markdown extension API
         md.treeprocessors.register(
             _SafePdfHtmlTreeprocessor(md),

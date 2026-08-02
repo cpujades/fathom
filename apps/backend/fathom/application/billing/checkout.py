@@ -4,8 +4,8 @@ import logging
 
 from pydantic import HttpUrl, TypeAdapter
 
-from fathom.api.deps.auth import AuthContext
 from fathom.application.billing.parsing import as_str
+from fathom.application.identity import AuthenticatedUser
 from fathom.core.config import Settings
 from fathom.core.errors import InvalidRequestError
 from fathom.crud.supabase.billing import fetch_plan_by_id, upsert_polar_customer
@@ -20,7 +20,7 @@ HTTP_URL_ADAPTER = TypeAdapter(HttpUrl)
 
 async def create_checkout_session(
     request: CheckoutSessionRequest,
-    auth: AuthContext,
+    auth: AuthenticatedUser,
     settings: Settings,
 ) -> CheckoutSessionResponse:
     plan_id = str(request.plan_id)
@@ -30,7 +30,7 @@ async def create_checkout_session(
 
 async def _create_checkout_session(
     plan_id: str,
-    auth: AuthContext,
+    auth: AuthenticatedUser,
     settings: Settings,
     admin_client: AsyncClient,
 ) -> CheckoutSessionResponse:
@@ -70,13 +70,13 @@ async def _create_checkout_session(
     return CheckoutSessionResponse(checkout_url=HTTP_URL_ADAPTER.validate_python(checkout_url))
 
 
-async def create_portal_session(auth: AuthContext, settings: Settings) -> CustomerPortalSessionResponse:
+async def create_portal_session(auth: AuthenticatedUser, settings: Settings) -> CustomerPortalSessionResponse:
     async with managed_supabase_client(await create_supabase_admin_client(settings)) as admin_client:
         return await _create_portal_session(auth, settings, admin_client)
 
 
 async def _create_portal_session(
-    auth: AuthContext,
+    auth: AuthenticatedUser,
     settings: Settings,
     admin_client: AsyncClient,
 ) -> CustomerPortalSessionResponse:

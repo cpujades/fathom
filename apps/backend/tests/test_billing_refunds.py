@@ -5,8 +5,8 @@ from types import SimpleNamespace
 from typing import cast
 from unittest.mock import AsyncMock, patch
 
-from fathom.api.deps.auth import AuthContext
 from fathom.application.billing.refunds import request_pack_refund
+from fathom.application.identity import AuthenticatedUser
 from fathom.core.config import Settings
 from fathom.core.errors import ExternalServiceError, InvalidRequestError
 from fathom.services.polar import PolarInvalidRequestError
@@ -15,7 +15,7 @@ from fathom.services.polar import PolarInvalidRequestError
 class BillingRefundTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.admin_client = object()
-        self.auth = AuthContext(access_token="token", user_id="user_123")
+        self.auth = AuthenticatedUser(access_token="token", user_id="user_123")
         self.settings = cast(Settings, SimpleNamespace(billing_debt_cap_seconds=600))
         self.started = {
             "resolution_type": "started",

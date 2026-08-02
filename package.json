@@ -10,23 +10,8 @@
     "start:web": "pnpm --filter @fathom/web start",
     "lint:web": "pnpm --filter @fathom/web lint",
     "typecheck:web": "pnpm --filter @fathom/web typecheck",
-    "generate:api-client": "pnpm --filter @fathom/api-client generate"
+    "generate:api-client": "PYTHONPATH=apps/backend uv run python scripts/export_openapi.py packages/api-client/openapi.json && pnpm --filter @fathom/api-client generate",
+    "check:api-contract": "PYTHONPATH=apps/backend uv run python scripts/export_openapi.py packages/api-client/openapi.json --check && pnpm --filter @fathom/api-client check:generated"
   },
-  "pnpm": {
-    "overrides": {
-      "postcss": "8.5.25",
-      "minimatch": "10.2.5",
-      "ajv@^8.0.0": "8.18.0",
-      "flatted": "3.4.2",
-      "brace-expansion": "5.0.8",
-      "fast-uri": "3.1.4",
-      "js-yaml": "4.3.0",
-      "ws": "8.21.0",
-      "@babel/core": "7.29.6",
-      "sharp": "0.35.0",
-      "picomatch@^2.3.1": "2.3.2",
-      "picomatch@^4.0.0": "4.0.4"
-    }
-  },
-  "packageManager": "pnpm@10.33.2"
+  "packageManager": "pnpm@11.18.0+sha512.33d83c77da82f49fba836925c6f1b841181ec3132b670639bd012f7075f5c7cf634c5f870147c19aae7478fac01df09d8892e880454896edd23ee9b33757563c"
 }

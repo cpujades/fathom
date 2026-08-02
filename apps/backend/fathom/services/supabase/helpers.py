@@ -118,8 +118,26 @@ def first_row(
             raise NotFoundError(not_found_message)
         raise ExternalServiceError(error_message)
 
-    row = value[0]
-    if not isinstance(row, Mapping):
+    return response_record(value[0], error_message=error_message)
+
+
+def response_record(value: object, *, error_message: str) -> dict[str, Any]:
+    """Validate one JSON object returned by Supabase."""
+    if not isinstance(value, Mapping):
         raise ExternalServiceError(error_message)
 
-    return dict(row)
+    record: dict[str, Any] = {}
+    for key, item in value.items():
+        if not isinstance(key, str):
+            raise ExternalServiceError(error_message)
+        record[key] = item
+    return record
+
+
+def response_records(value: object, *, error_message: str) -> list[dict[str, Any]]:
+    """Validate a possibly empty list of JSON objects returned by Supabase."""
+    if value is None:
+        return []
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        raise ExternalServiceError(error_message)
+    return [response_record(row, error_message=error_message) for row in value]

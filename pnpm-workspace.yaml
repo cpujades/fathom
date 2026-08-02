@@ -2,6 +2,21 @@ packages:
   - apps/*
   - packages/*
 
-onlyBuiltDependencies:
-  - sharp
-  - unrs-resolver
+allowBuilds:
+  sharp: true
+  unrs-resolver: true
+
+overrides:
+  postcss: 8.5.25
+  minimatch: 10.2.5
+  ajv@^8.0.0: 8.18.0
+  flatted: 3.4.2
+  brace-expansion: 5.0.8
+  fast-uri: 3.1.4
+  js-yaml: 4.3.0
+  ws: 8.21.0
+  "@babel/core": 7.29.6
+  typescript-eslint: 8.65.0
+  sharp: 0.35.0
+  picomatch@^2.3.1: 2.3.2
+  picomatch@^4.0.0: 4.0.4

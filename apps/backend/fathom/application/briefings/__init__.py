@@ -6,8 +6,8 @@ from typing import Any
 from urllib.parse import urlparse
 from uuid import UUID, uuid4
 
-from fathom.api.deps.auth import AuthContext
 from fathom.application.briefings.contract import build_source_thumbnail_url, normalize_source, resolve_source_title
+from fathom.application.identity import AuthenticatedUser
 from fathom.core.config import Settings
 from fathom.core.constants import SIGNED_URL_TTL_SECONDS, SUPABASE_PDF_BUCKET
 from fathom.core.errors import ExternalServiceError, NotReadyError
@@ -50,7 +50,7 @@ DEFAULT_BRIEFINGS_PAGE_SIZE = 24
 BRIEFINGS_SCAN_BATCH_SIZE = 200
 
 
-async def get_briefing(briefing_id: UUID, auth: AuthContext, settings: Settings) -> BriefingResponse:
+async def get_briefing(briefing_id: UUID, auth: AuthenticatedUser, settings: Settings) -> BriefingResponse:
     briefing_id_str = str(briefing_id)
     with log_context(user_id=auth.user_id, briefing_id=briefing_id_str):
         async with managed_supabase_client(
@@ -83,7 +83,7 @@ async def get_briefing(briefing_id: UUID, auth: AuthContext, settings: Settings)
         )
 
 
-async def create_briefing_pdf(briefing_id: UUID, auth: AuthContext, settings: Settings) -> BriefingPdfResponse:
+async def create_briefing_pdf(briefing_id: UUID, auth: AuthenticatedUser, settings: Settings) -> BriefingPdfResponse:
     briefing_id_str = str(briefing_id)
     with log_context(user_id=auth.user_id, briefing_id=briefing_id_str):
         async with managed_supabase_client(

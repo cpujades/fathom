@@ -306,8 +306,8 @@ measure it before adding a shared wake-up or retention system.
 ## Primary code paths
 
 - API entry: `apps/backend/fathom/api/app.py`
-- Session creation and streaming:
-  `apps/backend/fathom/application/briefings/sessions.py`
+- Session creation, lookup, and streaming:
+  `apps/backend/fathom/application/briefings/sessions/`
 - Worker loop: `apps/backend/fathom/orchestration/runner.py`
 - Per-job orchestration: `apps/backend/fathom/orchestration/jobs.py`
 - Transcript pipeline: `apps/backend/fathom/orchestration/transcripts.py`

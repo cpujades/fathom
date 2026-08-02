@@ -5,7 +5,7 @@ import Link from "next/link";
 import type { Cta, NavItem } from "@/content/landing";
 import SmoothScrollLink from "@/components/SmoothScrollLink";
 
-import styles from "../../page.module.css";
+import styles from "../../landing-header.module.css";
 
 type LandingHeaderProps = {
   navItems: NavItem[];

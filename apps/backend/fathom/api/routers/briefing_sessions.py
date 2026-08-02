@@ -6,14 +6,16 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Request
 from starlette.responses import Response, StreamingResponse
 
-from fathom.api.deps.auth import AuthContext, get_auth_context
+from fathom.api.deps.auth import get_auth_context
 from fathom.application.briefings.sessions import (
     create_briefing_session,
     delete_briefing_session,
     get_briefing_session,
     stream_briefing_session_events,
 )
+from fathom.application.identity import AuthenticatedUser
 from fathom.core.config import Settings, get_settings
+from fathom.core.rate_limits import get_request_client_ip
 from fathom.schemas.briefing_sessions import BriefingSessionCreateRequest, BriefingSessionResponse
 from fathom.schemas.errors import ErrorResponse
 
@@ -32,7 +34,7 @@ router = APIRouter(prefix="/briefing-sessions", tags=["briefing sessions"])
 )
 async def create_session(
     request: BriefingSessionCreateRequest,
-    auth: Annotated[AuthContext, Depends(get_auth_context)],
+    auth: Annotated[AuthenticatedUser, Depends(get_auth_context)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> BriefingSessionResponse:
     return await create_briefing_session(request, auth, settings)
@@ -51,7 +53,7 @@ async def create_session(
 )
 async def get_session(
     session_id: UUID,
-    auth: Annotated[AuthContext, Depends(get_auth_context)],
+    auth: Annotated[AuthenticatedUser, Depends(get_auth_context)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> BriefingSessionResponse:
     return await get_briefing_session(session_id, auth, settings)
@@ -70,10 +72,26 @@ async def get_session(
 async def get_session_events(
     session_id: UUID,
     request: Request,
-    auth: Annotated[AuthContext, Depends(get_auth_context)],
+    auth: Annotated[AuthenticatedUser, Depends(get_auth_context)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> StreamingResponse:
-    return await stream_briefing_session_events(session_id, auth, settings, request)
+    event_stream = await stream_briefing_session_events(
+        session_id,
+        auth,
+        settings,
+        client_subject=f"ip:{get_request_client_ip(request)}",
+        last_event_id=request.headers.get("last-event-id"),
+        is_disconnected=request.is_disconnected,
+    )
+    return StreamingResponse(
+        event_stream,
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.delete(
@@ -88,7 +106,7 @@ async def get_session_events(
 )
 async def delete_session(
     session_id: UUID,
-    auth: Annotated[AuthContext, Depends(get_auth_context)],
+    auth: Annotated[AuthenticatedUser, Depends(get_auth_context)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> Response:
     await delete_briefing_session(session_id, auth, settings)

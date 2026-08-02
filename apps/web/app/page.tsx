@@ -9,7 +9,7 @@ import ProofSection from "./components/landing/ProofSection";
 import QualitySection from "./components/landing/QualitySection";
 import SmoothScrollLink from "./components/SmoothScrollLink";
 import { landingContent } from "./content/landing";
-import styles from "./page.module.css";
+import styles from "./landing-page.module.css";
 
 type HomePageProps = {
   searchParams: Promise<{

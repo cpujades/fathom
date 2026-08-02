@@ -8,7 +8,7 @@ import { createApiClient } from "@fathom/api-client";
 
 import { AppShellHeader } from "../../../components/AppShellHeader";
 import { useAppShell } from "../../../components/AppShellProvider";
-import chrome from "../../../components/app-chrome.module.css";
+import chrome from "../../../components/app-chrome";
 import { getApiErrorMessage } from "../../../lib/apiErrors";
 import { getAccountLabel } from "../../../lib/accountLabel";
 import {
@@ -19,7 +19,7 @@ import {
 } from "../../../lib/appDataCache";
 import { buildSignInPath } from "../../../lib/url";
 import { isCreditOrPaymentError } from "../sessionPresentation";
-import styles from "../session.module.css";
+import styles from "../session-create.module.css";
 
 type CreatePhase = "idle" | "checking" | "creating" | "opening" | "error";
 

@@ -6,13 +6,13 @@ from typing import cast
 from unittest.mock import AsyncMock, patch
 from uuid import UUID
 
-from fathom.api.deps.auth import AuthContext
 from fathom.application.briefings import (
     _create_briefing_pdf,
     create_briefing_pdf,
     get_briefing,
     list_briefings_for_user,
 )
+from fathom.application.identity import AuthenticatedUser
 from fathom.core.config import Settings
 from fathom.core.constants import SUPABASE_PDF_BUCKET
 from fathom.core.errors import NotReadyError
@@ -23,7 +23,7 @@ from fathom.services.pdf import PDF_CACHE_VERSION, PDF_RENDER_FAILED_MESSAGE, PD
 class BriefingLibraryTests(unittest.IsolatedAsyncioTestCase):
     async def test_pdf_url_checks_owned_summary_before_admin_storage_access(self) -> None:
         settings = cast(Settings, SimpleNamespace())
-        auth = AuthContext(access_token="access-token", user_id="user-123")
+        auth = AuthenticatedUser(access_token="access-token", user_id="user-123")
         briefing_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
         user_client = object()
         admin_client = object()
@@ -64,7 +64,7 @@ class BriefingLibraryTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_stale_cached_pdf_is_not_issued(self) -> None:
         settings = cast(Settings, SimpleNamespace())
-        auth = AuthContext(access_token="access-token", user_id="user-123")
+        auth = AuthenticatedUser(access_token="access-token", user_id="user-123")
         briefing_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
         user_client = object()
 
@@ -102,7 +102,7 @@ class BriefingLibraryTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_detail_rejects_pending_partial_summary(self) -> None:
         settings = cast(Settings, SimpleNamespace())
-        auth = AuthContext(access_token="access-token", user_id="user-123")
+        auth = AuthenticatedUser(access_token="access-token", user_id="user-123")
         briefing_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
         user_client = object()
 
@@ -133,7 +133,7 @@ class BriefingLibraryTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_pdf_rejects_pending_partial_summary_before_render_or_upload(self) -> None:
         settings = cast(Settings, SimpleNamespace())
-        auth = AuthContext(access_token="access-token", user_id="user-123")
+        auth = AuthenticatedUser(access_token="access-token", user_id="user-123")
         briefing_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
         user_client = object()
 

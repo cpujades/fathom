@@ -15,10 +15,10 @@ from unittest.mock import AsyncMock, patch
 
 import asyncpg
 import httpx
-from starlette.requests import Request
 
-from fathom.api.deps.auth import AuthContext
-from fathom.application.briefings import sessions as session_application
+from fathom.application.briefings.sessions import commands as session_commands
+from fathom.application.briefings.sessions import streaming as session_streaming
+from fathom.application.identity import AuthenticatedUser
 from fathom.core.config import Settings, get_settings
 from fathom.crud.supabase.jobs import claim_next_job
 from fathom.orchestration.runner import _handle_claimed_job
@@ -107,7 +107,7 @@ class AuthenticatedGateCE2ETests(unittest.IsolatedAsyncioTestCase):
                 headers={"Authorization": f"Bearer {access_token}"},
                 timeout=20,
             )
-            self.auth = AuthContext(
+            self.auth = AuthenticatedUser(
                 access_token=access_token,
                 user_id=cast(str, self.user_id),
             )
@@ -140,13 +140,15 @@ class AuthenticatedGateCE2ETests(unittest.IsolatedAsyncioTestCase):
 
         good_session = await self._create_session(good_video)
         good_session_id = str(good_session["session_id"])
+        stream_request = _StreamRequest()
         stream = cast(
             AsyncGenerator[str, None],
-            session_application._session_event_stream(
+            session_streaming.session_event_stream(
                 session_id=uuid.UUID(good_session_id),
                 auth=self.auth,
                 settings=self.settings,
-                request=cast(Request, _StreamRequest()),
+                last_event_id=None,
+                is_disconnected=stream_request.is_disconnected,
             ),
         )
         self.assertEqual(await anext(stream), "retry: 2000\n\n")
@@ -159,8 +161,8 @@ class AuthenticatedGateCE2ETests(unittest.IsolatedAsyncioTestCase):
             summary=_briefing_contract(),
         )
 
-        poll = AsyncMock(wraps=session_application.list_job_events_after)
-        with patch.object(session_application, "list_job_events_after", poll):
+        poll = AsyncMock(wraps=session_streaming.list_job_events_after)
+        with patch.object(session_streaming, "list_job_events_after", poll):
             poll_started = time.perf_counter()
             first_live_event = await anext(stream)
             poll_elapsed = time.perf_counter() - poll_started
@@ -173,16 +175,15 @@ class AuthenticatedGateCE2ETests(unittest.IsolatedAsyncioTestCase):
         await stream.aclose()
         print(f"GATE_C_POLL_METRIC elapsed_seconds={poll_elapsed:.3f} queries=1 viewers=1 interval_seconds=1.0")
 
+        reconnect_request = _StreamRequest(last_event_id=str(reconnect_cursor))
         reconnect_chunks = [
             chunk
-            async for chunk in session_application._session_event_stream(
+            async for chunk in session_streaming.session_event_stream(
                 session_id=uuid.UUID(good_session_id),
                 auth=self.auth,
                 settings=self.settings,
-                request=cast(
-                    Request,
-                    _StreamRequest(last_event_id=str(reconnect_cursor)),
-                ),
+                last_event_id=reconnect_request.headers.get("last-event-id"),
+                is_disconnected=reconnect_request.is_disconnected,
             )
         ]
         reconnect_body = "".join(reconnect_chunks)
@@ -322,7 +323,7 @@ class AuthenticatedGateCE2ETests(unittest.IsolatedAsyncioTestCase):
 
     async def _create_session(self, video_id: str) -> dict[str, Any]:
         with patch.object(
-            session_application,
+            session_commands,
             "fetch_video_metadata_with_deadline",
             new=AsyncMock(
                 return_value=VideoMetadata(

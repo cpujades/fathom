@@ -4,7 +4,7 @@ import type {
   PlanResponse,
   UsageOverviewResponse
 } from "@fathom/api-client";
-import { createApiClient, getApiBaseUrl } from "@fathom/api-client";
+import { createApiClient } from "@fathom/api-client";
 
 import type { BriefingListResponse, BriefingsQueryOptions } from "./briefings";
 import { DEFAULT_BRIEFINGS_QUERY } from "./briefings";
@@ -245,39 +245,33 @@ export async function loadBriefings(
 
   const request = (async () => {
     try {
-      const url = new URL("/briefings", getApiBaseUrl());
-      url.searchParams.set("limit", String(query.limit));
-      url.searchParams.set("offset", String(query.offset));
-      url.searchParams.set("sort", query.sort);
-      url.searchParams.set("sourceType", query.sourceType);
-
-      if (query.query) {
-        url.searchParams.set("query", query.query);
-      }
-
-      const response = await fetch(url.toString(), {
-        headers: {
-          Authorization: `Bearer ${accessToken}`
+      const api = createApiClient(accessToken);
+      const { data, error } = await api.GET("/briefings", {
+        params: {
+          query: {
+            limit: query.limit,
+            offset: query.offset,
+            query: query.query || undefined,
+            sort: query.sort,
+            sourceType: query.sourceType
+          }
         }
       });
-      const payload = (await response.json()) as BriefingListResponse | { message?: string };
       assertAuthenticatedRequestScopeCurrent(scope);
-
-      if (!response.ok) {
-        throw payload;
-      }
+      if (error) throw error;
+      if (!data) throw new Error("The briefing library response was empty.");
 
       if (cacheable) {
         briefingsCache = {
           scope,
           value: {
-            value: payload as BriefingListResponse,
+            value: data,
             fetchedAt: Date.now()
           }
         };
       }
 
-      return payload as BriefingListResponse;
+      return data;
     } catch (error) {
       assertAuthenticatedRequestScopeCurrent(scope);
       throw error;

@@ -335,17 +335,18 @@ export interface components {
              * Format: uuid
              */
             session_id: string;
-            /**
-             * Briefing Id
-             * Format: uuid
-             */
+            /** Briefing Id */
             briefing_id?: string | null;
             /**
              * State
+             * @default ready
              * @enum {string}
              */
             state: "accepted" | "resolving_source" | "reusing_existing" | "transcribing" | "drafting_briefing" | "finalizing_briefing" | "ready" | "failed";
-            /** Progress */
+            /**
+             * Progress
+             * @default 100
+             */
             progress: number;
             /** Title */
             title: string;
@@ -677,6 +678,10 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+            /** Input */
+            input?: unknown;
+            /** Context */
+            ctx?: Record<string, never>;
         };
     };
     responses: never;

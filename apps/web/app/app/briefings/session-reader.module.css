@@ -1,0 +1,431 @@
+.textActionLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  min-height: 42px;
+  margin: -0.38rem -0.34rem;
+  padding: 0.38rem 0.34rem;
+  background: transparent;
+  color: #435247;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 750;
+  line-height: 1.25;
+  text-decoration: underline;
+  text-underline-offset: 0.18rem;
+  cursor: pointer;
+}
+.textActionLink:hover {
+  color: #17382b;
+}
+.removeTextButton {
+  color: #9b3a36;
+}
+.removeTextButton:hover {
+  color: #7b2c2a;
+}
+.desktopActionCard {
+  display: grid;
+  gap: 0.28rem;
+  justify-items: start;
+  padding: 0.1rem 0.95rem;
+}
+.sidebarDeleteConfirm {
+  display: grid;
+  gap: 0.45rem;
+  color: #7a3835;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+.sidebarDeleteConfirm p {
+  margin: 0;
+}
+.sidebarDeleteActions {
+  display: flex;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+.briefingLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(270px, 330px);
+  gap: 1.15rem;
+  align-items: start;
+}
+.briefingReader {
+  min-width: 0;
+  display: grid;
+  gap: 1rem;
+}
+.briefingSide {
+  position: sticky;
+  top: 5.6rem;
+  min-width: 0;
+  display: grid;
+  gap: 0.8rem;
+}
+.mobileReaderBar {
+  display: none;
+}
+.briefingFooter {
+  grid-column: 1 / -1;
+  display: grid;
+  justify-items: center;
+  gap: 1rem;
+  padding: 0.85rem 0 0.15rem;
+}
+.footerPrimaryRow,
+.footerNavigationRow,
+.footerDangerRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.footerNavigationRow {
+  gap: 1.25rem;
+}
+.footerDangerRow {
+  margin-top: -0.05rem;
+}
+.footerPdfAction {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  border: 1px solid rgba(36, 58, 47, 0.16);
+  border-radius: 999px;
+  padding: 0.62rem 1.25rem;
+  background: rgba(248, 244, 236, 0.76);
+  color: #17382b;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 760;
+  line-height: 1.2;
+  text-decoration: none;
+  cursor: pointer;
+}
+.footerPdfAction:disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
+}
+.footerDeleteConfirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  color: #7a3835;
+  font-size: 0.86rem;
+}
+@media (min-width: 721px) {
+  .briefingFooter {
+    display: none;
+  }
+}
+.contentsCard {
+  display: grid;
+  gap: 0.78rem;
+}
+.contentsHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.7rem;
+}
+.contentsHeader span {
+  color: #667267;
+  font-size: 0.74rem;
+  font-weight: 760;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.contentsProgressTrack {
+  overflow: hidden;
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(214, 224, 215, 0.72);
+}
+.contentsProgressFill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(155deg, #2d624b, #17382b);
+  transition: width 180ms ease;
+}
+.contentsList {
+  display: grid;
+  gap: 0.1rem;
+}
+.contentsList a {
+  display: block;
+  border-radius: 12px;
+  padding: 0.45rem 0.55rem;
+  color: #435247;
+  font-size: 0.84rem;
+  font-weight: 650;
+  line-height: 1.35;
+  text-decoration: none;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
+}
+.contentsList a:hover {
+  background: rgba(40, 92, 70, 0.08);
+  color: #17382b;
+}
+.sourceCard {
+  padding: 1rem;
+  display: grid;
+  gap: 0.72rem;
+}
+.sideKicker {
+  margin: 0;
+  color: #667267;
+  text-transform: uppercase;
+  letter-spacing: 0;
+  font-size: 0.7rem;
+  font-weight: 760;
+}
+.sourceHeader {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 0.9rem;
+  align-items: start;
+}
+.sourceMedia {
+  width: 112px;
+}
+.sourceThumbnailFrame {
+  position: relative;
+  width: 112px;
+  aspect-ratio: 16 / 9;
+}
+.sourceThumbnail,
+.sourceThumbnailFallback {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 12px;
+}
+.sourceThumbnail {
+  background: rgba(233, 227, 216, 0.9);
+}
+.sourceThumbnailFallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(120% 120% at 0% 0%, rgba(40, 92, 70, 0.18), transparent 45%),
+    linear-gradient(180deg, rgba(237, 232, 222, 0.96), rgba(227, 220, 207, 0.92));
+  color: #667267;
+  text-transform: uppercase;
+  letter-spacing: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.sourceBody {
+  display: grid;
+  gap: 0.8rem;
+  min-width: 0;
+}
+.sourceSummary {
+  display: grid;
+  gap: 0.42rem;
+}
+.sourceTitle {
+  margin: 0;
+  font-family: var(--font-body), sans-serif;
+  font-size: 0.94rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.35;
+  color: #18211d;
+  overflow-wrap: anywhere;
+}
+.sourceCardLink {
+  justify-self: start;
+  color: #17382b;
+  font-size: 0.82rem;
+  font-weight: 760;
+  text-decoration: underline;
+  text-underline-offset: 0.18rem;
+}
+.sourceMeta {
+  display: flex;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+  align-items: center;
+  color: #435247;
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+.sourceMeta span {
+  position: relative;
+}
+.sourceMeta span:not(:first-child)::before {
+  content: "";
+  position: absolute;
+  left: -0.42rem;
+  top: 0.55rem;
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(67, 82, 71, 0.35);
+}
+@media (max-width: 720px) {
+  .briefingLayout {
+    grid-template-columns: 1fr;
+    gap: 0.9rem;
+    padding-bottom: 4.6rem;
+  }
+  .contentsCard {
+    display: none;
+  }
+  .briefingSide {
+    position: static;
+  }
+  .desktopActionCard {
+    display: none;
+  }
+  .sourceCard {
+    display: none;
+  }
+  .mobileReaderBar {
+    position: fixed;
+    left: 50%;
+    bottom: 0.72rem;
+    transform: translateX(-50%);
+    z-index: 25;
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.55rem;
+    align-items: center;
+    width: min(calc(100vw - 1.25rem), 560px);
+    padding: 0.44rem;
+    border: 1px solid rgba(36, 58, 47, 0.14);
+    border-radius: 999px;
+    background: rgba(248, 247, 241, 0.92);
+    box-shadow:
+      0 18px 42px rgba(18, 28, 23, 0.18),
+      inset 0 1px 0 rgba(255, 255, 255, 0.5);
+    backdrop-filter: blur(20px) saturate(1.08);
+  }
+  .mobileReaderLinks {
+    min-width: 0;
+    display: flex;
+    gap: 0.22rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .mobileReaderLinks::-webkit-scrollbar {
+    display: none;
+  }
+  .mobileReaderLinks a,
+  .mobileReaderAction {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 36px;
+    border-radius: 999px;
+    padding: 0.48rem 0.72rem;
+    color: #24332c;
+    font-size: 0.76rem;
+    font-weight: 760;
+    line-height: 1.15;
+    white-space: nowrap;
+    text-decoration: none;
+  }
+  .mobileReaderLinks a {
+    background: transparent;
+  }
+  .mobileReaderAction {
+    border: 1px solid rgba(36, 58, 47, 0.18);
+    background: linear-gradient(155deg, #2d624b, #17382b);
+    color: #f7f3e7;
+    cursor: pointer;
+  }
+  .mobileReaderAction:disabled {
+    opacity: 0.58;
+    cursor: not-allowed;
+  }
+  .sourceHeader {
+    grid-template-columns: 96px minmax(0, 1fr);
+    gap: 0.75rem;
+  }
+  .sourceMedia,
+  .sourceThumbnailFrame {
+    width: 96px;
+  }
+}
+.errorCard {
+  display: grid;
+  gap: 0.82rem;
+  border: 1px solid rgba(182, 75, 71, 0.22);
+  border-radius: 18px;
+  padding: 0.92rem 1rem;
+  background: rgba(182, 75, 71, 0.08);
+  color: #8d312f;
+  font-size: 0.88rem;
+  line-height: 1.56;
+}
+.connectionCard {
+  border: 1px solid rgba(142, 123, 73, 0.22);
+  border-radius: 18px;
+  padding: 0.92rem 1rem;
+  background: rgba(142, 123, 73, 0.08);
+  color: #6e5d36;
+  font-size: 0.88rem;
+  line-height: 1.56;
+}
+@keyframes blink {
+  50% {
+    opacity: 0.1;
+  }
+}
+@keyframes livePulse {
+  50% {
+    transform: scale(1.35);
+    opacity: 0.35;
+  }
+}
+@keyframes lifecycleEllipsis {
+  0% {
+    content: ".";
+  }
+  33% {
+    content: "..";
+  }
+  66% {
+    content: "...";
+  }
+}
+@keyframes loadingSweep {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+@media (max-width: 520px) {
+  .sourceCard {
+    padding: 0.9rem;
+  }
+  .sourceHeader {
+    grid-template-columns: 1fr;
+  }
+  .sourceMedia,
+  .sourceThumbnailFrame {
+    width: min(150px, 100%);
+  }
+  .briefingFooter {
+    gap: 1.05rem;
+  }
+  .footerPdfAction {
+    display: inline-flex;
+    width: 100%;
+    max-width: 260px;
+  }
+}

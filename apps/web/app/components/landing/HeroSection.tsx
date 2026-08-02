@@ -6,7 +6,7 @@ import type { HeroContent } from "@/content/landing";
 import { trackMarketingEvent } from "@/lib/marketingEvents";
 import SmoothScrollLink from "@/components/SmoothScrollLink";
 
-import styles from "../../page.module.css";
+import styles from "../../landing-hero.module.css";
 
 type HeroSectionProps = {
   content: HeroContent;

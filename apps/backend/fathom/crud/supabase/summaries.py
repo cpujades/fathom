@@ -9,7 +9,7 @@ from typing import Any, Literal
 from postgrest import APIError
 
 from fathom.core.errors import ExternalServiceError
-from fathom.services.supabase.helpers import first_row, raise_for_postgrest_error
+from fathom.services.supabase.helpers import first_row, raise_for_postgrest_error, response_records
 from supabase import AsyncClient
 
 
@@ -64,8 +64,10 @@ async def fetch_summaries_by_ids(client: AsyncClient, summary_ids: list[str]) ->
     except APIError as exc:
         raise_for_postgrest_error(exc, "Failed to fetch summaries.")
 
-    data = response.data or []
-    return [row for row in data if isinstance(row, dict)]
+    return response_records(
+        response.data,
+        error_message="Supabase returned an unexpected summaries shape.",
+    )
 
 
 async def fetch_summary_by_keys(
@@ -161,14 +163,20 @@ async def prepare_summary_pdf(
         raise ExternalServiceError("Supabase returned an unexpected PDF preparation shape.")
     resolution_type = data.get("resolution_type")
     object_key = data.get("pdf_object_key")
-    if resolution_type not in {"ready", "in_progress", "acquired"}:
+    if resolution_type == "ready":
+        validated_resolution: PdfPreparationType = "ready"
+    elif resolution_type == "in_progress":
+        validated_resolution = "in_progress"
+    elif resolution_type == "acquired":
+        validated_resolution = "acquired"
+    else:
         raise ExternalServiceError("Supabase returned an unexpected PDF preparation shape.")
     if object_key is not None and not isinstance(object_key, str):
         raise ExternalServiceError("Supabase returned an unexpected PDF preparation shape.")
     if resolution_type == "ready" and not object_key:
         raise ExternalServiceError("Supabase returned an unexpected PDF preparation shape.")
     return PdfPreparation(
-        resolution_type=resolution_type,
+        resolution_type=validated_resolution,
         pdf_object_key=object_key,
     )
 

@@ -1,0 +1,2357 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Talven",
+    "description": "Talven briefing service",
+    "version": "0.20.3"
+  },
+  "paths": {
+    "/meta/health": {
+      "get": {
+        "tags": [
+          "meta"
+        ],
+        "summary": "Health",
+        "operationId": "health_meta_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/meta/ready": {
+      "get": {
+        "tags": [
+          "meta"
+        ],
+        "summary": "Ready",
+        "operationId": "ready_meta_ready_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadyResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/meta/status": {
+      "get": {
+        "tags": [
+          "meta"
+        ],
+        "summary": "Status",
+        "operationId": "status_meta_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/briefing-sessions": {
+      "post": {
+        "tags": [
+          "briefing sessions"
+        ],
+        "summary": "Create Session",
+        "operationId": "create_session_briefing_sessions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BriefingSessionCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BriefingSessionResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid auth token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input (e.g., malformed URL).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream provider failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/briefing-sessions/{session_id}": {
+      "get": {
+        "tags": [
+          "briefing sessions"
+        ],
+        "summary": "Get Session",
+        "operationId": "get_session_briefing_sessions__session_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BriefingSessionResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid auth token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid session id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Session not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream provider failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "briefing sessions"
+        ],
+        "summary": "Delete Session",
+        "operationId": "delete_session_briefing_sessions__session_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing or invalid auth token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid session id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Session not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/briefing-sessions/{session_id}/events": {
+      "get": {
+        "tags": [
+          "briefing sessions"
+        ],
+        "summary": "Get Session Events",
+        "operationId": "get_session_events_briefing_sessions__session_id__events_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid auth token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid session id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Session not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream provider failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/briefings": {
+      "get": {
+        "tags": [
+          "briefings"
+        ],
+        "summary": "List Briefings",
+        "operationId": "list_briefings_briefings_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 24,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 120
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Query"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "newest",
+                "oldest"
+              ],
+              "type": "string",
+              "default": "newest",
+              "title": "Sort"
+            }
+          },
+          {
+            "name": "sourceType",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "all",
+                "youtube",
+                "url"
+              ],
+              "type": "string",
+              "default": "all",
+              "title": "Sourcetype"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BriefingListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid auth token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid query parameters.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/briefings/{briefing_id}": {
+      "get": {
+        "tags": [
+          "briefings"
+        ],
+        "summary": "Get Briefing By Id",
+        "operationId": "get_briefing_by_id_briefings__briefing_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "briefing_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Briefing Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BriefingResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid auth token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid briefing id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Briefing not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream provider failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/briefings/{briefing_id}/pdf": {
+      "post": {
+        "tags": [
+          "briefings"
+        ],
+        "summary": "Generate Briefing Pdf",
+        "operationId": "generate_briefing_pdf_briefings__briefing_id__pdf_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "briefing_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Briefing Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BriefingPdfResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid auth token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid briefing id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Briefing not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream provider failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/billing/checkout": {
+      "post": {
+        "tags": [
+          "billing"
+        ],
+        "summary": "Create Checkout",
+        "operationId": "create_checkout_billing_checkout_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckoutSessionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckoutSessionResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid auth token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request payload.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream provider failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/billing/portal": {
+      "post": {
+        "tags": [
+          "billing"
+        ],
+        "summary": "Create Portal",
+        "operationId": "create_portal_billing_portal_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerPortalSessionResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid auth token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream provider failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/billing/packs/{polar_order_id}/refund": {
+      "post": {
+        "tags": [
+          "billing"
+        ],
+        "summary": "Refund Pack",
+        "operationId": "refund_pack_billing_packs__polar_order_id__refund_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "polar_order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "title": "Polar Order Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackRefundResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid auth token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request payload.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream provider failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/billing/plans": {
+      "get": {
+        "tags": [
+          "billing"
+        ],
+        "summary": "List Plans",
+        "operationId": "list_plans_billing_plans_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PlanResponse"
+                  },
+                  "type": "array",
+                  "title": "Response List Plans Billing Plans Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid auth token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream provider failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/billing/usage": {
+      "get": {
+        "tags": [
+          "billing"
+        ],
+        "summary": "Get Usage",
+        "operationId": "get_usage_billing_usage_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageOverviewResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid auth token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/billing/briefings": {
+      "get": {
+        "tags": [
+          "billing"
+        ],
+        "summary": "Get Briefings",
+        "operationId": "get_briefings_billing_briefings_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/UsageHistoryEntry"
+                  },
+                  "type": "array",
+                  "title": "Response Get Briefings Billing Briefings Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid auth token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/billing/account": {
+      "get": {
+        "tags": [
+          "billing"
+        ],
+        "summary": "Get Account",
+        "operationId": "get_account_billing_account_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAccountResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid auth token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/webhooks/polar": {
+      "post": {
+        "tags": [
+          "webhooks"
+        ],
+        "summary": "Polar Webhook",
+        "operationId": "polar_webhook_webhooks_polar_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Polar Webhook Webhooks Polar Post"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid webhook payload or signature.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "BillingAccountResponse": {
+        "properties": {
+          "subscription": {
+            "$ref": "#/components/schemas/SubscriptionBillingState"
+          },
+          "packs": {
+            "items": {
+              "$ref": "#/components/schemas/PackBillingState"
+            },
+            "type": "array",
+            "title": "Packs"
+          },
+          "orders": {
+            "items": {
+              "$ref": "#/components/schemas/BillingOrderHistoryEntry"
+            },
+            "type": "array",
+            "title": "Orders"
+          }
+        },
+        "type": "object",
+        "required": [
+          "subscription",
+          "packs",
+          "orders"
+        ],
+        "title": "BillingAccountResponse"
+      },
+      "BillingOrderHistoryEntry": {
+        "properties": {
+          "polar_order_id": {
+            "type": "string",
+            "title": "Polar Order Id"
+          },
+          "plan_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Name"
+          },
+          "plan_type": {
+            "type": "string",
+            "title": "Plan Type"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "paid_amount_cents": {
+            "type": "integer",
+            "title": "Paid Amount Cents"
+          },
+          "refunded_amount_cents": {
+            "type": "integer",
+            "title": "Refunded Amount Cents"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "polar_order_id",
+          "plan_name",
+          "plan_type",
+          "status",
+          "currency",
+          "paid_amount_cents",
+          "refunded_amount_cents",
+          "created_at"
+        ],
+        "title": "BillingOrderHistoryEntry"
+      },
+      "BriefingListItem": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Session Id"
+          },
+          "briefing_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Briefing Id"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "accepted",
+              "resolving_source",
+              "reusing_existing",
+              "transcribing",
+              "drafting_briefing",
+              "finalizing_briefing",
+              "ready",
+              "failed"
+            ],
+            "title": "State",
+            "default": "ready"
+          },
+          "progress": {
+            "type": "integer",
+            "title": "Progress",
+            "default": 100
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "author": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author"
+          },
+          "source_url": {
+            "type": "string",
+            "title": "Source Url"
+          },
+          "source_host": {
+            "type": "string",
+            "title": "Source Host"
+          },
+          "source_type": {
+            "type": "string",
+            "enum": [
+              "youtube",
+              "url"
+            ],
+            "title": "Source Type"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "source_duration_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Duration Seconds"
+          },
+          "source_thumbnail_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Thumbnail Url"
+          },
+          "session_path": {
+            "type": "string",
+            "title": "Session Path"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "title",
+          "source_url",
+          "source_host",
+          "source_type",
+          "created_at",
+          "session_path"
+        ],
+        "title": "BriefingListItem"
+      },
+      "BriefingListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BriefingListItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total_count": {
+            "type": "integer",
+            "title": "Total Count"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          },
+          "has_more": {
+            "type": "boolean",
+            "title": "Has More"
+          },
+          "query": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Query"
+          },
+          "sort": {
+            "type": "string",
+            "enum": [
+              "newest",
+              "oldest"
+            ],
+            "title": "Sort"
+          },
+          "source_type": {
+            "type": "string",
+            "enum": [
+              "all",
+              "youtube",
+              "url"
+            ],
+            "title": "Source Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total_count",
+          "limit",
+          "offset",
+          "has_more",
+          "sort",
+          "source_type"
+        ],
+        "title": "BriefingListResponse"
+      },
+      "BriefingPdfResponse": {
+        "properties": {
+          "briefing_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Briefing Id"
+          },
+          "pdf_url": {
+            "type": "string",
+            "title": "Pdf Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "briefing_id",
+          "pdf_url"
+        ],
+        "title": "BriefingPdfResponse"
+      },
+      "BriefingResponse": {
+        "properties": {
+          "briefing_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Briefing Id"
+          },
+          "markdown": {
+            "type": "string",
+            "title": "Markdown"
+          },
+          "pdf_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pdf Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "briefing_id",
+          "markdown",
+          "pdf_url"
+        ],
+        "title": "BriefingResponse"
+      },
+      "BriefingSessionCreateRequest": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "maxLength": 2083,
+            "minLength": 1,
+            "format": "uri",
+            "title": "Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "title": "BriefingSessionCreateRequest"
+      },
+      "BriefingSessionResponse": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Session Id"
+          },
+          "briefing_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Briefing Id"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "accepted",
+              "resolving_source",
+              "reusing_existing",
+              "transcribing",
+              "drafting_briefing",
+              "finalizing_briefing",
+              "ready",
+              "failed"
+            ],
+            "title": "State"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "progress": {
+            "type": "integer",
+            "title": "Progress"
+          },
+          "resolution_type": {
+            "type": "string",
+            "enum": [
+              "new",
+              "joined_existing",
+              "reused_ready"
+            ],
+            "title": "Resolution Type"
+          },
+          "submitted_url": {
+            "type": "string",
+            "title": "Submitted Url"
+          },
+          "canonical_source_url": {
+            "type": "string",
+            "title": "Canonical Source Url"
+          },
+          "source_type": {
+            "type": "string",
+            "enum": [
+              "youtube",
+              "url"
+            ],
+            "title": "Source Type"
+          },
+          "source_identity_key": {
+            "type": "string",
+            "title": "Source Identity Key"
+          },
+          "source_title": {
+            "type": "string",
+            "title": "Source Title"
+          },
+          "source_author": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Author"
+          },
+          "source_duration_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Duration Seconds"
+          },
+          "source_thumbnail_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Thumbnail Url"
+          },
+          "session_url": {
+            "type": "string",
+            "title": "Session Url"
+          },
+          "events_url": {
+            "type": "string",
+            "title": "Events Url"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
+          "briefing_markdown": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Briefing Markdown"
+          },
+          "briefing_has_pdf": {
+            "type": "boolean",
+            "title": "Briefing Has Pdf",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "state",
+          "message",
+          "progress",
+          "resolution_type",
+          "submitted_url",
+          "canonical_source_url",
+          "source_type",
+          "source_identity_key",
+          "source_title",
+          "session_url",
+          "events_url"
+        ],
+        "title": "BriefingSessionResponse"
+      },
+      "CheckoutSessionRequest": {
+        "properties": {
+          "plan_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Plan Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "plan_id"
+        ],
+        "title": "CheckoutSessionRequest"
+      },
+      "CheckoutSessionResponse": {
+        "properties": {
+          "checkout_url": {
+            "type": "string",
+            "maxLength": 2083,
+            "minLength": 1,
+            "format": "uri",
+            "title": "Checkout Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "checkout_url"
+        ],
+        "title": "CheckoutSessionResponse"
+      },
+      "CustomerPortalSessionResponse": {
+        "properties": {
+          "portal_url": {
+            "type": "string",
+            "maxLength": 2083,
+            "minLength": 1,
+            "format": "uri",
+            "title": "Portal Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "portal_url"
+        ],
+        "title": "CustomerPortalSessionResponse"
+      },
+      "ErrorDetail": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ErrorDetail"
+      },
+      "ErrorResponse": {
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorDetail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "title": "ErrorResponse"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "HealthResponse"
+      },
+      "PackBillingState": {
+        "properties": {
+          "polar_order_id": {
+            "type": "string",
+            "title": "Polar Order Id"
+          },
+          "plan_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Name"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "paid_amount_cents": {
+            "type": "integer",
+            "title": "Paid Amount Cents"
+          },
+          "refunded_amount_cents": {
+            "type": "integer",
+            "title": "Refunded Amount Cents"
+          },
+          "granted_seconds": {
+            "type": "integer",
+            "title": "Granted Seconds"
+          },
+          "consumed_seconds": {
+            "type": "integer",
+            "title": "Consumed Seconds"
+          },
+          "remaining_seconds": {
+            "type": "integer",
+            "title": "Remaining Seconds"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "refundable_amount_cents": {
+            "type": "integer",
+            "title": "Refundable Amount Cents"
+          },
+          "is_refundable": {
+            "type": "boolean",
+            "title": "Is Refundable"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "polar_order_id",
+          "plan_name",
+          "status",
+          "currency",
+          "paid_amount_cents",
+          "refunded_amount_cents",
+          "granted_seconds",
+          "consumed_seconds",
+          "remaining_seconds",
+          "expires_at",
+          "refundable_amount_cents",
+          "is_refundable",
+          "created_at"
+        ],
+        "title": "PackBillingState"
+      },
+      "PackRefundResponse": {
+        "properties": {
+          "polar_order_id": {
+            "type": "string",
+            "title": "Polar Order Id"
+          },
+          "refund_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refund Id"
+          },
+          "requested_amount_cents": {
+            "type": "integer",
+            "title": "Requested Amount Cents"
+          },
+          "remaining_seconds_before_refund": {
+            "type": "integer",
+            "title": "Remaining Seconds Before Refund"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "polar_order_id",
+          "refund_id",
+          "requested_amount_cents",
+          "remaining_seconds_before_refund",
+          "status"
+        ],
+        "title": "PackRefundResponse"
+      },
+      "PlanResponse": {
+        "properties": {
+          "plan_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Plan Id"
+          },
+          "plan_code": {
+            "type": "string",
+            "title": "Plan Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "plan_type": {
+            "type": "string",
+            "title": "Plan Type"
+          },
+          "polar_product_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Polar Product Id"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "amount_cents": {
+            "type": "integer",
+            "title": "Amount Cents"
+          },
+          "billing_interval": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Billing Interval"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "quota_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quota Seconds"
+          },
+          "rollover_cap_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rollover Cap Seconds"
+          },
+          "pack_expiry_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pack Expiry Days"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          }
+        },
+        "type": "object",
+        "required": [
+          "plan_id",
+          "plan_code",
+          "name",
+          "plan_type",
+          "polar_product_id",
+          "currency",
+          "amount_cents",
+          "billing_interval",
+          "version",
+          "quota_seconds",
+          "rollover_cap_seconds",
+          "pack_expiry_days",
+          "is_active"
+        ],
+        "title": "PlanResponse"
+      },
+      "ReadyResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "ReadyResponse"
+      },
+      "StatusResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "uptime_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uptime Seconds"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "StatusResponse"
+      },
+      "SubscriptionBillingState": {
+        "properties": {
+          "plan_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Name"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "period_start": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period Start"
+          },
+          "period_end": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period End"
+          }
+        },
+        "type": "object",
+        "required": [
+          "plan_name",
+          "status",
+          "period_start",
+          "period_end"
+        ],
+        "title": "SubscriptionBillingState"
+      },
+      "UsageHistoryEntry": {
+        "properties": {
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "seconds_used": {
+            "type": "integer",
+            "title": "Seconds Used"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "session_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Path"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "seconds_used",
+          "source",
+          "created_at"
+        ],
+        "title": "UsageHistoryEntry"
+      },
+      "UsageOverviewResponse": {
+        "properties": {
+          "subscription_plan_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subscription Plan Name"
+          },
+          "subscription_remaining_seconds": {
+            "type": "integer",
+            "title": "Subscription Remaining Seconds"
+          },
+          "pack_remaining_seconds": {
+            "type": "integer",
+            "title": "Pack Remaining Seconds"
+          },
+          "total_remaining_seconds": {
+            "type": "integer",
+            "title": "Total Remaining Seconds"
+          },
+          "pack_expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pack Expires At"
+          },
+          "debt_seconds": {
+            "type": "integer",
+            "title": "Debt Seconds"
+          },
+          "is_blocked": {
+            "type": "boolean",
+            "title": "Is Blocked"
+          }
+        },
+        "type": "object",
+        "required": [
+          "subscription_plan_name",
+          "subscription_remaining_seconds",
+          "pack_remaining_seconds",
+          "total_remaining_seconds",
+          "pack_expires_at",
+          "debt_seconds",
+          "is_blocked"
+        ],
+        "title": "UsageOverviewResponse"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  }
+}

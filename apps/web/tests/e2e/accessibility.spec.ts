@@ -21,7 +21,7 @@ test("password recovery without a verified link fails safely", async ({ page }) 
   await page.goto("/auth/recovery");
 
   await expect(page.locator("#password-recovery-error")).toContainText("Open the password reset link");
-    await expect(page.locator("input#new-password")).toHaveCount(0);
+  await expect(page.locator("input#new-password")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Request a new reset link" })).toHaveAttribute("href", "/signin");
 });
 

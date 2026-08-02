@@ -2,11 +2,9 @@
   margin-top: 1.9rem;
   width: 100%;
 }
-
 .wrap[data-pending="true"] .modeStage {
   opacity: 0.78;
 }
-
 .toggle {
   display: inline-flex;
   gap: 0.34rem;
@@ -21,7 +19,6 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.42),
     inset 0 -1px 0 rgba(23, 56, 43, 0.05);
 }
-
 .toggleButton,
 .toggleActive {
   position: relative;
@@ -44,7 +41,6 @@
     filter 220ms ease,
     transform 180ms ease;
 }
-
 .toggleButton::before,
 .toggleActive::before {
   content: "";
@@ -59,7 +55,6 @@
     transform 340ms ease;
   pointer-events: none;
 }
-
 .toggleButton:hover {
   color: var(--landing-text);
   background: rgba(226, 236, 229, 0.92);
@@ -68,13 +63,11 @@
     0 12px 24px rgba(21, 31, 26, 0.1);
   transform: translateY(-1px);
 }
-
 .toggleButton:hover::before,
 .toggleActive:hover::before {
   opacity: 1;
   transform: translateX(22%);
 }
-
 .toggleActive {
   color: #f3f8ff;
   background:
@@ -84,24 +77,20 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.24),
     0 16px 28px rgba(23, 56, 43, 0.24);
 }
-
 .modeStage {
   grid-area: 1 / 1;
   transform-origin: top center;
   width: 100%;
 }
-
 .modeViewport {
   display: grid;
   min-height: 31rem;
 }
-
 .copyBlock {
   margin-top: 1rem;
   max-width: 72ch;
   min-height: 5.75rem;
 }
-
 .sectionLabel {
   margin: 0 0 0.36rem;
   color: var(--landing-brand-strong);
@@ -109,7 +98,6 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
-
 .copyBlock h3 {
   margin: 0;
   font-family: var(--font-body), sans-serif;
@@ -118,14 +106,12 @@
   font-weight: 650;
   letter-spacing: -0.02em;
 }
-
 .copyBlock p {
   margin: 0.5rem 0 0;
   color: var(--landing-text-muted);
   font-size: 0.92rem;
   line-height: 1.62;
 }
-
 .cardGrid {
   margin-top: 1.32rem;
   display: grid;
@@ -133,15 +119,12 @@
   gap: 0.84rem;
   align-items: stretch;
 }
-
 .cardGrid[data-mode="subscriptions"] > * {
   grid-column: span 3;
 }
-
 .cardGrid[data-mode="packs"] > * {
   grid-column: span 4;
 }
-
 .planCard,
 .planCardFeatured {
   border-radius: 20px;
@@ -156,7 +139,6 @@
     background-color 220ms ease,
     filter 220ms ease;
 }
-
 .planCard {
   border: 1px solid rgba(35, 55, 45, 0.14);
   background:
@@ -164,7 +146,6 @@
   box-shadow: 0 18px 34px rgba(21, 31, 26, 0.09);
   backdrop-filter: blur(22px) saturate(1.04);
 }
-
 .planCardFeatured {
   border: 1px solid rgba(40, 92, 70, 0.24);
   background:
@@ -175,23 +156,19 @@
   position: relative;
   backdrop-filter: blur(24px) saturate(1.16);
 }
-
 .planCard:hover,
 .planCardFeatured:hover {
   filter: brightness(1.03) saturate(1.04);
   transform: translateY(-2px);
 }
-
 .planCard:hover {
   border-color: rgba(35, 55, 45, 0.22);
   box-shadow: 0 24px 42px rgba(21, 31, 26, 0.14);
 }
-
 .planCardFeatured:hover {
   border-color: rgba(40, 92, 70, 0.34);
   box-shadow: 0 28px 48px rgba(23, 56, 43, 0.18);
 }
-
 .planCardFeatured::after {
   content: "";
   position: absolute;
@@ -200,7 +177,6 @@
   pointer-events: none;
   border: 1px solid rgba(255, 251, 244, 0.52);
 }
-
 .planHeader {
   display: flex;
   justify-content: space-between;
@@ -208,12 +184,10 @@
   gap: 0.56rem;
   min-height: 2.9rem;
 }
-
 .planMeta {
   display: grid;
   gap: 0.24rem;
 }
-
 .planTag {
   margin: 0;
   color: var(--landing-text-soft);
@@ -221,7 +195,6 @@
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
-
 .planName {
   margin: 0;
   font-family: var(--font-body), sans-serif;
@@ -229,7 +202,6 @@
   font-weight: 620;
   letter-spacing: -0.015em;
 }
-
 .popularBadge {
   display: inline-flex;
   align-items: center;
@@ -244,13 +216,11 @@
   font-weight: 700;
   letter-spacing: 0.02em;
 }
-
 .planLedger {
   border-top: 1px solid rgba(35, 55, 45, 0.12);
   border-bottom: 1px solid rgba(35, 55, 45, 0.12);
   padding: 0.68rem 0;
 }
-
 .planPrice {
   margin: 0;
   font-family: var(--font-body), sans-serif;
@@ -260,14 +230,12 @@
   font-weight: 660;
   min-height: 1.6rem;
 }
-
 .planHours {
   margin: -0.1rem 0 0;
   color: var(--landing-text-soft);
   font-size: 0.82rem;
   min-height: 1.2rem;
 }
-
 .featureList {
   margin: 0;
   padding: 0;
@@ -277,7 +245,6 @@
   flex: 1;
   min-height: 8rem;
 }
-
 .featureList li {
   color: var(--landing-text-muted);
   font-size: 0.84rem;
@@ -285,7 +252,6 @@
   padding-left: 1rem;
   position: relative;
 }
-
 .featureList li::before {
   content: "";
   position: absolute;
@@ -296,7 +262,6 @@
   border-radius: 999px;
   background: var(--landing-warm);
 }
-
 .cardCtaPrimary,
 .cardCtaGhost {
   position: relative;
@@ -317,7 +282,6 @@
     filter 220ms ease,
     transform 180ms ease;
 }
-
 .cardCtaPrimary::before,
 .cardCtaGhost::before {
   content: "";
@@ -332,18 +296,15 @@
     transform 340ms ease;
   pointer-events: none;
 }
-
 .cardCtaPrimary:hover,
 .cardCtaGhost:hover {
   transform: translateY(-2px);
 }
-
 .cardCtaPrimary:hover::before,
 .cardCtaGhost:hover::before {
   opacity: 1;
   transform: translateX(24%);
 }
-
 .cardCtaPrimary {
   color: #f3f8ff;
   border-color: rgba(23, 56, 43, 0.24);
@@ -354,14 +315,12 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.18),
     0 12px 24px rgba(23, 56, 43, 0.2);
 }
-
 .cardCtaPrimary:hover {
   filter: saturate(1.1) brightness(1.06);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.22),
     0 20px 34px rgba(23, 56, 43, 0.3);
 }
-
 .cardCtaGhost {
   color: var(--landing-text);
   border-color: rgba(35, 55, 45, 0.16);
@@ -371,14 +330,12 @@
     inset 0 0 0 1px rgba(255, 255, 255, 0.18),
     0 10px 22px rgba(21, 31, 26, 0.08);
 }
-
 .cardCtaGhost:hover {
   border-color: rgba(35, 55, 45, 0.24);
   background:
     linear-gradient(180deg, rgba(252, 249, 243, 0.96), rgba(240, 234, 225, 0.82));
   box-shadow: 0 18px 32px rgba(21, 31, 26, 0.14);
 }
-
 .notesPanel {
   margin-top: 0.94rem;
   border: 1px solid rgba(35, 55, 45, 0.14);
@@ -388,7 +345,6 @@
     linear-gradient(180deg, rgba(248, 244, 236, 0.8), rgba(236, 230, 220, 0.62));
   backdrop-filter: blur(22px) saturate(1.04);
 }
-
 .notesLabel {
   margin: 0;
   color: var(--landing-brand-strong);
@@ -396,7 +352,6 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
-
 .footnote {
   margin: 0.42rem 0 0;
   color: var(--landing-text-muted);
@@ -404,14 +359,12 @@
   line-height: 1.5;
   min-height: 0;
 }
-
 .footnoteMuted {
   margin: 0.46rem 0 0;
   color: var(--landing-text-soft);
   font-size: 0.78rem;
   line-height: 1.48;
 }
-
 .benefitList {
   margin: 0.62rem 0 0;
   padding-left: 1rem;
@@ -421,12 +374,10 @@
   font-size: 0.8rem;
   line-height: 1.45;
 }
-
 .secondaryActions {
   margin-top: 0.82rem;
   min-height: 1.4rem;
 }
-
 .secondaryLink {
   color: var(--landing-brand-strong);
   font-size: 0.84rem;
@@ -438,16 +389,13 @@
     color 180ms ease,
     text-decoration-color 180ms ease;
 }
-
 .secondaryLink:hover {
   color: var(--landing-brand);
 }
-
 @media (max-width: 1040px) {
   .modeViewport {
     min-height: 0;
   }
-
   .copyBlock,
   .planHeader,
   .planPrice,
@@ -456,61 +404,51 @@
   .secondaryActions {
     min-height: 0;
   }
-
   .cardGrid,
   .cardGrid[data-mode="subscriptions"],
   .cardGrid[data-mode="packs"] {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
-
   .cardGrid[data-mode="subscriptions"] > *,
   .cardGrid[data-mode="packs"] > * {
     grid-column: span 1;
   }
-
   .cardGrid[data-mode="subscriptions"] > .planCardFeatured {
     grid-column: 1 / -1;
     order: -1;
   }
 }
-
 @media (max-width: 760px) {
   .cardGrid,
   .cardGrid[data-mode="subscriptions"],
   .cardGrid[data-mode="packs"] {
     grid-template-columns: 1fr;
   }
-
   .cardGrid[data-mode="subscriptions"] > *,
   .cardGrid[data-mode="packs"] > *,
   .cardGrid[data-mode="subscriptions"] > .planCardFeatured {
     grid-column: span 1;
   }
 }
-
 @media (max-width: 640px) {
   .toggle {
     width: 100%;
   }
-
   .toggleButton,
   .toggleActive {
     flex: 1;
     min-width: 0;
     padding-inline: 0.55rem;
   }
-
   .cardGrid {
     grid-template-columns: 1fr;
   }
 }
-
 @media (max-width: 380px) {
   .toggleButton,
   .toggleActive {
     font-size: 0.76rem;
   }
-
   .planCard,
   .planCardFeatured,
   .notesPanel {
@@ -518,7 +456,6 @@
     padding: 0.9rem;
   }
 }
-
 @media (prefers-reduced-motion: reduce) {
   .wrap[data-pending="true"] .modeStage,
   .toggleButton,

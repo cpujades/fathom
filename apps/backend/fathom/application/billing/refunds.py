@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import logging
 
-from fathom.api.deps.auth import AuthContext
 from fathom.application.billing.parsing import as_str, is_definitive_duplicate_refund_error
+from fathom.application.identity import AuthenticatedUser
 from fathom.core.config import Settings
 from fathom.core.errors import ExternalServiceError, InvalidRequestError
 from fathom.crud.supabase.billing import (
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 async def request_pack_refund(
     *,
     polar_order_id: str,
-    auth: AuthContext,
+    auth: AuthenticatedUser,
     settings: Settings,
 ) -> PackRefundResponse:
     async with managed_supabase_client(await create_supabase_admin_client(settings)) as admin_client:
@@ -36,7 +36,7 @@ async def request_pack_refund(
 async def _request_pack_refund(
     *,
     polar_order_id: str,
-    auth: AuthContext,
+    auth: AuthenticatedUser,
     settings: Settings,
     admin_client: AsyncClient,
 ) -> PackRefundResponse:
