@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.20.5](https://github.com/cpujades/fathom/compare/v0.20.4...v0.20.5) (2026-08-02)
+
+_Automated release from [#164](https://github.com/cpujades/fathom/pull/164) docs: improve Talven end-to-end documentation_
+
+### Bug Fixes
+
+- fix: update api-client (5008ac3)
+
+### Documentation
+
+- docs: improve Talven end-to-end documentation (d75f08c)
+
 ## [0.20.4](https://github.com/cpujades/fathom/compare/v0.20.3...v0.20.4) (2026-08-02)
 
 _Automated release from [#163](https://github.com/cpujades/fathom/pull/163) refactor: simplify architecture and project tooling_
