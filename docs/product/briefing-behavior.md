@@ -4,6 +4,10 @@ This page describes what Talven does today, including duplicate requests,
 caching, charging, failures, archive/restore, and intentionally deferred
 features.
 
+For the shorter user-facing walkthrough, start with
+[Product and user workflows](./user-workflows.md). This page is the deeper
+behavior and trade-off reference behind that walkthrough.
+
 ## Supported input and output
 
 Talven currently accepts public YouTube URLs. Product copy no longer promises

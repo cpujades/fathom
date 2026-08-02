@@ -1,27 +1,59 @@
 # Talven documentation
 
-These pages describe the product as it behaves now. Start here after time away
-from the repository:
+These pages describe the product as it behaves now. Read them in the order
+below when taking ownership of the project. The first section builds the user
+mental model; the second follows the request through the system; the remaining
+sections explain the contracts, data, operations, and deliberate trade-offs.
 
-- [Local development from a fresh clone](./getting-started/local-development.md):
-  prerequisites, local Supabase, environment mapping, plan provisioning, Auth,
-  readiness, and the first briefing journey.
-- [Environment configuration](./reference/environment.md): the personal
-  environment model, localhost convention, every runtime variable, and the
-  limits of local code against hosted staging or production.
-- [Repository and code map](./architecture/repository-and-code-map.md): why this
-  is one monorepo, what `apps` and `packages` mean, root-file responsibilities,
-  and where backend and frontend code belongs.
-- [API contract and client generation](./architecture/api-contract.md): the
-  generated REST client, CI drift checks, and runtime-validated SSE events.
-- [Frontend, authentication, and user flows](./architecture/frontend-auth-and-user-flows.md):
-  browser routes, safe redirects, session ownership, briefing creation,
-  streaming, library, billing, and account-scoped caches.
-- [HTTP API reference](./reference/http-api.md): authentication, endpoint
-  inventory, error contract, rate-limit pointers, and example requests.
-- [System and job lifecycle](./architecture/system-and-job-lifecycle.md):
-  services, request flow, database queue, workers, leases, retries, shutdown,
-  events, and recovery.
+## Recommended reading order
+
+1. [Product and user workflows](./product/user-workflows.md): what a person
+   sees from landing page through sign-up, first briefing, library, billing,
+   refund, recovery, and failure states.
+2. [Local development from a fresh clone](./getting-started/local-development.md):
+   how to run the complete authenticated journey locally.
+3. [Environment configuration](./reference/environment.md): what each process
+   can reach, every application variable, and the local/staging/production
+   boundary.
+4. [Repository and code map](./architecture/repository-and-code-map.md): where
+   each responsibility lives and where new code belongs.
+5. [Frontend, authentication, and user flows](./architecture/frontend-auth-and-user-flows.md):
+   the browser route map, auth boundaries, navigation, SSE client, and browser
+   cache ownership.
+6. [System and job lifecycle](./architecture/system-and-job-lifecycle.md):
+   the API, queue, worker, transcript, summary, settlement, and event path.
+7. [Cache and versioning](./architecture/cache-and-versioning.md): exactly
+   what is reusable, which keys protect compatibility, and what “cache hit”
+   means for a user and for billing.
+8. [Database, RLS, and persistence](./architecture/database-and-persistence.md):
+   the 16 application tables, foreign keys, row-level security, server RPCs,
+   and current Python CRUD modules.
+9. [Billing and Polar webhooks](./architecture/billing-and-webhooks.md):
+   signature verification, normalized events, idempotency, ordering, refund
+   behavior, and reconciliation.
+10. [API contract and client generation](./architecture/api-contract.md) and
+    the [HTTP API reference](./reference/http-api.md): request/response
+    contracts, SSE frames, auth, errors, and practical examples.
+11. [Security and data access](./architecture/security-and-data-access.md)
+    and [Runtime safety, in plain language](./architecture/runtime-safety-explained.md):
+    why the boundaries exist and what they do under failure or concurrency.
+12. [Briefing product behavior](./product/briefing-behavior.md), the
+    [quality evaluation](./quality/briefing-evaluation.md), and the
+    [decisions](./decisions/deferred-work.md): current limits, quality rules,
+    and what is intentionally not built yet.
+13. Finish with the [runbooks](#runbooks) when you are ready to operate or
+    release the system.
+
+## Reference pages
+
+- [Product and user workflows](./product/user-workflows.md): the user-facing
+  walkthrough linked above.
+- [Cache and versioning](./architecture/cache-and-versioning.md): server,
+  browser, and PDF cache behavior.
+- [Database, RLS, and persistence](./architecture/database-and-persistence.md):
+  tables, relationships, grants, RPCs, and CRUD modules.
+- [Billing and Polar webhooks](./architecture/billing-and-webhooks.md): the
+  provider-event lifecycle and repair path.
 - [Security and data access](./architecture/security-and-data-access.md):
   browser permissions, backend privileges, RLS, server commands, storage,
   billing, and export boundaries.
@@ -53,6 +85,11 @@ from the repository:
   project-specific Gate A, Gate B, and Gate C checks.
 - [Storage access boundary](./security/storage-access.md): intended Supabase
   Storage access patterns.
+
+## Runbooks
+
+The operational pages are intentionally last in the learning path. They assume
+you already understand the user workflow and the state model.
 
 The names Gate A, Gate B, and Gate C are Talven project conventions, not
 industry standards:
