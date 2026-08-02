@@ -2,6 +2,10 @@
 
 This folder is the source of truth for database schema changes.
 
+For the application owner’s explanation of the resulting tables, foreign keys,
+RLS boundary, server RPCs, and Python CRUD modules, see
+`../docs/architecture/database-and-persistence.md`.
+
 ### Migration guidelines
 - Migrations are immutable once pushed. If a change is needed later, create a new migration that updates the schema or policies.
   - Why: editing applied migrations makes envs drift and breaks reproducibility.

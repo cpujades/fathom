@@ -5,6 +5,11 @@ briefing. The API handles authenticated requests, a separate worker performs
 long-running work, and Supabase Postgres is both the source of truth and the
 job queue. Redis is not part of the current design.
 
+This page explains the execution path. The companion guides explain the
+[cache keys and reuse rules](./cache-and-versioning.md), the
+[database/RLS/CRUD boundary](./database-and-persistence.md), and the
+[Polar webhook lifecycle](./billing-and-webhooks.md).
+
 ## Component map
 
 ```mermaid

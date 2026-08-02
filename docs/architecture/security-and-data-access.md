@@ -11,6 +11,9 @@ Talven uses two distinct Supabase identities:
 The service key must never be sent to the browser, embedded in frontend
 configuration, or logged.
 
+For the table-by-table schema, foreign keys, RLS boundary, server RPCs, and
+Python CRUD modules, see [Database, RLS, and persistence](./database-and-persistence.md).
+
 ## Browser data boundary
 
 The final migration revokes inherited/default privileges first, then grants
@@ -116,12 +119,14 @@ Polar requests require HTTPS. Automatic redirects are disabled; only a bounded
 forwarded to another host. Responses are size-bounded, and provider IDs are
 encoded as one URL path segment.
 
-## Verification
+## Verification evidence
 
-Last full clean-database verification: July 30, 2026. Focused July 31 billing
-verification applied the new migration and passed its live concurrency and
-pgTAP suites; the exact release candidate must still repeat the full clean
-database gate.
+These are dated evidence records, not a permanent guarantee for every later
+commit. The repository’s prior evidence includes a July 30, 2026 full
+clean-database run and a July 31 focused billing run. The current `main` is
+`b8c7b02` (`v0.20.4`) and has had later refactoring after those records, so an
+exact release candidate must repeat the clean-database gate before it is called
+verified.
 
 - The July 30 baseline applied all then-current migrations from an empty
   disposable local Supabase database and passed all then-current pgTAP suites.

@@ -4,6 +4,11 @@ This page maps what happens between a browser route, Supabase Auth, the Talven
 API, and the worker. It complements the backend-focused
 [system and job lifecycle](./system-and-job-lifecycle.md).
 
+For the product-language version of these journeys, read
+[Product and user workflows](../product/user-workflows.md). For exact browser
+cache TTL, keys, and invalidation rules, read
+[Cache and versioning](./cache-and-versioning.md).
+
 ## Route map
 
 | Route | Responsibility |
