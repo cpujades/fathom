@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.20.4](https://github.com/cpujades/fathom/compare/v0.20.3...v0.20.4) (2026-08-02)
+
+_Automated release from [#163](https://github.com/cpujades/fathom/pull/163) refactor: simplify architecture and project tooling_
+
+### Refactoring
+
+- refactor: simplify architecture and project tooling (05e64e6)
+
 ## [0.20.3](https://github.com/cpujades/fathom/compare/v0.20.2...v0.20.3) (2026-08-01)
 
 _Automated release from [#162](https://github.com/cpujades/fathom/pull/162) fix: remove unwanted file_
