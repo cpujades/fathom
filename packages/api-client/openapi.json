@@ -3,7 +3,7 @@
   "info": {
     "title": "Talven",
     "description": "Talven briefing service",
-    "version": "0.20.3"
+    "version": "0.20.4"
   },
   "paths": {
     "/meta/health": {
