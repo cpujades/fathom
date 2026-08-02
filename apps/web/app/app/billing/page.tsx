@@ -1,684 +1,29 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import * as Dialog from "@radix-ui/react-dialog";
-import type {
-  BillingAccountResponse,
-  BillingOrderHistoryEntry,
-  PackBillingState,
-  PlanResponse,
-  UsageOverviewResponse
-} from "@fathom/api-client";
-import { createApiClient } from "@fathom/api-client";
+import type { BillingOrderHistoryEntry, PackBillingState } from "@fathom/api-client";
 
 import { AppShellHeader } from "../../components/AppShellHeader";
-import { useAppShell } from "../../components/AppShellProvider";
-import chrome from "../../components/app-chrome.module.css";
-import styles from "./billing.module.css";
+import chrome from "../../components/app-chrome";
+import dialogStyles from "./billing-dialog.module.css";
+import pageStyles from "./billing-page.module.css";
 import { formatDate, formatDuration } from "../../lib/format";
-import { getApiErrorMessage } from "../../lib/apiErrors";
 import { getAccountLabel } from "../../lib/accountLabel";
-import {
-  assertAuthenticatedRequestScopeCurrent,
-  captureAuthenticatedRequestScope,
-  getCachedBillingSnapshot,
-  hasFreshBillingCache,
-  loadBillingSnapshot
-} from "../../lib/appDataCache";
-import { resolveRequestedPlan } from "./billingIntent";
-import { applyPendingRefundHold, getDisplayedPacks } from "./billingPresentation";
+import { formatPrice, getPlanBadge, getStatusTone } from "./billingFormatters";
+import { useBillingController } from "./useBillingController";
 
-type PlanGroup = {
-  key: "subscription" | "pack";
-  label: string;
-  description: string;
-  plans: PlanResponse[];
-};
-
-type PurchaseSyncState = {
-  status: "syncing" | "synced" | "delayed";
-  orderLabel: string | null;
-};
-
-type RefundSyncState = {
-  orderId: string;
-  orderLabel: string | null;
-  status: "syncing" | "synced" | "delayed";
-};
-
-const formatPrice = (amountCents: number, currency: string, billingInterval: string | null): string => {
-  if (amountCents <= 0) {
-    return "Free";
-  }
-
-  const amount = new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: currency.toUpperCase()
-  }).format(amountCents / 100);
-
-  return billingInterval ? `${amount}/${billingInterval}` : amount;
-};
-
-const describeSubscriptionStatus = (status: string | null): string => {
-  if (!status) {
-    return "No active subscription";
-  }
-  if (status === "active") {
-    return "Active";
-  }
-  if (status === "canceled") {
-    return "Cancels at period end";
-  }
-  if (status === "revoked") {
-    return "Revoked";
-  }
-  return status.replaceAll("_", " ");
-};
-
-const getStatusTone = (status: string | null): string => {
-  if (status === "active" || status === "paid" || status === "refunded") {
-    return chrome.statusPillSuccess;
-  }
-  if (status === "refund_pending" || status === "canceled") {
-    return chrome.statusPillWarning;
-  }
-  if (status === "revoked") {
-    return chrome.statusPillDanger;
-  }
-  return chrome.statusPillMuted;
-};
-
-const getOrderLabel = (
-  order:
-    | Pick<BillingOrderHistoryEntry, "plan_name" | "plan_type">
-    | Pick<PackBillingState, "plan_name">
-    | null
-    | undefined
-): string | null => {
-  if (!order) {
-    return null;
-  }
-
-  if (order.plan_name) {
-    return order.plan_name;
-  }
-
-  if ("plan_type" in order) {
-    return order.plan_type === "subscription" ? "Subscription" : "Pack";
-  }
-
-  return "Pack";
-};
-
-const getPlanBadge = (plan: PlanResponse, groupKey: PlanGroup["key"]): string | null => {
-  const normalizedName = plan.name.toLowerCase();
-
-  if (groupKey === "subscription") {
-    if (normalizedName.includes("starter")) {
-      return "Most popular";
-    }
-    if (normalizedName.includes("pro")) {
-      return "Best value";
-    }
-    if (normalizedName.includes("agency")) {
-      return "High volume";
-    }
-    return null;
-  }
-
-  if (normalizedName.includes("creator")) {
-    return "Flexible";
-  }
-  if (normalizedName.includes("studio")) {
-    return "Best value";
-  }
-
-  return null;
-};
-
-const findRecentOrder = (
-  orders: BillingOrderHistoryEntry[],
-  checkoutStartedAt: number | null
-): BillingOrderHistoryEntry | null => {
-  if (!checkoutStartedAt) {
-    return null;
-  }
-
-  const threshold = checkoutStartedAt - 120_000;
-
-  return (
-    [...orders]
-      .sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime())
-      .find((entry) => new Date(entry.created_at).getTime() >= threshold) ?? null
-  );
-};
+const styles = { ...pageStyles, ...dialogStyles };
 
 function BillingPageContent() {
-  const searchParams = useSearchParams();
-  const { accessToken, loading: shellLoading, remainingSeconds, setRemainingSeconds, signOut, user } = useAppShell();
-  const userId = user?.id ?? null;
-  const checkoutStatus = searchParams.get("checkout");
-  const customerSessionToken = searchParams.get("customer_session_token");
-  const requestedIntent = searchParams.get("intent");
-  const requestedPlanCode = searchParams.get("plan");
-  const cachedBillingSnapshot = userId ? getCachedBillingSnapshot(userId) : null;
-
-  const [plans, setPlans] = useState<PlanResponse[]>(cachedBillingSnapshot?.plansData ?? []);
-  const [usage, setUsage] = useState<UsageOverviewResponse | null>(cachedBillingSnapshot?.usageData ?? null);
-  const [account, setAccount] = useState<BillingAccountResponse | null>(cachedBillingSnapshot?.accountData ?? null);
-
-  const [loading, setLoading] = useState(() => cachedBillingSnapshot === null);
-  const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
-  const [portalLoading, setPortalLoading] = useState(false);
-  const [refundLoading, setRefundLoading] = useState<string | null>(null);
-  const [refundTarget, setRefundTarget] = useState<PackBillingState | null>(null);
-  const [offerMode, setOfferMode] = useState<"subscription" | "pack">("subscription");
-
-  const [purchaseSync, setPurchaseSync] = useState<PurchaseSyncState | null>(null);
-  const [refundSync, setRefundSync] = useState<RefundSyncState | null>(null);
-  const [syncRefreshLoading, setSyncRefreshLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const checkoutStartRef = useRef<number | null>(null);
-  const focusedPlanRef = useRef<string | null>(null);
-  const refundPollRef = useRef<number | null>(null);
-
-  const loadBilling = useCallback(
-    async (showLoading: boolean) => {
-      if (!accessToken || !userId) {
-        return null;
-      }
-
-      if (showLoading) {
-        setLoading(true);
-      }
-
-      try {
-        const snapshot = await loadBillingSnapshot(userId, accessToken);
-        setPlans(snapshot.plansData);
-        setUsage(snapshot.usageData);
-        setAccount(snapshot.accountData);
-        setRemainingSeconds(userId, snapshot.usageData?.total_remaining_seconds ?? null);
-        setError(null);
-        return snapshot;
-      } catch (err) {
-        setError(getApiErrorMessage(err, "Unable to load billing details."));
-        return null;
-      } finally {
-        if (showLoading) {
-          setLoading(false);
-        }
-      }
-    },
-    [accessToken, setRemainingSeconds, userId]
-  );
-
-  useEffect(() => {
-    if (!accessToken || !userId) {
-      return;
-    }
-
-    const cacheIsFresh = hasFreshBillingCache(userId);
-    if (cacheIsFresh) {
-      const nextSnapshot = getCachedBillingSnapshot(userId);
-      setPlans(nextSnapshot?.plansData ?? []);
-      setUsage(nextSnapshot?.usageData ?? null);
-      setAccount(nextSnapshot?.accountData ?? null);
-      setLoading(false);
-      setError(null);
-      return;
-    }
-
-    void loadBilling(cachedBillingSnapshot === null);
-  }, [accessToken, cachedBillingSnapshot, loadBilling, userId]);
-
-  useEffect(() => {
-    if (checkoutStatus !== "success") {
-      return;
-    }
-
-    if (!checkoutStartRef.current) {
-      checkoutStartRef.current = Date.now();
-    }
-
-    setPurchaseSync({
-      status: "syncing",
-      orderLabel: null
-    });
-
-    let attempts = 0;
-    const maxAttempts = 20;
-    const timer = window.setInterval(async () => {
-      attempts += 1;
-      const result = await loadBilling(false);
-      const recentOrder = findRecentOrder(result?.accountData?.orders ?? [], checkoutStartRef.current);
-
-      if (recentOrder) {
-        setPurchaseSync({
-          status: "synced",
-          orderLabel: getOrderLabel(recentOrder)
-        });
-        window.clearInterval(timer);
-        return;
-      }
-
-      if (attempts >= maxAttempts) {
-        setPurchaseSync((current) => ({
-          status: "delayed",
-          orderLabel: current?.orderLabel ?? null
-        }));
-        window.clearInterval(timer);
-      }
-    }, 2500);
-
-    return () => {
-      window.clearInterval(timer);
-    };
-  }, [checkoutStatus, customerSessionToken, loadBilling]);
-
-  useEffect(() => {
-    return () => {
-      if (refundPollRef.current !== null) {
-        window.clearInterval(refundPollRef.current);
-      }
-    };
-  }, []);
-
-  const planGroups = useMemo<PlanGroup[]>(() => {
-    const subscriptions = plans.filter((plan) => plan.plan_type === "subscription");
-    const packs = plans.filter((plan) => plan.plan_type === "pack");
-
-    return [
-      {
-        key: "subscription",
-        label: "Monthly subscriptions",
-        description: "Best for steady use and recurring briefing volume.",
-        plans: subscriptions
-      },
-      {
-        key: "pack",
-        label: "One-time packs",
-        description: "Add reserve time when you need extra coverage without a recurring change.",
-        plans: packs
-      }
-    ];
-  }, [plans]);
-
-  const requestedPlan = useMemo(
-    () => resolveRequestedPlan(plans, requestedIntent, requestedPlanCode),
-    [plans, requestedIntent, requestedPlanCode]
-  );
-
-  useEffect(() => {
-    if (!requestedPlan) {
-      return;
-    }
-    setOfferMode(requestedPlan.plan_type === "pack" ? "pack" : "subscription");
-  }, [requestedPlan]);
-
-  useEffect(() => {
-    if (!requestedPlan || focusedPlanRef.current === requestedPlan.plan_id) {
-      return;
-    }
-
-    const expectedMode = requestedPlan.plan_type === "pack" ? "pack" : "subscription";
-    if (offerMode !== expectedMode) {
-      return;
-    }
-
-    const frameId = window.requestAnimationFrame(() => {
-      const planCard = document.getElementById(`billing-plan-${requestedPlan.plan_id}`);
-      planCard?.focus({ preventScroll: true });
-      planCard?.scrollIntoView({ behavior: "smooth", block: "center" });
-      focusedPlanRef.current = requestedPlan.plan_id;
-    });
-
-    return () => window.cancelAnimationFrame(frameId);
-  }, [offerMode, requestedPlan]);
-
-  const displayedPacks = useMemo(() => getDisplayedPacks(account?.packs ?? []), [account?.packs]);
-
-  const activePackCount = useMemo(() => {
-    return displayedPacks.filter((pack) => pack.remaining_seconds > 0 && pack.status === "paid").length;
-  }, [displayedPacks]);
-
-  const currentSubscriptionPlan = useMemo(() => {
-    const planName = account?.subscription.plan_name ?? usage?.subscription_plan_name ?? null;
-    if (!planName) {
-      return null;
-    }
-
-    return (
-      plans.find((plan) => plan.plan_type === "subscription" && plan.name.toLowerCase() === planName.toLowerCase()) ??
-      null
-    );
-  }, [account?.subscription.plan_name, plans, usage?.subscription_plan_name]);
-
-  const quotaCapacitySeconds = useMemo(() => {
-    if (!usage) {
-      return 0;
-    }
-
-    const subscriptionQuotaSeconds = currentSubscriptionPlan?.quota_seconds ?? usage.subscription_remaining_seconds;
-    const activePackAllowanceSeconds = displayedPacks
-      .filter((pack) => pack.status === "paid" && pack.remaining_seconds > 0)
-      .reduce((total, pack) => total + pack.granted_seconds, 0);
-
-    return Math.max(subscriptionQuotaSeconds + activePackAllowanceSeconds, usage.total_remaining_seconds);
-  }, [currentSubscriptionPlan?.quota_seconds, displayedPacks, usage]);
-
-  const quotaAvailablePercent = useMemo(() => {
-    if (!usage || quotaCapacitySeconds <= 0) {
-      return null;
-    }
-
-    return Math.max(0, Math.min(100, Math.round((usage.total_remaining_seconds / quotaCapacitySeconds) * 100)));
-  }, [quotaCapacitySeconds, usage]);
-
-  const canManageBilling = useMemo(() => {
-    return (account?.orders ?? []).some((order) => order.paid_amount_cents > 0);
-  }, [account?.orders]);
-
-  const subscriptionStatusText = describeSubscriptionStatus(account?.subscription.status ?? null);
-
-  const accessNote = useMemo(() => {
-    if ((usage?.pack_remaining_seconds ?? 0) > 0 && usage?.pack_expires_at) {
-      return `Pack reserve expires ${formatDate(usage.pack_expires_at)}.`;
-    }
-
-    const subscriptionPlanName = account?.subscription.plan_name ?? usage?.subscription_plan_name;
-    const hasPaidPlan = Boolean(subscriptionPlanName && subscriptionPlanName.toLowerCase() !== "free");
-    if (hasPaidPlan && account?.subscription.period_end) {
-      return `Current plan renews ${formatDate(account.subscription.period_end)}.`;
-    }
-
-    return "Add more video time whenever you need it.";
-  }, [
-    usage?.pack_remaining_seconds,
-    usage?.pack_expires_at,
-    usage?.subscription_plan_name,
-    account?.subscription.plan_name,
-    account?.subscription.period_end
-  ]);
-
-  const visiblePlanGroup = useMemo(() => {
-    return planGroups.find((group) => group.key === offerMode) ?? null;
-  }, [offerMode, planGroups]);
-
-  const handleCheckout = async (planId: string) => {
-    if (checkoutLoading) {
-      return;
-    }
-
-    setCheckoutLoading(planId);
-    setError(null);
-
-    try {
-      if (!accessToken || !userId) {
-        return;
-      }
-
-      const requestScope = captureAuthenticatedRequestScope(userId);
-      const api = createApiClient(accessToken);
-      const { data, error: apiError } = await api.POST("/billing/checkout", {
-        body: {
-          plan_id: planId
-        }
-      });
-      assertAuthenticatedRequestScopeCurrent(requestScope);
-
-      if (apiError) {
-        setError(getApiErrorMessage(apiError, "Unable to start checkout."));
-        return;
-      }
-
-      if (data?.checkout_url) {
-        window.location.href = data.checkout_url;
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong.");
-    } finally {
-      setCheckoutLoading(null);
-    }
-  };
-
-  const handlePortal = async () => {
-    if (portalLoading) {
-      return;
-    }
-
-    setPortalLoading(true);
-    setError(null);
-
-    try {
-      if (!accessToken || !userId) {
-        return;
-      }
-
-      const requestScope = captureAuthenticatedRequestScope(userId);
-      const api = createApiClient(accessToken);
-      const { data, error: apiError } = await api.POST("/billing/portal");
-      assertAuthenticatedRequestScopeCurrent(requestScope);
-
-      if (apiError) {
-        setError(getApiErrorMessage(apiError, "Unable to open billing portal."));
-        return;
-      }
-
-      if (data?.portal_url) {
-        window.location.href = data.portal_url;
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong.");
-    } finally {
-      setPortalLoading(false);
-    }
-  };
-
-  const handleRefund = async (polarOrderId: string): Promise<boolean> => {
-    if (refundLoading) {
-      return false;
-    }
-
-    setRefundLoading(polarOrderId);
-    setError(null);
-
-    try {
-      if (!accessToken || !userId) {
-        return false;
-      }
-
-      const requestScope = captureAuthenticatedRequestScope(userId);
-      const api = createApiClient(accessToken);
-      const { data, error: apiError } = await api.POST("/billing/packs/{polar_order_id}/refund", {
-        params: {
-          path: {
-            polar_order_id: polarOrderId
-          }
-        }
-      });
-      assertAuthenticatedRequestScopeCurrent(requestScope);
-
-      if (apiError) {
-        setError(getApiErrorMessage(apiError, "Unable to request pack refund."));
-        return false;
-      }
-
-      if (usage && data?.remaining_seconds_before_refund) {
-        const nextUsage = applyPendingRefundHold(usage, data.remaining_seconds_before_refund);
-        setUsage(nextUsage);
-        setRemainingSeconds(userId, nextUsage.total_remaining_seconds);
-      }
-
-      setAccount((previous) => {
-        if (!previous) {
-          return previous;
-        }
-
-        return {
-          ...previous,
-          packs: previous.packs.map((pack) =>
-            pack.polar_order_id === polarOrderId
-              ? {
-                  ...pack,
-                  status: "refund_pending",
-                  is_refundable: false,
-                  refundable_amount_cents: 0
-                }
-              : pack
-          ),
-          orders: previous.orders.map((order) =>
-            order.polar_order_id === polarOrderId
-              ? {
-                  ...order,
-                  status: "refund_pending"
-                }
-              : order
-          )
-        };
-      });
-
-      const refundTargetOrder =
-        account?.orders.find((order) => order.polar_order_id === polarOrderId) ??
-        account?.packs.find((pack) => pack.polar_order_id === polarOrderId) ??
-        null;
-
-      setRefundSync({
-        orderId: polarOrderId,
-        orderLabel: getOrderLabel(refundTargetOrder),
-        status: "syncing"
-      });
-
-      if (refundPollRef.current !== null) {
-        window.clearInterval(refundPollRef.current);
-      }
-
-      let attempts = 0;
-      const maxAttempts = 24;
-      refundPollRef.current = window.setInterval(async () => {
-        attempts += 1;
-        const result = await loadBilling(false);
-        const status =
-          (result?.accountData?.orders ?? []).find((order) => order.polar_order_id === polarOrderId)?.status ?? null;
-
-        if (status === "refunded") {
-          if (refundPollRef.current !== null) {
-            window.clearInterval(refundPollRef.current);
-            refundPollRef.current = null;
-          }
-          setRefundSync((current) =>
-            current
-              ? {
-                  ...current,
-                  status: "synced"
-                }
-              : null
-          );
-          return;
-        }
-
-        if (attempts >= maxAttempts) {
-          if (refundPollRef.current !== null) {
-            window.clearInterval(refundPollRef.current);
-            refundPollRef.current = null;
-          }
-          setRefundSync((current) =>
-            current
-              ? {
-                  ...current,
-                  status: "delayed"
-                }
-              : null
-          );
-        }
-      }, 2500);
-      return true;
-    } catch (err) {
-      setError(getApiErrorMessage(err, "Unable to request pack refund."));
-      return false;
-    } finally {
-      setRefundLoading(null);
-    }
-  };
-
-  const handleConfirmRefund = async () => {
-    if (!refundTarget) {
-      return;
-    }
-
-    const requested = await handleRefund(refundTarget.polar_order_id);
-    if (requested) {
-      setRefundTarget(null);
-    }
-  };
-
-  const renderRefundAction = (pack: PackBillingState) => {
-    if (pack.status === "refund_pending") {
-      return <span className={chrome.statusPillWarning}>Refund pending</span>;
-    }
-
-    if (pack.status === "refunded") {
-      return <span className={chrome.statusPillSuccess}>Refunded</span>;
-    }
-
-    if (!pack.is_refundable) {
-      return <span className={chrome.statusPillMuted}>Unavailable</span>;
-    }
-
-    return (
-      <button
-        className={chrome.secondaryButton}
-        type="button"
-        onClick={() => {
-          setError(null);
-          setRefundTarget(pack);
-        }}
-        disabled={refundLoading !== null}
-        aria-label={`Refund ${pack.plan_name ?? "pack"} for ${formatPrice(pack.refundable_amount_cents, pack.currency, null)}`}
-      >
-        {refundLoading === pack.polar_order_id
-          ? "Requesting refund..."
-          : `Refund ${formatPrice(pack.refundable_amount_cents, pack.currency, null)}`}
-      </button>
-    );
-  };
-
-  const handleRefreshSyncStatus = useCallback(async () => {
-    if (syncRefreshLoading) {
-      return;
-    }
-
-    setSyncRefreshLoading(true);
-    try {
-      const result = await loadBilling(false);
-      const orders = result?.accountData?.orders ?? [];
-
-      if (purchaseSync) {
-        const recentOrder = findRecentOrder(orders, checkoutStartRef.current);
-        if (recentOrder) {
-          setPurchaseSync({
-            status: "synced",
-            orderLabel: getOrderLabel(recentOrder)
-          });
-        }
-      }
-
-      if (refundSync) {
-        const matchingOrder = orders.find((order) => order.polar_order_id === refundSync.orderId) ?? null;
-        if (matchingOrder?.status === "refunded") {
-          setRefundSync({
-            ...refundSync,
-            orderLabel: refundSync.orderLabel ?? getOrderLabel(matchingOrder),
-            status: "synced"
-          });
-        }
-      }
-    } finally {
-      setSyncRefreshLoading(false);
-    }
-  }, [loadBilling, purchaseSync, refundSync, syncRefreshLoading]);
+  const {
+    accessNote, account, activePackCount, canManageBilling, checkoutLoading, closeRefundDialog, displayedPacks,
+    error, handleCheckout, handleConfirmRefund, handlePortal, handleRefreshSyncStatus, loading, offerMode,
+    portalLoading, purchaseSync, quotaAvailablePercent, quotaCapacitySeconds, refundLoading, refundSync,
+    refundTarget, remainingSeconds, requestedPlan, selectRefundTarget, setOfferMode, shellLoading, signOut,
+    subscriptionStatusText, syncRefreshLoading, usage, user, visiblePlanGroup
+  } = useBillingController();
 
   if (loading) {
     return (
@@ -994,7 +339,13 @@ function BillingPageContent() {
                           Used {formatDuration(pack.consumed_seconds)} / {formatDuration(pack.granted_seconds)}
                         </p>
                       </div>
-                      <div className={styles.packActions}>{renderRefundAction(pack)}</div>
+                      <div className={styles.packActions}>
+                        <RefundAction
+                          pack={pack}
+                          refundLoading={refundLoading}
+                          onSelect={selectRefundTarget}
+                        />
+                      </div>
                     </article>
                   ))}
                 </div>
@@ -1038,9 +389,7 @@ function BillingPageContent() {
       <Dialog.Root
         open={refundTarget !== null}
         onOpenChange={(open) => {
-          if (!open && refundLoading === null) {
-            setRefundTarget(null);
-          }
+          if (!open) closeRefundDialog();
         }}
       >
         <Dialog.Portal>
@@ -1095,6 +444,33 @@ function BillingPageContent() {
         </Dialog.Portal>
       </Dialog.Root>
     </div>
+  );
+}
+
+function RefundAction({
+  onSelect,
+  pack,
+  refundLoading
+}: {
+  onSelect: (pack: PackBillingState) => void;
+  pack: PackBillingState;
+  refundLoading: string | null;
+}) {
+  if (pack.status === "refund_pending") return <span className={chrome.statusPillWarning}>Refund pending</span>;
+  if (pack.status === "refunded") return <span className={chrome.statusPillSuccess}>Refunded</span>;
+  if (!pack.is_refundable) return <span className={chrome.statusPillMuted}>Unavailable</span>;
+
+  const refundLabel = formatPrice(pack.refundable_amount_cents, pack.currency, null);
+  return (
+    <button
+      className={chrome.secondaryButton}
+      type="button"
+      onClick={() => onSelect(pack)}
+      disabled={refundLoading !== null}
+      aria-label={`Refund ${pack.plan_name ?? "pack"} for ${refundLabel}`}
+    >
+      {refundLoading === pack.polar_order_id ? "Requesting refund..." : `Refund ${refundLabel}`}
+    </button>
   );
 }
 

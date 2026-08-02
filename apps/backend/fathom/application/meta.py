@@ -4,7 +4,7 @@ import logging
 import time
 from contextlib import asynccontextmanager
 
-from fathom.api import __version__
+from fathom import __version__
 from fathom.core.config import Settings
 from fathom.core.errors import ConfigurationError, NotReadyError
 from fathom.schemas.meta import HealthResponse, ReadyResponse, StatusResponse

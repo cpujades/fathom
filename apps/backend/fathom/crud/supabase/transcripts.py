@@ -9,7 +9,13 @@ from postgrest import APIError
 
 from fathom.core.errors import ExternalServiceError
 from fathom.schemas.transcripts import TranscriptSegment
-from fathom.services.supabase.helpers import first_row, is_unique_violation, raise_for_postgrest_error
+from fathom.services.supabase.helpers import (
+    first_row,
+    is_unique_violation,
+    raise_for_postgrest_error,
+    response_record,
+    response_records,
+)
 from supabase import AsyncClient
 
 
@@ -117,7 +123,7 @@ async def create_transcript(
         raise_for_postgrest_error(exc, "Failed to create transcript.")
 
     if isinstance(response.data, Mapping):
-        return dict(response.data)
+        return response_record(response.data, error_message="Failed to create transcript.")
     return first_row(response.data, error_message="Failed to create transcript.")
 
 
@@ -138,17 +144,33 @@ async def fetch_transcript_segments(
         raise_for_postgrest_error(exc, "Failed to fetch transcript segments.")
 
     segments: list[TranscriptSegment] = []
-    for expected_index, row in enumerate(response.data or []):
-        if not isinstance(row, dict):
+    rows = response_records(
+        response.data,
+        error_message="Supabase returned invalid transcript segments.",
+    )
+    for expected_index, row in enumerate(rows):
+        segment_index = row.get("segment_index")
+        start_seconds = row.get("start_seconds")
+        end_seconds = row.get("end_seconds")
+        text = row.get("segment_text")
+        if (
+            not isinstance(segment_index, int)
+            or isinstance(segment_index, bool)
+            or not isinstance(start_seconds, (int, float))
+            or isinstance(start_seconds, bool)
+            or not isinstance(end_seconds, (int, float))
+            or isinstance(end_seconds, bool)
+            or not isinstance(text, str)
+        ):
             raise ExternalServiceError("Supabase returned invalid transcript segments.")
         try:
             segment = TranscriptSegment(
-                segment_index=int(row["segment_index"]),
-                start_seconds=float(row["start_seconds"]),
-                end_seconds=float(row["end_seconds"]),
-                text=str(row["segment_text"]),
+                segment_index=segment_index,
+                start_seconds=float(start_seconds),
+                end_seconds=float(end_seconds),
+                text=text,
             )
-        except (KeyError, TypeError, ValueError) as exc:
+        except ValueError as exc:
             raise ExternalServiceError("Supabase returned invalid transcript segments.") from exc
         if segment.segment_index != expected_index:
             raise ExternalServiceError("Supabase returned non-contiguous transcript segments.")
@@ -191,5 +213,7 @@ async def fetch_transcripts_by_ids(client: AsyncClient, transcript_ids: list[str
     except APIError as exc:
         raise_for_postgrest_error(exc, "Failed to fetch transcripts.")
 
-    data = response.data or []
-    return [row for row in data if isinstance(row, dict)]
+    return response_records(
+        response.data,
+        error_message="Supabase returned an unexpected transcripts shape.",
+    )

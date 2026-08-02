@@ -4,13 +4,15 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Path
 from pydantic import TypeAdapter
 
-from fathom.api.deps.auth import AuthContext, get_auth_context
+from fathom.api.deps.auth import get_auth_context
 from fathom.application.billing import (
     create_checkout_session,
     create_portal_session,
     get_billing_account,
+    list_billing_plans,
     request_pack_refund,
 )
+from fathom.application.identity import AuthenticatedUser
 from fathom.application.usage import get_usage_history, get_usage_overview
 from fathom.core.config import Settings, get_settings
 from fathom.schemas.billing import (
@@ -41,7 +43,7 @@ DATETIME_ADAPTER = TypeAdapter(datetime)
 )
 async def create_checkout(
     request: CheckoutSessionRequest,
-    auth: Annotated[AuthContext, Depends(get_auth_context)],
+    auth: Annotated[AuthenticatedUser, Depends(get_auth_context)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> CheckoutSessionResponse:
     return await create_checkout_session(request, auth, settings)
@@ -57,7 +59,7 @@ async def create_checkout(
     },
 )
 async def create_portal(
-    auth: Annotated[AuthContext, Depends(get_auth_context)],
+    auth: Annotated[AuthenticatedUser, Depends(get_auth_context)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> CustomerPortalSessionResponse:
     return await create_portal_session(auth, settings)
@@ -75,7 +77,7 @@ async def create_portal(
 )
 async def refund_pack(
     polar_order_id: Annotated[str, Path(min_length=1)],
-    auth: Annotated[AuthContext, Depends(get_auth_context)],
+    auth: Annotated[AuthenticatedUser, Depends(get_auth_context)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> PackRefundResponse:
     return await request_pack_refund(
@@ -95,32 +97,10 @@ async def refund_pack(
     },
 )
 async def list_plans(
-    auth: Annotated[AuthContext, Depends(get_auth_context)],
+    auth: Annotated[AuthenticatedUser, Depends(get_auth_context)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> list[PlanResponse]:
-    from fathom.crud.supabase.billing import fetch_active_plans
-    from fathom.services.supabase import create_supabase_admin_client, managed_supabase_client
-
-    async with managed_supabase_client(await create_supabase_admin_client(settings)) as admin_client:
-        plans = await fetch_active_plans(admin_client)
-    return [
-        PlanResponse(
-            plan_id=plan["id"],
-            plan_code=plan["plan_code"],
-            name=plan["name"],
-            plan_type=plan["plan_type"],
-            polar_product_id=plan.get("polar_product_id"),
-            currency=str(plan.get("currency") or "usd"),
-            amount_cents=int(plan.get("amount_cents") or 0),
-            billing_interval=plan.get("billing_interval"),
-            version=int(plan.get("version") or 1),
-            quota_seconds=plan.get("quota_seconds"),
-            rollover_cap_seconds=plan.get("rollover_cap_seconds"),
-            pack_expiry_days=plan.get("pack_expiry_days"),
-            is_active=bool(plan.get("is_active")),
-        )
-        for plan in plans
-    ]
+    return await list_billing_plans(settings)
 
 
 @router.get(
@@ -132,7 +112,7 @@ async def list_plans(
     },
 )
 async def get_usage(
-    auth: Annotated[AuthContext, Depends(get_auth_context)],
+    auth: Annotated[AuthenticatedUser, Depends(get_auth_context)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> UsageOverviewResponse:
     overview = await get_usage_overview(auth.user_id, settings)
@@ -156,7 +136,7 @@ async def get_usage(
     },
 )
 async def get_briefings(
-    auth: Annotated[AuthContext, Depends(get_auth_context)],
+    auth: Annotated[AuthenticatedUser, Depends(get_auth_context)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> list[UsageHistoryEntry]:
     entries = await get_usage_history(auth.user_id, settings, limit=50)
@@ -182,7 +162,7 @@ async def get_briefings(
     },
 )
 async def get_account(
-    auth: Annotated[AuthContext, Depends(get_auth_context)],
+    auth: Annotated[AuthenticatedUser, Depends(get_auth_context)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> BillingAccountResponse:
     return await get_billing_account(auth=auth, settings=settings)

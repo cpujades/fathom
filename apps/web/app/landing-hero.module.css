@@ -1,0 +1,364 @@
+.container {
+  position: relative;
+  z-index: 1;
+}
+
+.container {
+  width: min(1120px, 92vw);
+  margin: 0 auto;
+}
+
+.button {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  padding: 0.56rem 1rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  transition:
+    background-color 180ms ease,
+    border-color 220ms ease,
+    color 180ms ease,
+    box-shadow 220ms ease,
+    filter 220ms ease,
+    transform 180ms ease;
+}
+
+.button::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  background: linear-gradient(115deg, transparent 20%, rgba(255, 255, 255, 0.28) 46%, transparent 72%);
+  opacity: 0;
+  transform: translateX(-120%);
+  transition:
+    opacity 180ms ease,
+    transform 360ms ease;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.button:hover {
+  transform: translateY(-2px);
+}
+
+.button:hover::before {
+  opacity: 1;
+  transform: translateX(28%);
+}
+
+.button:active {
+  transform: scale(0.988);
+}
+
+.buttonGhost {
+  color: var(--landing-text);
+  border-color: rgba(34, 53, 44, 0.16);
+  background:
+    linear-gradient(180deg, rgba(221, 232, 224, 0.84), rgba(203, 216, 207, 0.58));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.14),
+    0 10px 24px rgba(21, 31, 26, 0.08);
+}
+
+.buttonGhost:hover {
+  border-color: rgba(23, 56, 43, 0.28);
+  background:
+    linear-gradient(180deg, rgba(227, 237, 230, 0.96), rgba(210, 223, 214, 0.76));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.34),
+    0 18px 34px rgba(21, 31, 26, 0.14);
+}
+
+.buttonPrimary {
+  color: #f4f9ff;
+  border-color: rgba(23, 56, 43, 0.26);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent 56%),
+    linear-gradient(155deg, #2f674f, #17382b);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 14px 28px rgba(23, 56, 43, 0.22);
+}
+
+.buttonPrimary:hover {
+  filter: saturate(1.1) brightness(1.06);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 22px 40px rgba(23, 56, 43, 0.32);
+}
+
+.hero {
+  padding: clamp(3.5rem, 7vw, 6.2rem) 0 clamp(2.9rem, 6vw, 4.6rem);
+}
+
+.heroGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.14fr) minmax(0, 0.86fr);
+  gap: clamp(1.2rem, 3vw, 2.8rem);
+  align-items: start;
+}
+
+.heroCopy {
+  max-width: 64ch;
+}
+
+.eyebrow {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.67rem;
+  font-weight: 700;
+  color: var(--landing-brand-strong);
+}
+
+.heroTitle {
+  margin: 0.9rem 0 0;
+  font-family: var(--font-display), serif;
+  font-size: clamp(1.86rem, 4.3vw, 3.5rem);
+  line-height: 0.98;
+  letter-spacing: -0.038em;
+  max-width: 13ch;
+  text-wrap: balance;
+}
+
+.heroSubtitle {
+  margin: 1.08rem 0 0;
+  color: var(--landing-text-muted);
+  font-size: clamp(1rem, 1.34vw, 1.1rem);
+  line-height: 1.68;
+  max-width: 56ch;
+}
+
+.heroActions {
+  margin-top: 1.4rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.66rem;
+}
+
+.heroDeck {
+  margin: 0.9rem 0 0;
+  color: var(--landing-text-soft);
+  font-size: 0.74rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.expectationList {
+  margin: 1.2rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.86rem;
+  border-top: 1px solid var(--landing-line);
+  padding-top: 0.9rem;
+}
+
+.expectationList li {
+  color: var(--landing-text-soft);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.expectationList li + li {
+  padding-left: 0.86rem;
+  border-left: 1px solid var(--landing-line-strong);
+}
+
+.heroAside {
+  border: 1px solid rgba(35, 55, 45, 0.2);
+  border-radius: 18px;
+  padding: 1.2rem;
+  background:
+    var(--landing-glass-strong),
+    var(--landing-surface);
+  position: relative;
+  box-shadow: var(--landing-shadow);
+  backdrop-filter: blur(18px) saturate(1.08);
+}
+
+.heroAside::before {
+  content: "";
+  position: absolute;
+  inset: 0.7rem;
+  border: 1px solid rgba(35, 55, 45, 0.08);
+  pointer-events: none;
+  border-radius: 12px;
+}
+
+.dossierMasthead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.dossierSeal {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0.12rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid rgba(35, 55, 45, 0.16);
+  color: var(--landing-brand-strong);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: rgba(40, 92, 70, 0.06);
+}
+
+.cardEyebrow {
+  margin: 0;
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--landing-text-soft);
+}
+
+.cardTitle {
+  margin: 0.46rem 0 0;
+  font-family: var(--font-body), sans-serif;
+  font-size: 1.18rem;
+  line-height: 1.18;
+  font-weight: 620;
+  letter-spacing: -0.02em;
+}
+
+.cardText {
+  margin: 0.58rem 0 0;
+  color: var(--landing-text-muted);
+  font-size: 0.9rem;
+  line-height: 1.58;
+}
+
+.heroCoverSheet {
+  margin-top: 1rem;
+  border-top: 1px solid var(--landing-line);
+  border-bottom: 1px solid var(--landing-line);
+}
+
+.coverRow {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 0.72rem;
+  align-items: start;
+  padding: 0.7rem 0;
+}
+
+.coverRow + .coverRow {
+  border-top: 1px solid rgba(35, 55, 45, 0.08);
+}
+
+.coverLabel {
+  color: var(--landing-text-soft);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.coverValue {
+  margin: 0;
+  color: var(--landing-text);
+  font-size: 0.86rem;
+  line-height: 1.48;
+}
+
+.heroAsideNote {
+  margin-top: 1rem;
+  padding-top: 0.92rem;
+  border-top: 1px solid var(--landing-line);
+  color: var(--landing-text-muted);
+  font-size: 0.83rem;
+  line-height: 1.52;
+}
+
+.hero {
+  animation: section-rise 420ms ease both;
+}
+
+@keyframes section-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 1060px) {
+  .heroGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .heroCopy {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .container {
+    width: min(1120px, 94vw);
+  }
+
+  .hero {
+    padding-top: 2.2rem;
+  }
+
+  .heroTitle {
+    max-width: none;
+    font-size: clamp(1.58rem, 8vw, 2.24rem);
+  }
+
+  .button {
+    min-height: 38px;
+    font-size: 0.8rem;
+  }
+
+  .heroActions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .expectationList {
+    gap: 0.54rem;
+  }
+
+  .expectationList li + li {
+    border-left: 0;
+    padding-left: 0;
+  }
+
+  .coverRow {
+    grid-template-columns: 1fr;
+    gap: 0.28rem;
+  }
+
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero,
+  .button {
+    animation: none;
+    transition: none;
+  }
+
+  .button:hover {
+    transform: none;
+    filter: none;
+  }
+}

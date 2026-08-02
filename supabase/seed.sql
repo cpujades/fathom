@@ -10,7 +10,7 @@ values (
   'example_url_hash',
   'example_video_id',
   'Hello world transcript...',
-  'deepgram'
+  'groq:whisper-large-v3-turbo:segments-v1'
 );
 
 -- Example "user id" for local-only seed data (not tied to auth.users)
@@ -34,8 +34,8 @@ select
   gen_random_uuid(),
   '00000000-0000-0000-0000-000000000001'::uuid,
   t.id,
-  'default',
-  'x-ai/grok-4.1-fast',
+  'briefing-v6-evidence-links',
+  'x-ai/grok-4.3',
   '# Example summary
 
 This is a seeded summary.',
@@ -65,5 +65,5 @@ select
 from public.summaries s
 join public.transcripts t on t.id = s.transcript_id
 where t.url_hash = 'example_url_hash'
-  and s.prompt_key = 'default'
-  and s.summary_model = 'x-ai/grok-4.1-fast';
+  and s.prompt_key = 'briefing-v6-evidence-links'
+  and s.summary_model = 'x-ai/grok-4.3';

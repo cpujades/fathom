@@ -1,0 +1,158 @@
+.container {
+  position: relative;
+  z-index: 1;
+}
+
+.container {
+  width: min(1120px, 92vw);
+  margin: 0 auto;
+}
+
+.eyebrow {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.67rem;
+  font-weight: 700;
+  color: var(--landing-brand-strong);
+}
+
+.section {
+  padding: clamp(3.2rem, 7vw, 5.9rem) 0;
+}
+
+.sectionIntro {
+  max-width: 70ch;
+}
+
+.editorialShell {
+  display: grid;
+  grid-template-columns: minmax(0, 1.12fr) minmax(260px, 0.64fr);
+  gap: 1.2rem;
+  align-items: end;
+}
+
+.sectionTitle {
+  margin: 0.76rem 0 0;
+  font-family: var(--font-body), sans-serif;
+  font-size: clamp(1.34rem, 2.8vw, 2.06rem);
+  line-height: 1.02;
+  letter-spacing: -0.022em;
+  font-weight: 620;
+  text-wrap: balance;
+}
+
+.sectionSubtitle {
+  margin: 0.74rem 0 0;
+  color: var(--landing-text-muted);
+  font-size: 0.98rem;
+  line-height: 1.68;
+  max-width: 62ch;
+}
+
+.dossierNote {
+  max-width: 31ch;
+  border: 1px solid rgba(35, 55, 45, 0.14);
+  border-radius: 18px;
+  padding: 1rem 1.05rem;
+  background: var(--landing-neutral-glass);
+  box-shadow: 0 18px 36px rgba(21, 31, 26, 0.08);
+  backdrop-filter: blur(18px) saturate(1.04);
+}
+
+.dossierNoteLabel {
+  margin: 0;
+  color: var(--landing-brand-strong);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dossierNoteText {
+  margin: 0.44rem 0 0;
+  color: var(--landing-text-muted);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.problemStack {
+  margin-top: 2rem;
+  display: grid;
+  gap: 0.8rem;
+}
+
+.problemEntry {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 1rem;
+  padding: 1rem 1.05rem;
+  border: 1px solid rgba(35, 55, 45, 0.14);
+  border-radius: 18px;
+  background: var(--landing-neutral-glass);
+  box-shadow: 0 16px 32px rgba(21, 31, 26, 0.08);
+  backdrop-filter: blur(18px) saturate(1.04);
+}
+
+.problemIndex {
+  margin: 0;
+  color: var(--landing-brand-strong);
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 800;
+}
+
+.problemEntryBody h3 {
+  margin: 0;
+  font-family: var(--font-body), sans-serif;
+  font-size: 1.02rem;
+  font-weight: 610;
+  letter-spacing: -0.015em;
+}
+
+.problemEntryBody p {
+  margin: 0.5rem 0 0;
+  color: var(--landing-text-muted);
+  font-size: 0.9rem;
+  line-height: 1.58;
+}
+
+.section {
+  animation: section-rise 420ms ease both;
+}
+
+@keyframes section-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 1060px) {
+  .editorialShell {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .container {
+    width: min(1120px, 94vw);
+  }
+
+  .problemEntry {
+    grid-template-columns: 1fr;
+    gap: 0.6rem;
+  }
+
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .section {
+    animation: none;
+    transition: none;
+  }
+}

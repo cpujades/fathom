@@ -1,6 +1,6 @@
 import type { LandingContent } from "@/content/landing";
 
-import styles from "../../page.module.css";
+import styles from "../../landing-how.module.css";
 
 type HowItWorksSectionProps = {
   content: LandingContent["howItWorks"];

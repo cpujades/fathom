@@ -13,6 +13,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from typing_extensions import override
+
 # Standard log record attributes that should not be treated as "extra" context.
 _STANDARD_LOG_RECORD_ATTRS = {
     "name",
@@ -114,6 +116,7 @@ def _build_log_format(include_source: bool) -> str:
 class ContextInjectionFilter(logging.Filter):
     """Injects contextvars-based fields into every log record."""
 
+    @override
     def filter(self, record: logging.LogRecord) -> bool:
         context = _LOG_CONTEXT.get()
         if not context:
@@ -133,6 +136,7 @@ class StaticFieldsFilter(logging.Filter):
         super().__init__()
         self.fields = fields
 
+    @override
     def filter(self, record: logging.LogRecord) -> bool:
         for key, value in self.fields.items():
             if key in _STANDARD_LOG_RECORD_ATTRS or hasattr(record, key):
@@ -178,6 +182,7 @@ class AppLoggingFilter(logging.Filter):
                 return True
         return False
 
+    @override
     def filter(self, record: logging.LogRecord) -> bool:
         logger = logging.getLogger(record.name)
 
@@ -205,6 +210,7 @@ class AppLoggingFilter(logging.Filter):
 class SmartContextFormatter(logging.Formatter):
     """Formatter that appends all extra fields as key=value context."""
 
+    @override
     def format(self, record: logging.LogRecord) -> str:
         record.module_path = _module_path(record)  # type: ignore[attr-defined]
         return super().format(record)
@@ -213,6 +219,7 @@ class SmartContextFormatter(logging.Formatter):
 class ConsoleFormatter(SmartContextFormatter):
     """Human-readable formatter for local development."""
 
+    @override
     def format(self, record: logging.LogRecord) -> str:
         base_message = super().format(record)
         extra_fields = {
@@ -230,6 +237,7 @@ class ConsoleFormatter(SmartContextFormatter):
 class JsonFormatter(logging.Formatter):
     """Structured JSON lines formatter for production log ingestion."""
 
+    @override
     def format(self, record: logging.LogRecord) -> str:
         payload: dict[str, Any] = {
             "ts": datetime.fromtimestamp(record.created, UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
@@ -265,6 +273,7 @@ class ColorFormatter(ConsoleFormatter):
     _NAME_COLOR = "\x1b[34m"  # blue
     _SOURCE_COLOR = "\x1b[94m"  # bright blue
 
+    @override
     def format(self, record: logging.LogRecord) -> str:
         # Inject fields used by the format string.
         level_color = self._LEVEL_COLORS.get(record.levelname, "")
@@ -290,13 +299,11 @@ def log_context(**kwargs: Any) -> Iterator[None]:
 
 def get_log_context() -> Mapping[str, Any]:
     """Return the current logging context (useful for debugging/tests)."""
-
     return _LOG_CONTEXT.get() or {}
 
 
 def normalize_correlation_id(value: str | None) -> str:
     """Return a bounded, log-safe correlation ID, generating one when invalid."""
-
     candidate = (value or "").strip()
     if _CORRELATION_ID_PATTERN.fullmatch(candidate):
         return candidate
@@ -369,7 +376,6 @@ def _level_from_name(level_name: str, fallback: int) -> int:
 
 def _clamp_to_warning(level: int) -> int:
     """Ensure third-party loggers never go below WARNING."""
-
     return level if level >= logging.WARNING else logging.WARNING
 
 
@@ -394,7 +400,6 @@ def _resolve_third_party_levels(root_level: int, overrides: Mapping[str, str] | 
 
 def _reset_logging_state() -> logging.Logger:
     """Reset handlers and logger state so configuration is deterministic."""
-
     root_logger = logging.getLogger()
     for handler in root_logger.handlers[:]:
         root_logger.removeHandler(handler)
@@ -451,12 +456,7 @@ def setup_logging(
     service: str | None = None,
     third_party_levels: Mapping[str, str] | None = None,
 ) -> None:
-    """
-    Configure global, context-aware logging for the application.
-
-    Environment variables:
-    - LOG_FORMAT: console or json (default: console)
-    """
+    """Configure global logging; ``LOG_FORMAT`` selects console or JSON output."""
     root_level = _resolve_log_level(log_level or "INFO")
     include_source = True
     log_format = _build_log_format(include_source)

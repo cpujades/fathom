@@ -1,13 +1,30 @@
-export type SessionStreamEvent<T> = {
-  id: string | null;
-  event: string;
-  data: T | null;
-};
+import type { BriefingSessionResponse } from "@fathom/api-client";
 
-export async function readSessionStream<T>(
+import type { SessionContentDeltaPayload, SessionStatusPayload } from "./sessionState";
+
+type SessionEventName =
+  | "session.snapshot"
+  | "session.updated"
+  | "session.ready"
+  | "session.failed";
+
+export type SessionStreamEvent =
+  | { id: string | null; event: "session.event"; data: Record<string, unknown> }
+  | { id: string | null; event: "session.content_delta"; data: SessionContentDeltaPayload }
+  | { id: string | null; event: "session.status"; data: SessionStatusPayload }
+  | { id: string | null; event: SessionEventName; data: BriefingSessionResponse };
+
+export class SessionStreamProtocolError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SessionStreamProtocolError";
+  }
+}
+
+export async function readSessionStream(
   stream: ReadableStream<Uint8Array>,
-  onEvent: (event: SessionStreamEvent<T>) => Promise<void> | void
-) {
+  onEvent: (event: SessionStreamEvent) => Promise<void> | void
+): Promise<void> {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
@@ -16,70 +33,179 @@ export async function readSessionStream<T>(
     const { done, value } = await reader.read();
     buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
 
-    let boundary = buffer.indexOf("\n\n");
-    while (boundary !== -1) {
-      const rawEvent = buffer.slice(0, boundary);
-      buffer = buffer.slice(boundary + 2);
-      const parsed = parseSessionStreamEvent<T>(rawEvent);
-      if (parsed) {
-        await onEvent(parsed);
-      }
-      boundary = buffer.indexOf("\n\n");
+    let boundary = findEventBoundary(buffer);
+    while (boundary) {
+      const parsed = parseSessionStreamEvent(buffer.slice(0, boundary.index));
+      buffer = buffer.slice(boundary.index + boundary.length);
+      if (parsed) await onEvent(parsed);
+      boundary = findEventBoundary(buffer);
     }
 
     if (done) {
-      const parsed = parseSessionStreamEvent<T>(buffer);
-      if (parsed) {
-        await onEvent(parsed);
-      }
+      const parsed = parseSessionStreamEvent(buffer);
+      if (parsed) await onEvent(parsed);
       return;
     }
   }
 }
 
-function parseSessionStreamEvent<T>(rawEvent: string): SessionStreamEvent<T> | null {
+export function parseSessionStreamEvent(rawEvent: string): SessionStreamEvent | null {
   const trimmed = rawEvent.trim();
-  if (!trimmed || trimmed.startsWith(":")) {
-    return null;
-  }
+  if (!trimmed) return null;
 
   let id: string | null = null;
   let event = "message";
   const dataLines: string[] = [];
 
-  for (const line of rawEvent.split("\n")) {
-    if (!line || line.startsWith(":")) {
-      continue;
-    }
-
+  for (const line of rawEvent.split(/\r?\n/)) {
+    if (!line || line.startsWith(":")) continue;
     const separatorIndex = line.indexOf(":");
-    if (separatorIndex === -1) {
-      continue;
-    }
+    if (separatorIndex === -1) continue;
 
     const field = line.slice(0, separatorIndex).trim();
     const value = line.slice(separatorIndex + 1).trimStart();
-    if (field === "id") {
-      id = value;
-      continue;
-    }
-    if (field === "event") {
-      event = value;
-      continue;
-    }
-    if (field === "data") {
-      dataLines.push(value);
-    }
+    if (field === "id") id = value;
+    else if (field === "event") event = value;
+    else if (field === "data") dataLines.push(value);
   }
 
   const rawData = dataLines.join("\n");
-  if (!rawData) {
-    return null;
+  if (!rawData) return null;
+
+  let data: unknown;
+  try {
+    data = JSON.parse(rawData);
+  } catch {
+    throw new SessionStreamProtocolError(`The ${event} event contained invalid JSON.`);
   }
 
-  return {
-    id,
-    event,
-    data: JSON.parse(rawData) as T
-  };
+  if (event === "session.event" && isRecord(data)) return { id, event, data };
+  if (event === "session.content_delta" && isContentDelta(data)) return { id, event, data };
+  if (event === "session.status" && isSessionStatus(data)) return { id, event, data };
+  if (isSnapshotEvent(event) && isSessionSnapshot(data)) return { id, event, data };
+
+  throw new SessionStreamProtocolError(`The ${event} event did not match the session stream contract.`);
+}
+
+function findEventBoundary(buffer: string): { index: number; length: number } | null {
+  const match = /\r?\n\r?\n/.exec(buffer);
+  return match ? { index: match.index, length: match[0].length } : null;
+}
+
+const SESSION_STATES = new Set<BriefingSessionResponse["state"]>([
+  "accepted",
+  "resolving_source",
+  "reusing_existing",
+  "transcribing",
+  "drafting_briefing",
+  "finalizing_briefing",
+  "ready",
+  "failed"
+]);
+const RESOLUTION_TYPES = new Set<BriefingSessionResponse["resolution_type"]>([
+  "new",
+  "joined_existing",
+  "reused_ready"
+]);
+const SNAPSHOT_EVENTS = new Set<SessionEventName>([
+  "session.snapshot",
+  "session.updated",
+  "session.ready",
+  "session.failed"
+]);
+
+function isSnapshotEvent(value: string): value is SessionEventName {
+  return SNAPSHOT_EVENTS.has(value as SessionEventName);
+}
+
+function isSessionSnapshot(value: unknown): value is BriefingSessionResponse {
+  if (!hasSessionStatusBase(value) || !RESOLUTION_TYPES.has(value.resolution_type as BriefingSessionResponse["resolution_type"])) {
+    return false;
+  }
+  return (
+    isString(value.submitted_url) &&
+    isString(value.canonical_source_url) &&
+    (value.source_type === "youtube" || value.source_type === "url") &&
+    isString(value.source_identity_key) &&
+    isString(value.source_title) &&
+    isString(value.session_url) &&
+    isString(value.events_url) &&
+    typeof value.briefing_has_pdf === "boolean" &&
+    isOptionalNullableString(value.briefing_id) &&
+    isOptionalNullableString(value.briefing_markdown) &&
+    isOptionalNullableString(value.error_code) &&
+    isOptionalNullableString(value.error_message) &&
+    isOptionalNullableString(value.source_author) &&
+    isOptionalNullableNumber(value.source_duration_seconds) &&
+    isOptionalNullableString(value.source_thumbnail_url)
+  );
+}
+
+function isSessionStatus(value: unknown): value is SessionStatusPayload {
+  return (
+    hasSessionStatusBase(value) &&
+    RESOLUTION_TYPES.has(value.resolution_type as BriefingSessionResponse["resolution_type"]) &&
+    isNullableString(value.briefing_id) &&
+    isString(value.source_title) &&
+    isNullableString(value.source_author) &&
+    isNullableNumber(value.source_duration_seconds) &&
+    isNullableString(value.source_thumbnail_url) &&
+    typeof value.briefing_has_pdf === "boolean" &&
+    isNullableString(value.error_code) &&
+    isNullableString(value.error_message)
+  );
+}
+
+function isContentDelta(value: unknown): value is SessionContentDeltaPayload {
+  return (
+    hasSessionStatusBase(value) &&
+    isNullableString(value.briefing_id) &&
+    isString(value.source_title) &&
+    isNullableString(value.source_author) &&
+    isNullableNumber(value.source_duration_seconds) &&
+    isNullableString(value.source_thumbnail_url) &&
+    typeof value.briefing_has_pdf === "boolean" &&
+    typeof value.markdown_length === "number" &&
+    isString(value.delta)
+  );
+}
+
+function hasSessionStatusBase(value: unknown): value is Record<string, unknown> & {
+  message: string;
+  progress: number;
+  session_id: string;
+  state: BriefingSessionResponse["state"];
+} {
+  return (
+    isRecord(value) &&
+    isString(value.session_id) &&
+    SESSION_STATES.has(value.state as BriefingSessionResponse["state"]) &&
+    isString(value.message) &&
+    typeof value.progress === "number" &&
+    isOptionalNullableString(value.detail)
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === "string";
+}
+
+function isNullableString(value: unknown): value is string | null {
+  return value === null || isString(value);
+}
+
+function isOptionalNullableString(value: unknown): value is string | null | undefined {
+  return value === undefined || isNullableString(value);
+}
+
+function isNullableNumber(value: unknown): value is number | null {
+  return value === null || typeof value === "number";
+}
+
+function isOptionalNullableNumber(value: unknown): value is number | null | undefined {
+  return value === undefined || isNullableNumber(value);
 }

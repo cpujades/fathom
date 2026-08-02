@@ -18,17 +18,19 @@ dependencies = [
   "pyjwt==2.13.0",
   "pydantic-settings==2.14.2",
   "asyncpg==0.31.0",
-  "debugpy>=1.8.21",
+  "typing-extensions==4.15.0",
   "groq>=1.6.0",
   "pytubefix>=10.10.1",
 ]
 
 [dependency-groups]
 dev = [
+  # Local debugging
+  "debugpy==1.8.21",
   # Lint/format
   "ruff==0.16.0",
   # Type-checking
-  "ty==0.0.8",
+  "ty==0.0.63",
   # Git hooks runner
   "pre-commit==4.6.1",
 ]
@@ -65,15 +67,8 @@ known-first-party = ["fathom"]
 [tool.ty.environment]
 root = ["apps/backend"]
 
-[tool.ty.terminal]
-error-on-warning = false
-
 [tool.ty.src]
 respect-ignore-files = true
 
 [tool.ty.rules]
-invalid-argument-type = "error"
-invalid-return-type = "error"
-missing-argument = "error"
-unknown-argument = "error"
-unresolved-reference = "error"
+all = "error"

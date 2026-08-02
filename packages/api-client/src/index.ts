@@ -4,6 +4,10 @@ export type { paths } from "./schema";
 export type {
   ApiErrorBody,
   BriefingPdfResponse,
+  BriefingListItem,
+  BriefingListResponse,
+  BriefingListSort,
+  BriefingSourceFilter,
   BriefingResponse,
   BriefingSessionCreateRequest,
   BriefingSessionResolution,

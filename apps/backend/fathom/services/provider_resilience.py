@@ -19,6 +19,7 @@ DEFAULT_PROVIDER_RETRY_AFTER_MAX_SECONDS = 60.0
 DEFAULT_PROVIDER_JITTER_RATIO = 0.25
 
 T = TypeVar("T")
+T_co = TypeVar("T_co", covariant=True)
 
 
 class ProviderFailureKind(StrEnum):
@@ -78,11 +79,14 @@ class RetryPolicy:
             raise ValueError("jitter_ratio must be between zero and one")
 
 
-class AsyncProviderAdapter(Protocol[T]):
-    provider: str
-    stage: str
+class AsyncProviderAdapter(Protocol[T_co]):
+    @property
+    def provider(self) -> str: ...
 
-    async def invoke(self) -> T: ...
+    @property
+    def stage(self) -> str: ...
+
+    async def invoke(self) -> T_co: ...
 
     def classify_error(self, exc: Exception) -> ProviderOperationError: ...
 

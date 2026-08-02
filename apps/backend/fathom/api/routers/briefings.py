@@ -5,8 +5,9 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 
-from fathom.api.deps.auth import AuthContext, get_auth_context
+from fathom.api.deps.auth import get_auth_context
 from fathom.application.briefings import create_briefing_pdf, get_briefing, list_briefings_for_user
+from fathom.application.identity import AuthenticatedUser
 from fathom.core.config import Settings, get_settings
 from fathom.schemas.briefings import (
     BriefingListResponse,
@@ -30,7 +31,7 @@ router = APIRouter(prefix="/briefings", tags=["briefings"])
     },
 )
 async def list_briefings(
-    auth: Annotated[AuthContext, Depends(get_auth_context)],
+    auth: Annotated[AuthenticatedUser, Depends(get_auth_context)],
     settings: Annotated[Settings, Depends(get_settings)],
     limit: Annotated[int, Query(ge=1, le=100)] = 24,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -62,7 +63,7 @@ async def list_briefings(
 )
 async def get_briefing_by_id(
     briefing_id: UUID,
-    auth: Annotated[AuthContext, Depends(get_auth_context)],
+    auth: Annotated[AuthenticatedUser, Depends(get_auth_context)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> BriefingResponse:
     return await get_briefing(briefing_id, auth, settings)
@@ -81,7 +82,7 @@ async def get_briefing_by_id(
 )
 async def generate_briefing_pdf(
     briefing_id: UUID,
-    auth: Annotated[AuthContext, Depends(get_auth_context)],
+    auth: Annotated[AuthenticatedUser, Depends(get_auth_context)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> BriefingPdfResponse:
     return await create_briefing_pdf(briefing_id, auth, settings)

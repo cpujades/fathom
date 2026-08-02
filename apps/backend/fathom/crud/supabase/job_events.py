@@ -9,7 +9,7 @@ from uuid import uuid4
 
 from postgrest import APIError
 
-from fathom.services.supabase.helpers import raise_for_postgrest_error
+from fathom.services.supabase.helpers import raise_for_postgrest_error, response_records
 from supabase import AsyncClient
 
 
@@ -113,8 +113,10 @@ async def list_job_events(client: AsyncClient, *, job_id: str) -> list[dict[str,
     except APIError as exc:
         raise_for_postgrest_error(exc, "Failed to fetch job events.")
 
-    data = response.data or []
-    return [row for row in data if isinstance(row, dict)]
+    return response_records(
+        response.data,
+        error_message="Supabase returned an unexpected job events shape.",
+    )
 
 
 async def list_job_events_after(
@@ -138,8 +140,10 @@ async def list_job_events_after(
     except APIError as exc:
         raise_for_postgrest_error(exc, "Failed to replay job events.")
 
-    data = response.data or []
-    return [row for row in data if isinstance(row, dict)]
+    return response_records(
+        response.data,
+        error_message="Supabase returned an unexpected job events shape.",
+    )
 
 
 async def fetch_latest_job_event_sequence(client: AsyncClient, *, job_id: str) -> int:

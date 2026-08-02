@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
 from functools import lru_cache
 from typing import Annotated, Any
 from urllib.parse import urljoin
@@ -12,6 +11,7 @@ from jwt import ExpiredSignatureError, InvalidTokenError, PyJWKClient, PyJWKClie
 from jwt import decode as jwt_decode
 from supabase_auth.errors import AuthApiError
 
+from fathom.application.identity import AuthenticatedUser
 from fathom.core.config import Settings, get_settings
 from fathom.core.errors import AppError, AuthenticationError, ConfigurationError, ExternalServiceError
 from fathom.core.logging import log_context
@@ -21,12 +21,6 @@ from fathom.services.supabase.helpers import raise_for_auth_error
 security = HTTPBearer(auto_error=False)
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True)
-class AuthContext:
-    access_token: str
-    user_id: str
 
 
 def _extract_user_id(user: Any) -> str | None:
@@ -48,7 +42,7 @@ def _get_jwks_client(jwks_url: str) -> PyJWKClient:
     return PyJWKClient(jwks_url, cache_jwk_set=True, cache_keys=True)
 
 
-def _decode_local_jwt(access_token: str, settings: Settings) -> AuthContext:
+def _decode_local_jwt(access_token: str, settings: Settings) -> AuthenticatedUser:
     try:
         header = get_unverified_header(access_token)
     except InvalidTokenError as exc:
@@ -79,14 +73,14 @@ def _decode_local_jwt(access_token: str, settings: Settings) -> AuthContext:
     if not user_id:
         raise AuthenticationError("Invalid auth token.")
 
-    return AuthContext(access_token=access_token, user_id=str(user_id))
+    return AuthenticatedUser(access_token=access_token, user_id=str(user_id))
 
 
 async def get_auth_context(
     request: Request,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(security)],
     settings: Annotated[Settings, Depends(get_settings)],
-) -> AuthContext:
+) -> AuthenticatedUser:
     request_id = getattr(request.state, "request_id", None)
     base_log_context = {
         "request_id": request_id,
@@ -153,4 +147,4 @@ async def get_auth_context(
         raise AuthenticationError("Invalid auth token.")
 
     request.state.user_id = user_id
-    return AuthContext(access_token=access_token, user_id=user_id)
+    return AuthenticatedUser(access_token=access_token, user_id=user_id)

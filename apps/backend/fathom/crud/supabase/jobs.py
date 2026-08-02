@@ -11,7 +11,7 @@ from postgrest import APIError
 from postgrest.types import CountMethod
 
 from fathom.core.errors import ExternalServiceError, UsageSettlementError
-from fathom.services.supabase.helpers import first_row, raise_for_postgrest_error
+from fathom.services.supabase.helpers import first_row, raise_for_postgrest_error, response_records
 from supabase import AsyncClient
 
 
@@ -153,8 +153,10 @@ async def fetch_jobs_by_ids(client: AsyncClient, job_ids: list[str]) -> list[dic
     except APIError as exc:
         raise_for_postgrest_error(exc, "Failed to fetch jobs.")
 
-    data = response.data or []
-    return [row for row in data if isinstance(row, dict)]
+    return response_records(
+        response.data,
+        error_message="Supabase returned an unexpected jobs shape.",
+    )
 
 
 async def fetch_briefing_jobs_page(
@@ -178,9 +180,12 @@ async def fetch_briefing_jobs_page(
     except APIError as exc:
         raise_for_postgrest_error(exc, "Failed to fetch briefing jobs.")
 
-    data = response.data or []
-    count = response.count if isinstance(response.count, int) else len(data)
-    return [row for row in data if isinstance(row, dict)], count
+    rows = response_records(
+        response.data,
+        error_message="Supabase returned an unexpected jobs shape.",
+    )
+    count = response.count if isinstance(response.count, int) else len(rows)
+    return rows, count
 
 
 async def claim_next_job(client: AsyncClient, *, lease_seconds: int) -> dict[str, Any] | None:

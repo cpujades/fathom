@@ -8,7 +8,7 @@ from starlette.middleware import Middleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.cors import CORSMiddleware
 
-from fathom.api import __version__
+from fathom import __version__
 from fathom.api.routers import (
     billing_router,
     briefing_sessions_router,

@@ -14,6 +14,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urljoin, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
+from typing_extensions import override
+
 from fathom.core.config import Settings
 from fathom.core.errors import ConfigurationError, ExternalServiceError, InvalidRequestError
 
@@ -92,6 +94,7 @@ def _get_api_base_url(settings: Settings) -> str:
 class _NoRedirectHandler(HTTPRedirectHandler):
     """Return redirects to the caller so bearer credentials never move implicitly."""
 
+    @override
     def redirect_request(
         self,
         req: Request,

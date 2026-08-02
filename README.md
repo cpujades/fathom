@@ -10,10 +10,17 @@ Talven turns long-form YouTube audio/video into structured, source-linked briefi
 
 ## Repo Layout
 
-- `apps/backend/fathom`: FastAPI app, application logic, worker, integrations
-- `apps/web`: Next.js frontend
-- `packages/api-client`: generated API client used by the frontend
-- `supabase`: migrations and local Supabase config
+- `apps/backend/fathom`: deployable FastAPI API and worker code
+- `apps/web`: deployable Next.js frontend
+- `packages/api-client`: generated REST contract shared across the app boundary
+- `scripts`: repository-wide generation and provider administration
+- `supabase`: database migrations, tests, seed, and local infrastructure
+- `docs`: architecture, product decisions, and operational runbooks
+
+This is intentionally one monorepo: backend contracts, the generated client,
+the web application, and database migrations are reviewed and tested together.
+See the [repository and code map](./docs/architecture/repository-and-code-map.md)
+for the rationale, root-file responsibilities, and placement rules.
 
 ## Current Product Flow
 
@@ -23,6 +30,10 @@ Talven turns long-form YouTube audio/video into structured, source-linked briefi
 4. Worker downloads the source, transcribes it with Groq, summarizes it with OpenRouter, and streams progress through job updates.
 5. Frontend subscribes to session events and renders the evolving briefing.
 6. Billing uses Polar checkout, portal sessions, refunds, and webhooks.
+
+See [frontend, authentication, and user flows](./docs/architecture/frontend-auth-and-user-flows.md)
+for the browser route map, safe redirect rules, account-scoped caches, and each
+end-to-end user journey.
 
 ## Local Setup
 
@@ -83,6 +94,7 @@ Optional backend runtime variables:
 - `RATE_LIMIT`
 - `TRUST_PROXY_HEADERS`
 - `TRUSTED_PROXY_NETWORKS`
+- `SUPABASE_DB_PORT`
 - `POLAR_CHECKOUT_RETURN_URL`
 - `POLAR_SERVER`
 - `WORKER_SHUTDOWN_GRACE_SECONDS`
@@ -115,6 +127,19 @@ Copy the frontend example file:
 cp apps/web/env.example apps/web/.env.local
 ```
 
+For local Supabase, run `supabase start`, then use `supabase status -o env` to
+copy its URL and public publishable key into `.env.local`. The tracked example
+uses `localhost` consistently with the browser/Auth redirect configuration.
+
+For the meaning of each backend and frontend variable, and the distinction
+between local Supabase, hosted staging, and production targets, see
+[Environment configuration](./docs/reference/environment.md).
+
+For a literal first-run sequence—including database reset safety, backend key
+mapping, the local database port, plan provisioning, email confirmation,
+readiness checks, and the first briefing—follow [local development from a fresh
+clone](./docs/getting-started/local-development.md).
+
 ### Billing catalog
 
 `scripts/polar/plan_contract.json` is the tracked, non-secret source of truth
@@ -142,7 +167,7 @@ Recommended frontend public variable:
 ### API
 
 ```bash
-uvicorn --app-dir apps/backend fathom.api.app:app --host 127.0.0.1 --port 8080 --reload
+uvicorn --app-dir apps/backend fathom.api.app:app --host localhost --port 8080 --reload
 ```
 
 ### Worker
@@ -160,6 +185,10 @@ pnpm --filter @fathom/web dev
 ```
 
 ## Main API Routes
+
+The [HTTP API reference](./docs/reference/http-api.md) documents authentication,
+inputs, results, errors, rate-limit pointers, and example requests. The list
+below is the compact route inventory.
 
 ### Meta
 
@@ -217,8 +246,23 @@ For a durable product and architecture map, start with the
 ```bash
 pnpm --filter @fathom/web lint
 pnpm --filter @fathom/web typecheck
+pnpm --filter @fathom/web test
+pnpm --filter @fathom/web test:browser
 pnpm --filter @fathom/web build
 ```
+
+### API contract
+
+After changing FastAPI routes or Pydantic request/response models, regenerate
+the committed OpenAPI contract and TypeScript client:
+
+```bash
+pnpm generate:api-client
+pnpm check:api-contract
+```
+
+See [API contract and client generation](./docs/architecture/api-contract.md)
+for ownership rules and the separate SSE runtime contract.
 
 ## Production Notes
 

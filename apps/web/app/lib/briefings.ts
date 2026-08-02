@@ -1,40 +1,11 @@
-export type BriefingListSort = "newest" | "oldest";
-export type BriefingSourceFilter = "all" | "youtube" | "url";
+import type {
+  BriefingListItem,
+  BriefingListResponse,
+  BriefingListSort,
+  BriefingSourceFilter
+} from "@fathom/api-client";
 
-export type BriefingListItem = {
-  session_id: string;
-  briefing_id: string | null;
-  state:
-    | "accepted"
-    | "resolving_source"
-    | "reusing_existing"
-    | "transcribing"
-    | "drafting_briefing"
-    | "finalizing_briefing"
-    | "ready"
-    | "failed";
-  progress: number;
-  title: string;
-  author: string | null;
-  source_url: string;
-  source_host: string;
-  source_type: "youtube" | "url";
-  created_at: string;
-  source_duration_seconds: number | null;
-  source_thumbnail_url: string | null;
-  session_path: string;
-};
-
-export type BriefingListResponse = {
-  items: BriefingListItem[];
-  total_count: number;
-  limit: number;
-  offset: number;
-  has_more: boolean;
-  query: string | null;
-  sort: BriefingListSort;
-  source_type: BriefingSourceFilter;
-};
+export type { BriefingListItem, BriefingListResponse, BriefingListSort, BriefingSourceFilter };
 
 export type BriefingsQueryOptions = {
   limit?: number;

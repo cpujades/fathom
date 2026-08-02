@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 import { AppShellHeader } from "../../components/AppShellHeader";
 import { useAppShell } from "../../components/AppShellProvider";
-import chrome from "../../components/app-chrome.module.css";
+import chrome from "../../components/app-chrome";
 import { getAccountLabel } from "../../lib/accountLabel";
 import { getSupabaseClient } from "../../lib/supabaseClient";
 import styles from "./account.module.css";

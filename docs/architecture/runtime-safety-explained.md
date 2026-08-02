@@ -187,7 +187,6 @@ migrate; all newly processed sources use the evidence-aware path.
 A loopback address always points back to the same machine:
 
 - `http://localhost:3000`
-- `http://127.0.0.1:3000`
 - `http://[::1]:3000`
 
 These are correct for local development. They are invalid for a hosted user,

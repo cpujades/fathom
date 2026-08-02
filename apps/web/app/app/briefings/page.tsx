@@ -1,16 +1,14 @@
 "use client";
 
-import Image from "next/image";
-import Link from "next/link";
 import { type MouseEvent, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createApiClient } from "@fathom/api-client";
 
 import { AppShellHeader } from "../../components/AppShellHeader";
 import { useAppShell } from "../../components/AppShellProvider";
-import chrome from "../../components/app-chrome.module.css";
+import chrome from "../../components/app-chrome";
 import shellStyles from "../app.module.css";
-import styles from "./briefings.module.css";
+import styles from "./briefings-page.module.css";
 import { getAccountLabel } from "../../lib/accountLabel";
 import { getApiErrorMessage } from "../../lib/apiErrors";
 import type {
@@ -28,6 +26,7 @@ import {
   loadBriefings,
   prefetchSessionSnapshot
 } from "../../lib/appDataCache";
+import { BriefingLibraryRow, isBriefingProcessing } from "./BriefingLibraryRow";
 
 const EMPTY_BRIEFINGS_RESPONSE: BriefingListResponse = {
   items: [],
@@ -56,64 +55,6 @@ function getSessionIdFromPath(path: string | null | undefined): string | null {
 
   const match = path.match(/\/app\/briefings\/sessions\/([^/?#]+)/);
   return match?.[1] ?? null;
-}
-
-function getSourceTypeLabel(sourceType: BriefingListItem["source_type"]): string {
-  if (sourceType === "youtube") {
-    return "YouTube";
-  }
-  if (sourceType === "url") {
-    return "Web";
-  }
-  return "Source";
-}
-
-function getSourceActionLabel(sourceType: BriefingListItem["source_type"]): string {
-  if (sourceType === "youtube") {
-    return "Video";
-  }
-  return "Source";
-}
-
-function getBriefingState(entry: BriefingListItem): BriefingListItem["state"] {
-  return entry.state ?? "ready";
-}
-
-function isBriefingProcessing(entry: BriefingListItem): boolean {
-  const state = getBriefingState(entry);
-  return state !== "ready" && state !== "failed";
-}
-
-function getBriefingStateLabel(state: BriefingListItem["state"]): string | null {
-  if (state === "ready") {
-    return null;
-  }
-  if (state === "failed") {
-    return "Needs review";
-  }
-  if (state === "accepted") {
-    return "Starting";
-  }
-  if (state === "resolving_source" || state === "reusing_existing") {
-    return "Checking";
-  }
-  if (state === "transcribing") {
-    return "Transcribing";
-  }
-  if (state === "drafting_briefing") {
-    return "Writing";
-  }
-  return "Saving";
-}
-
-function getBriefingActionLabel(entry: BriefingListItem): string {
-  if (getBriefingState(entry) === "failed") {
-    return "Review";
-  }
-  if (isBriefingProcessing(entry)) {
-    return "Progress";
-  }
-  return "Open";
 }
 
 function getStatusLabel(loading: boolean, shellLoading: boolean, totalCount: number, activeCount: number): string {
@@ -441,139 +382,24 @@ export default function BriefingsPage() {
             <p className={chrome.emptyState}>{helperText}</p>
           ) : (
             <div className={styles.libraryList}>
-              {briefings.items.map((entry) => {
-                const confirmingDelete = confirmDeleteSessionId === entry.session_id;
-                const deletingThisEntry = deletingSessionId === entry.session_id;
-                const entryState = getBriefingState(entry);
-                const stateLabel = getBriefingStateLabel(entryState);
-                const actionLabel = openingSessionId === entry.session_id ? "Opening" : getBriefingActionLabel(entry);
-
-                return (
-                  <article className={styles.libraryRow} key={entry.session_id}>
-                    <div className={styles.libraryRowBody}>
-                      <div className={styles.libraryRowMain}>
-                        <div className={styles.libraryTopRow}>
-                          <div className={styles.libraryMedia}>
-                            <div className={styles.libraryThumbnailFrame}>
-                              {entry.source_thumbnail_url ? (
-                                <Image
-                                  className={styles.libraryThumbnail}
-                                  src={entry.source_thumbnail_url}
-                                  alt=""
-                                  fill
-                                  sizes="(max-width: 420px) 84px, (max-width: 720px) 96px, 96px"
-                                />
-                              ) : (
-                                <div className={styles.libraryThumbnailFallback}>
-                                  <span>{getSourceTypeLabel(entry.source_type)}</span>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-
-                        </div>
-
-                        <div className={styles.libraryRowContent}>
-                          <div className={styles.libraryTitleBlock}>
-                            <div className={styles.titleRow}>
-                              <Link
-                                className={styles.libraryTitleLink}
-                                href={entry.session_path}
-                                onClick={(event) => void openBriefing(event, entry)}
-                                onMouseEnter={() => prefetchBriefing(entry)}
-                                onPointerDown={() => prefetchBriefing(entry)}
-                                onFocus={() => prefetchBriefing(entry)}
-                              >
-                                {entry.title}
-                              </Link>
-                              {stateLabel ? (
-                                <span
-                                  className={`${styles.libraryStatePill} ${
-                                    entryState === "failed" ? styles.libraryStatePillFailed : styles.libraryStatePillActive
-                                  }`}
-                                >
-                                  {stateLabel}
-                                </span>
-                              ) : null}
-                            </div>
-
-                            <div className={styles.metaRow}>
-                              <span className={styles.metaDate}>{formatDateTime(entry.created_at)}</span>
-                              {entry.author ? <span className={styles.metaAuthor}>By {entry.author}</span> : null}
-                              {entry.source_duration_seconds ? (
-                                <span className={styles.metaDuration}>{formatExactDuration(entry.source_duration_seconds)}</span>
-                              ) : null}
-                            </div>
-                          </div>
-
-                          <div className={styles.rowActions}>
-                            <div className={styles.actionSet}>
-                              <Link
-                                className={`${chrome.primaryButton} ${styles.libraryPrimaryAction}`}
-                                href={entry.session_path}
-                                onClick={(event) => void openBriefing(event, entry)}
-                                onMouseEnter={() => prefetchBriefing(entry)}
-                                onPointerDown={() => prefetchBriefing(entry)}
-                                onFocus={() => prefetchBriefing(entry)}
-                              >
-                                {actionLabel}
-                              </Link>
-                              <a
-                                className={`${chrome.ghostButton} ${styles.librarySecondaryAction}`}
-                                href={entry.source_url}
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                {getSourceActionLabel(entry.source_type)}
-                              </a>
-                              {!confirmingDelete ? (
-                                <button
-                                  className={styles.menuDangerAction}
-                                  type="button"
-                                  onClick={() => setConfirmDeleteSessionId(entry.session_id)}
-                                  ref={(node) => {
-                                    if (node) {
-                                      removeButtonRefs.current.set(entry.session_id, node);
-                                    } else {
-                                      removeButtonRefs.current.delete(entry.session_id);
-                                    }
-                                  }}
-                                >
-                                  Remove
-                                </button>
-                              ) : null}
-                            </div>
-
-                            {confirmingDelete ? (
-                              <div className={styles.confirmBlock} role="group" aria-label={`Remove ${entry.title}`}>
-                                <p className={styles.confirmText}>Remove this briefing from history?</p>
-                                <div className={styles.confirmActions}>
-                                  <button
-                                    autoFocus
-                                    className={styles.confirmCancelButton}
-                                    type="button"
-                                    onClick={() => closeDeleteConfirmation(entry.session_id)}
-                                  >
-                                    Keep briefing
-                                  </button>
-                                  <button
-                                    className={styles.dangerButton}
-                                    type="button"
-                                    onClick={() => void handleDeleteBriefing(entry)}
-                                    disabled={deletingThisEntry}
-                                  >
-                                    {deletingThisEntry ? "Removing…" : "Remove from history"}
-                                  </button>
-                                </div>
-                              </div>
-                            ) : null}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </article>
-                );
-              })}
+              {briefings.items.map((entry) => (
+                <BriefingLibraryRow
+                  confirmingDelete={confirmDeleteSessionId === entry.session_id}
+                  deleting={deletingSessionId === entry.session_id}
+                  entry={entry}
+                  key={entry.session_id}
+                  opening={openingSessionId === entry.session_id}
+                  onCancelDelete={() => closeDeleteConfirmation(entry.session_id)}
+                  onDelete={() => void handleDeleteBriefing(entry)}
+                  onOpen={(event) => void openBriefing(event, entry)}
+                  onPrefetch={() => prefetchBriefing(entry)}
+                  onRequestDelete={() => setConfirmDeleteSessionId(entry.session_id)}
+                  setRemoveButtonRef={(node) => {
+                    if (node) removeButtonRefs.current.set(entry.session_id, node);
+                    else removeButtonRefs.current.delete(entry.session_id);
+                  }}
+                />
+              ))}
             </div>
           )}
 

@@ -1,6 +1,6 @@
 import type { LandingContent } from "@/content/landing";
 
-import styles from "../../page.module.css";
+import styles from "../../landing-problem.module.css";
 
 type ProblemSectionProps = {
   content: LandingContent["problem"];
