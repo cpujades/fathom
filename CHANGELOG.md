@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.20.6](https://github.com/cpujades/fathom/compare/v0.20.5...v0.20.6) (2026-08-03)
+
+_Automated release from [#165](https://github.com/cpujades/fathom/pull/165) fix: harden launch readiness and user experience_
+
+### Bug Fixes
+
+- fix: harden launch readiness and user experience (9e92682)
+- fix(db): correct queued retry delay migration (397a097)
+
+### Documentation
+
+- docs: explain Supabase and Polar environments (672b2a0)
+- docs: complete quality and billing setup guides (aa6798a)
+- docs: clarify Polar catalog verification (26e52e6)
+
 ## [0.20.5](https://github.com/cpujades/fathom/compare/v0.20.4...v0.20.5) (2026-08-02)
 
 _Automated release from [#164](https://github.com/cpujades/fathom/pull/164) docs: improve Talven end-to-end documentation_
