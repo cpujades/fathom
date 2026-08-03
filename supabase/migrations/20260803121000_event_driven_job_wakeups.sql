@@ -59,7 +59,7 @@ as $$
   select case
     when next_job.run_after is null then null
     when next_job.run_after <= pg_catalog.now() then 0::double precision
-    else pg_catalog.extract(epoch from (next_job.run_after - pg_catalog.now()))::double precision
+    else pg_catalog.date_part('epoch', next_job.run_after - pg_catalog.now())::double precision
   end
   from next_job;
 $$;
