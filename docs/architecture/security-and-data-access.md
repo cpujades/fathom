@@ -16,19 +16,24 @@ Python CRUD modules, see [Database, RLS, and persistence](./database-and-persist
 
 ## Browser data boundary
 
-The final migration revokes inherited/default privileges first, then grants
-the authenticated role `SELECT` on only three application tables:
+The final migrations revoke inherited/default privileges first, then grant
+the authenticated role `SELECT` on only two application tables:
 
 | Table | Browser operation | RLS condition |
 | --- | --- | --- |
 | `jobs` | Read | `user_id` equals the signed-in user |
-| `summaries` | Read | Summary is non-empty and `ready`, and an owned job referencing it is `succeeded` or `deleted` |
 | `job_events` | Read | The referenced job belongs to the signed-in user |
 
 The browser has no direct insert, update, or delete permission on application
-tables. It also cannot directly read transcripts, plans, entitlements, usage
+tables. It also cannot directly read summaries, transcripts, plans, entitlements, usage
 ledger rows, settlements, Polar records, rate-limit buckets, or transcript
 segments.
+
+Shared summaries are server-mediated. For a detail, session, or PDF request,
+the API first uses the caller's token to find an owned `succeeded` or `deleted`
+job that references the requested `summary_id`. Only then may its service
+client read the shared row. This prevents browser `SELECT *` queries from
+exposing internal producer, cache, generation-token, or PDF metadata.
 
 Anonymous users have no application-table privileges.
 
@@ -73,8 +78,9 @@ work that bypasses settlement.
 
 ## Settlement boundary
 
-A worker may attach a ready summary before usage settlement, but neither the
-API nor summary RLS exposes it yet. The result becomes visible only after:
+A worker may attach a ready summary before usage settlement, but the API does
+not authorize it yet and the browser cannot select summaries at all. The
+result becomes visible only after:
 
 1. one immutable job-level settlement has committed; and
 2. the same current lease marks the job `succeeded`.
@@ -88,7 +94,7 @@ Both `fathom` and `fathom_groq` buckets converge to `public = false`, even if
 an earlier environment accidentally created one as public.
 
 - The browser cannot list, read, upload, change, or delete objects directly.
-- The API first proves application ownership through RLS, then the service
+- The API first proves application ownership through the caller's `jobs` RLS, then the service
   client creates a short-lived signed URL or uploads a PDF.
 - The worker uses the service client for temporary audio.
 
@@ -123,8 +129,8 @@ encoded as one URL path segment.
 
 These are dated evidence records, not a permanent guarantee for every later
 commit. The repository’s prior evidence includes a July 30, 2026 full
-clean-database run and a July 31 focused billing run. The current `main` is
-`b8c7b02` (`v0.20.4`) and has had later refactoring after those records, so an
+clean-database run and a July 31 focused billing run. The current release
+baseline is `v0.20.5` and has had later hardening after those records, so an
 exact release candidate must repeat the clean-database gate before it is called
 verified.
 

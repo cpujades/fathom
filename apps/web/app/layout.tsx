@@ -3,12 +3,13 @@ import type { ReactNode } from "react";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 
+import { getSiteUrl } from "./lib/url";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://talven.ai"),
-  title: "Talven | Private YouTube Briefings",
-  description: "Turn long-form YouTube videos into clear, evidence-linked briefings you can reuse.",
+  metadataBase: new URL(getSiteUrl()),
+  title: "Talven | Source-linked YouTube Briefings",
+  description: "Turn long-form YouTube videos into clear, source-linked briefings you can reuse.",
   applicationName: "Talven",
   alternates: {
     canonical: "/"
@@ -18,7 +19,7 @@ export const metadata: Metadata = {
     shortcut: "/favicon.svg"
   },
   openGraph: {
-    title: "Talven | Private YouTube Briefings",
+    title: "Talven | Source-linked YouTube Briefings",
     description: "Paste a public YouTube URL and get a concise, timestamped briefing.",
     url: "/",
     siteName: "Talven",
@@ -28,13 +29,13 @@ export const metadata: Metadata = {
         url: "/opengraph-image",
         width: 1200,
         height: 630,
-        alt: "Talven private YouTube briefings"
+        alt: "Talven source-linked YouTube briefings"
       }
     ]
   },
   twitter: {
     card: "summary_large_image",
-    title: "Talven | Private YouTube Briefings",
+    title: "Talven | Source-linked YouTube Briefings",
     description: "Convert long-form YouTube videos into fast, readable briefings with source moments attached.",
     images: ["/opengraph-image"]
   }

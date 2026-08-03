@@ -83,11 +83,11 @@ briefings can incur provider usage or rate limits.
 | `SUPABASE_URL` | Supabase project API URL used by backend clients and JWT key discovery. |
 | `SUPABASE_PUBLISHABLE_KEY` | Public/anon-style key. It is needed by the backend configuration and is also safe to expose to the browser through `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. |
 | `SUPABASE_SECRET_KEY` | Backend-only secret/service-role key. Never put it in `apps/web/.env.local`. |
-| `SUPABASE_DB_PASSWORD` | Password for the direct Postgres connection used for notifications, readiness, and database-backed coordination. |
+| `SUPABASE_DB_PASSWORD` | Password for the direct Postgres connection used for notifications, readiness, and database-backed coordination. Required when `APP_ENV` is `staging` or `production`. |
 | `SUPABASE_DB_USER` | Postgres user; defaults to `postgres`. |
 | `SUPABASE_DB_NAME` | Postgres database; defaults to `postgres`. |
 | `SUPABASE_DB_HOST` | Postgres hostname. Use `localhost` for the local CLI database; use the provider's non-loopback host for hosted projects. |
-| `SUPABASE_DB_PORT` | Postgres port. Defaults to `5432`; local Supabase CLI normally uses `54322`. |
+| `SUPABASE_DB_PORT` | Postgres port in the range 1-65,535. Defaults to `5432`; local Supabase CLI normally uses `54322`. |
 
 The Supabase URL/key pair powers HTTP/Auth/Storage access. The DB variables
 are a separate direct Postgres path; having a valid Supabase URL does not make
@@ -151,8 +151,8 @@ These have safe defaults and normally stay unset in the personal `.env`:
 
 | Variable | Default | Meaning |
 | --- | ---: | --- |
-| `BILLING_DEBT_CAP_SECONDS` | `600` | Maximum billing debt window used by usage admission. |
-| `WORKER_MAX_CONCURRENT_JOBS` | `10` | Maximum jobs the worker processes concurrently. Lower this locally if provider or machine capacity is limited. |
+| `BILLING_DEBT_CAP_SECONDS` | `600` | Maximum billing debt window used by usage admission. Accepted range: 0-86,400 seconds. |
+| `WORKER_MAX_CONCURRENT_JOBS` | `10` | Maximum jobs the worker processes concurrently. Accepted range: 1-64; lower it if provider or machine capacity is limited. |
 | `WORKER_SHUTDOWN_GRACE_SECONDS` | `30` | Time for the worker to stop claiming and drain before cancellation. |
 | `SOURCE_DOWNLOAD_DEADLINE_SECONDS` | `600` | Total deadline for downloading source audio. |
 | `SOURCE_METADATA_DEADLINE_SECONDS` | `30` | Total deadline for source metadata/admission. |
@@ -176,7 +176,7 @@ These belong in `apps/web/.env.local` or the frontend deployment settings:
 | `NEXT_PUBLIC_API_BASE_URL` | Base URL of the FastAPI API, for example `http://localhost:8080`. The frontend has no safe production fallback; set it explicitly. |
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase API URL used by the browser Auth client. It must point to the same project as the backend. |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Browser-safe Supabase publishable/anon-style key. |
-| `NEXT_PUBLIC_SITE_URL` | Canonical frontend origin used for metadata and auth/recovery destinations. Set `http://localhost:3000` locally and the exact HTTPS site URL when hosted. |
+| `NEXT_PUBLIC_SITE_URL` | Canonical frontend origin used for metadata and auth/recovery destinations. Set `http://localhost:3000` locally. Hosted production builds require the exact HTTPS origin and fail when it is missing. |
 
 The `NEXT_PUBLIC_` prefix means Next.js may embed the value in browser code.
 Only publishable URLs/keys belong there.

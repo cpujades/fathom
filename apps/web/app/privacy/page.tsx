@@ -23,10 +23,10 @@ export default function PrivacyPage() {
           <p className={styles.eyebrow}>Privacy</p>
           <h1 className={styles.title}>Privacy policy</h1>
           <p className={styles.lede}>
-            Talven turns user-submitted public YouTube links into private written briefings. This policy explains the
-            data we collect, why we collect it, and how to contact us about privacy requests.
+            Talven turns user-submitted public YouTube links into written briefings in an account-scoped library. This
+            policy explains the data we collect, why we collect it, and how to contact us about privacy requests.
           </p>
-          <p className={styles.updated}>Last updated: August 1, 2026</p>
+          <p className={styles.updated}>Last updated: August 3, 2026</p>
 
           <section className={styles.section}>
             <h2>Information we collect</h2>
@@ -60,15 +60,16 @@ export default function PrivacyPage() {
               Talven temporarily stores downloaded source audio in private storage while Groq transcribes it. Talven tries
               to remove that temporary audio when processing finishes, although a service or storage failure may delay the
               cleanup. The transcript is then sent to OpenRouter to create the briefing. We may keep transcripts and
-              briefings so the same public video does not always need to be processed again. Your library, access, usage,
-              and billing records remain tied to your account.
+              briefings so the same compatible public video does not always need to be processed again. Two accounts may
+              therefore receive the same stored processing result for the same public source. Their jobs, library state,
+              usage, and billing remain separate, and one account cannot see another account&apos;s private activity.
             </p>
           </section>
 
           <section className={styles.section}>
             <h2>Retention and deletion</h2>
             <p>
-              Removing a briefing from your library archives it; it does not permanently erase it. Talven has not yet set a
+              Archiving a briefing removes it from your library view; it does not permanently erase it. Talven has not yet set a
               single deletion timetable because account, payment, security, and reusable processing records may need
               different rules. Contact us if you want us to review the information connected to your account or help with
               an account or data request.

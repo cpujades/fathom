@@ -123,7 +123,7 @@ export function useBillingController() {
     {
       key: "pack",
       label: "One-time packs",
-      description: "Add reserve time when you need extra coverage without a recurring change.",
+      description: "Add video time when you need it without a recurring charge.",
       plans: plans.filter((plan) => plan.plan_type === "pack")
     }
   ], [plans]);
@@ -181,7 +181,7 @@ export function useBillingController() {
   const subscriptionStatusText = describeSubscriptionStatus(account?.subscription.status ?? null);
   const accessNote = useMemo(() => {
     if ((usage?.pack_remaining_seconds ?? 0) > 0 && usage?.pack_expires_at) {
-      return `Pack reserve expires ${formatDate(usage.pack_expires_at)}.`;
+      return `One-time pack balance expires ${formatDate(usage.pack_expires_at)}.`;
     }
     const planName = account?.subscription.plan_name ?? usage?.subscription_plan_name;
     if (planName && planName.toLowerCase() !== "free" && account?.subscription.period_end) {

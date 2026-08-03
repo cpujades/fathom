@@ -6,8 +6,7 @@ import asyncio
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from functools import partial
-from typing import Any, cast
+from typing import Any, Literal, cast
 from urllib.parse import quote
 
 import asyncpg
@@ -16,6 +15,8 @@ from fathom.core.config import Settings
 from fathom.core.errors import ConfigurationError
 
 logger = logging.getLogger(__name__)
+
+PostgresNotificationSignal = Literal["notification", "disconnected"]
 
 
 def _build_postgres_url(settings: Settings) -> str | None:
@@ -44,17 +45,29 @@ def _parse_notification_payload(payload: str) -> dict[str, Any] | None:
         return None
 
 
-async def _enqueue_notification(
+def _enqueue_notification_signal(
     _connection: asyncpg.Connection,
     _pid: int,
     _channel: str,
     payload: str,
     *,
-    queue: asyncio.Queue[dict[str, Any]],
+    signal: asyncio.Queue[PostgresNotificationSignal],
 ) -> None:
     data = _parse_notification_payload(payload)
-    if data:
-        await queue.put(data)
+    if data is not None and not signal.full():
+        signal.put_nowait("notification")
+
+
+def _enqueue_disconnect_signal(
+    _connection: asyncpg.Connection,
+    *,
+    signal: asyncio.Queue[PostgresNotificationSignal],
+) -> None:
+    # A disconnect must win over a queued notification so the supervisor does
+    # not wait forever on a dead LISTEN connection.
+    if signal.full():
+        signal.get_nowait()
+    signal.put_nowait("disconnected")
 
 
 @asynccontextmanager
@@ -78,7 +91,7 @@ async def create_postgres_connection(settings: Settings) -> AsyncIterator[asyncp
             logger.debug("postgres.connection.closed")
     except Exception as exc:
         logger.error("postgres.connection.failed", exc_info=exc)
-        raise ConfigurationError(f"Failed to connect to Postgres: {exc}") from exc
+        raise ConfigurationError("Failed to connect to Postgres.") from exc
 
 
 async def create_postgres_pool(settings: Settings) -> asyncpg.Pool:
@@ -98,21 +111,44 @@ async def create_postgres_pool(settings: Settings) -> asyncpg.Pool:
         return pool
     except Exception as exc:
         logger.error("postgres.pool.failed", exc_info=exc)
-        raise ConfigurationError(f"Failed to create Postgres pool: {exc}") from exc
+        raise ConfigurationError("Failed to create Postgres pool.") from exc
 
 
 @asynccontextmanager
 async def listen_for_notifications(
     settings: Settings,
     channel: str,
-) -> AsyncIterator[asyncio.Queue[dict[str, Any]]]:
+) -> AsyncIterator[asyncio.Queue[PostgresNotificationSignal]]:
     async with create_postgres_connection(settings) as conn:
-        queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
-        notification_handler = partial(_enqueue_notification, queue=queue)
+        # The payload is only a wake-up hint; durable job data stays in Postgres.
+        # A one-slot queue coalesces bursts without growing memory or losing the
+        # final wake-up to an Event.clear() race.
+        signal: asyncio.Queue[PostgresNotificationSignal] = asyncio.Queue(maxsize=1)
+
+        def notification_handler(
+            connection: asyncpg.Connection,
+            pid: int,
+            notification_channel: str,
+            payload: str,
+        ) -> None:
+            _enqueue_notification_signal(
+                connection,
+                pid,
+                notification_channel,
+                payload,
+                signal=signal,
+            )
+
+        def termination_handler(connection: asyncpg.Connection) -> None:
+            _enqueue_disconnect_signal(connection, signal=signal)
+
         await conn.add_listener(channel, notification_handler)
+        conn.add_termination_listener(termination_handler)
         logger.info("postgres.listen.started", extra={"channel": channel})
         try:
-            yield queue
+            yield signal
         finally:
-            await conn.remove_listener(channel, notification_handler)
+            conn.remove_termination_listener(termination_handler)
+            if not conn.is_closed():
+                await conn.remove_listener(channel, notification_handler)
             logger.info("postgres.listen.stopped", extra={"channel": channel})

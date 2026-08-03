@@ -5,9 +5,18 @@ import {
   buildAuthCallbackUrl,
   buildAuthDestinationPath,
   buildSignInPath,
+  getSiteUrl,
   getSafeAuthIntentContext,
   getSafeNextPath
 } from "./url.ts";
+
+const restoreEnvironmentValue = (name, value) => {
+  if (value === undefined) {
+    delete process.env[name];
+  } else {
+    process.env[name] = value;
+  }
+};
 
 test("safe app destinations preserve submitted source URLs", () => {
   const nextPath = "/app/briefings/new?url=https%3A%2F%2Fyoutube.com%2Fwatch%3Fv%3Dtest";
@@ -77,4 +86,23 @@ test("unknown intent and unsafe plan values are discarded", () => {
     }),
     "/app/billing?tab=history&intent=paid"
   );
+});
+
+test("the canonical site URL is an exact HTTPS origin in hosted production", () => {
+  const originalNodeEnv = process.env.NODE_ENV;
+  const originalSiteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+  try {
+    process.env.NODE_ENV = "production";
+    process.env.NEXT_PUBLIC_SITE_URL = "https://app.talven.ai/path";
+    assert.throws(() => getSiteUrl(), /exact origin/);
+
+    process.env.NEXT_PUBLIC_SITE_URL = "http://app.talven.ai";
+    assert.throws(() => getSiteUrl(), /must use https/);
+
+    process.env.NEXT_PUBLIC_SITE_URL = "https://app.talven.ai";
+    assert.equal(getSiteUrl(), "https://app.talven.ai");
+  } finally {
+    restoreEnvironmentValue("NODE_ENV", originalNodeEnv);
+    restoreEnvironmentValue("NEXT_PUBLIC_SITE_URL", originalSiteUrl);
+  }
 });

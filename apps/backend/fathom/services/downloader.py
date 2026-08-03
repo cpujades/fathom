@@ -150,6 +150,9 @@ async def _run_youtube_worker(request: dict[str, object], *, deadline_seconds: f
     except asyncio.CancelledError:
         await asyncio.shield(_terminate_worker(process))
         raise
+    except Exception as exc:
+        await asyncio.shield(_terminate_worker(process))
+        raise DownloadError("YouTube source request failed.") from exc
 
     if len(stdout) > YOUTUBE_WORKER_MAX_RESPONSE_BYTES:
         raise DownloadError("YouTube source request failed.")

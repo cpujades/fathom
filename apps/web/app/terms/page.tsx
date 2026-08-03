@@ -5,7 +5,7 @@ import styles from "../legal.module.css";
 
 export const metadata: Metadata = {
   title: "Terms of Service | Talven",
-  description: "The terms that apply when using Talven private YouTube briefings."
+  description: "The terms that apply when using Talven source-linked YouTube briefings."
 };
 
 export default function TermsPage() {

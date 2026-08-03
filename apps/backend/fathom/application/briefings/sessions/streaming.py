@@ -41,6 +41,12 @@ async def stream_briefing_session_events(
     last_event_id: str | None,
     is_disconnected: Callable[[], Awaitable[bool]],
 ) -> AsyncIterator[str]:
+    session_id_str = str(session_id)
+    async with managed_supabase_client(await create_supabase_user_client(settings, auth.access_token)) as user_client:
+        job = await fetch_job(user_client, session_id_str)
+        if str(job.get("status") or "") == "deleted":
+            raise NotFoundError("Briefing session not found.")
+
     async with managed_supabase_client(await create_supabase_admin_client(settings)) as admin_client:
         stream_lease_token = await claim_stream_lease(
             admin_client,
@@ -60,6 +66,7 @@ async def stream_briefing_session_events(
         last_event_id=last_event_id,
         is_disconnected=is_disconnected,
         stream_lease_token=stream_lease_token,
+        initial_job=job,
     )
 
 
@@ -71,6 +78,7 @@ async def session_event_stream(
     last_event_id: str | None,
     is_disconnected: Callable[[], Awaitable[bool]],
     stream_lease_token: str | None = None,
+    initial_job: dict[str, Any] | None = None,
 ) -> AsyncIterator[str]:
     async with (
         managed_supabase_client(await create_supabase_user_client(settings, auth.access_token)) as user_client,
@@ -86,6 +94,7 @@ async def session_event_stream(
                 user_client=user_client,
                 admin_client=admin_client,
                 stream_lease_token=stream_lease_token,
+                initial_job=initial_job,
             ):
                 yield event
         finally:
@@ -110,12 +119,13 @@ async def session_event_stream_with_clients(
     user_client: Any,
     admin_client: Any,
     stream_lease_token: str | None,
+    initial_job: dict[str, Any] | None = None,
 ) -> AsyncIterator[str]:
     session_id_str = str(session_id)
     with log_context(user_id=auth.user_id, session_id=session_id_str):
         logger.info("briefing_session.stream.opened")
 
-    job = await fetch_job(user_client, session_id_str)
+    job = initial_job if initial_job is not None else await fetch_job(user_client, session_id_str)
     if str(job.get("status") or "") == "deleted":
         raise NotFoundError("Briefing session not found.")
 

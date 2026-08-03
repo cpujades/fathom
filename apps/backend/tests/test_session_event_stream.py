@@ -12,7 +12,7 @@ from fathom.application.briefings.sessions.streaming import (
 from fathom.application.briefings.sessions.streaming import stream_briefing_session_events
 from fathom.application.identity import AuthenticatedUser
 from fathom.core.config import Settings
-from fathom.core.errors import RateLimitError
+from fathom.core.errors import NotFoundError, RateLimitError
 from fathom.schemas.briefing_sessions import BriefingSessionResponse
 
 SESSION_ID = UUID("11111111-1111-1111-1111-111111111111")
@@ -63,8 +63,22 @@ class SessionEventStreamTests(unittest.IsolatedAsyncioTestCase):
         )
         with (
             patch(
+                "fathom.application.briefings.sessions.streaming.create_supabase_user_client",
+                AsyncMock(return_value=self.user_client),
+            ),
+            patch(
                 "fathom.application.briefings.sessions.streaming.create_supabase_admin_client",
                 AsyncMock(return_value=self.admin_client),
+            ),
+            patch(
+                "fathom.application.briefings.sessions.streaming.fetch_job",
+                AsyncMock(
+                    return_value={
+                        "id": str(SESSION_ID),
+                        "status": "running",
+                        "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                    }
+                ),
             ),
             patch(
                 "fathom.application.briefings.sessions.streaming.claim_stream_lease",
@@ -89,6 +103,41 @@ class SessionEventStreamTests(unittest.IsolatedAsyncioTestCase):
             max_per_subject=12,
             lease_seconds=90,
         )
+
+    async def test_missing_session_is_rejected_before_claiming_stream_capacity(self) -> None:
+        settings = cast(
+            Settings,
+            SimpleNamespace(
+                sse_max_streams_per_user=3,
+                sse_max_streams_per_ip=12,
+                sse_stream_lease_seconds=90,
+            ),
+        )
+        with (
+            patch(
+                "fathom.application.briefings.sessions.streaming.create_supabase_user_client",
+                AsyncMock(return_value=self.user_client),
+            ),
+            patch(
+                "fathom.application.briefings.sessions.streaming.fetch_job",
+                AsyncMock(side_effect=NotFoundError("Briefing session not found.")),
+            ),
+            patch(
+                "fathom.application.briefings.sessions.streaming.claim_stream_lease",
+                AsyncMock(),
+            ) as claim,
+            self.assertRaisesRegex(NotFoundError, "Briefing session not found"),
+        ):
+            await stream_briefing_session_events(
+                session_id=SESSION_ID,
+                auth=self.auth,
+                settings=settings,
+                client_subject="ip:203.0.113.4",
+                last_event_id=None,
+                is_disconnected=AsyncMock(return_value=False),
+            )
+
+        claim.assert_not_awaited()
 
     async def test_reconnect_replays_stable_ids_before_snapshot(self) -> None:
         request = SimpleNamespace(

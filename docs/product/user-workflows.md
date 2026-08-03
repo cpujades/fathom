@@ -13,6 +13,12 @@ through authentication, so a user who chooses a plan before signing in returns
 to billing with that choice still selected. Arbitrary external redirect URLs
 are rejected.
 
+There is no invitation code or email allowlist in the product. Once a public
+deployment URL is announced, any visitor may create an account. Hosted email
+confirmation, SMTP, CAPTCHA/bot protection, and Auth rate limits must therefore
+be configured before that URL is opened; local UI tests do not provide those
+controls.
+
 The supported entry methods are password, magic link, and Google OAuth. In the
 local Supabase stack, email confirmation is enabled: create a disposable user,
 open Inbucket at `http://localhost:54324`, and follow the confirmation link.
@@ -158,7 +164,7 @@ even if its provider calls finish faster or slower.
 
 ## Deliberate product boundaries
 
-The current pilot does not offer running-job cancellation, permanent self-service
+The initial release does not offer running-job cancellation, permanent self-service
 erasure, arbitrary non-YouTube sources, podcast Q&A/chat, or 300-minute videos.
 These are decisions with charging, privacy, provider, or recovery consequences;
 they are recorded in the [deferred work register](../decisions/deferred-work.md).

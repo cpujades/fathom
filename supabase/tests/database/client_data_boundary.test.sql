@@ -63,8 +63,8 @@ select is(
       'select'
     )
   ),
-  3::bigint,
-  'authenticated clients can select only jobs, summaries, and job events'
+  2::bigint,
+  'authenticated clients can select only jobs and job events'
 );
 
 select ok(
@@ -72,8 +72,8 @@ select ok(
   'authenticated clients can read their RLS-scoped jobs'
 );
 select ok(
-  pg_catalog.has_table_privilege('authenticated', 'public.summaries', 'select'),
-  'authenticated clients can read settled RLS-scoped summaries'
+  not pg_catalog.has_table_privilege('authenticated', 'public.summaries', 'select'),
+  'authenticated clients cannot read the server-only global summary cache'
 );
 select ok(
   pg_catalog.has_table_privilege('authenticated', 'public.job_events', 'select'),
@@ -161,10 +161,9 @@ select is(
   ),
   array[
     'job_events.job_events_select_via_jobs',
-    'jobs.jobs_select_own',
-    'summaries.summaries_select_via_settled_jobs'
+    'jobs.jobs_select_own'
   ]::text[],
-  'the browser has only the three intended tenant-scoped read policies'
+  'the browser has only the intended tenant-scoped read policies'
 );
 
 select ok(
@@ -238,7 +237,7 @@ select is(
   (
     select proconfig
     from pg_catalog.pg_proc
-    where oid = 'public.notify_job_created()'::regprocedure
+    where oid = 'public.notify_job_available()'::regprocedure
   ),
   array['search_path=pg_catalog']::text[],
   'the notification trigger has a fixed search path'
@@ -246,7 +245,7 @@ select is(
 select ok(
   not pg_catalog.has_function_privilege(
     'authenticated',
-    'public.notify_job_created()',
+    'public.notify_job_available()',
     'execute'
   ),
   'authenticated clients cannot invoke the notification trigger function'
@@ -323,11 +322,23 @@ select pg_catalog.set_config(
 select is(
   (
     select pg_catalog.count(*)
+    from public.jobs
+    where id = 'c4000000-0000-0000-0000-000000000001'
+  ),
+  1::bigint,
+  'a tenant can read its own in-progress job'
+);
+
+select throws_ok(
+  $$
+    select id, user_id, transcript_id, summary_markdown,
+           pdf_object_key, pdf_cache_version, status_updated_at
     from public.summaries
     where id = 'c2000000-0000-0000-0000-000000000001'
-  ),
-  0::bigint,
-  'a ready draft remains hidden while its job is still finalizing'
+  $$,
+  '42501',
+  'permission denied for table summaries',
+  'a browser cannot query shared summary content or internal metadata'
 );
 
 reset role;
@@ -338,6 +349,29 @@ set status = 'succeeded',
     status_message = 'Summary ready'
 where id = 'c4000000-0000-0000-0000-000000000001';
 
+insert into public.jobs (
+  id,
+  user_id,
+  status,
+  url,
+  source_key,
+  summary_id,
+  stage,
+  progress,
+  status_message
+)
+values (
+  'c4000000-0000-0000-0000-000000000002',
+  'c3000000-0000-0000-0000-000000000002',
+  'succeeded',
+  'https://www.youtube.com/watch?v=client-boundary',
+  'youtube:client-boundary',
+  'c2000000-0000-0000-0000-000000000001',
+  'completed',
+  100,
+  'Summary ready'
+);
+
 set local role authenticated;
 select pg_catalog.set_config(
   'request.jwt.claim.sub',
@@ -347,11 +381,11 @@ select pg_catalog.set_config(
 select is(
   (
     select pg_catalog.count(*)
-    from public.summaries
-    where id = 'c2000000-0000-0000-0000-000000000001'
+    from public.jobs
+    where summary_id = 'c2000000-0000-0000-0000-000000000001'
   ),
   1::bigint,
-  'the owner can read a ready summary after terminal settlement'
+  'the first tenant sees only its own job for the shared summary'
 );
 
 select pg_catalog.set_config(
@@ -362,64 +396,24 @@ select pg_catalog.set_config(
 select is(
   (
     select pg_catalog.count(*)
-    from public.summaries
-    where id = 'c2000000-0000-0000-0000-000000000001'
-  ),
-  0::bigint,
-  'another tenant cannot read the settled summary'
-);
-
-reset role;
-update public.summaries
-set status = 'failed',
-    summary_markdown = '',
-    status_updated_at = pg_catalog.now(),
-    ready_at = null,
-    failed_at = pg_catalog.now()
-where id = 'c2000000-0000-0000-0000-000000000001';
-
-set local role authenticated;
-select pg_catalog.set_config(
-  'request.jwt.claim.sub',
-  'c3000000-0000-0000-0000-000000000001',
-  true
-);
-select is(
-  (
-    select pg_catalog.count(*)
-    from public.summaries
-    where id = 'c2000000-0000-0000-0000-000000000001'
-  ),
-  0::bigint,
-  'a failed or empty summary is never browser-readable'
-);
-
-reset role;
-update public.summaries
-set status = 'ready',
-    summary_markdown = '# Settled briefing',
-    status_updated_at = pg_catalog.now(),
-    ready_at = pg_catalog.now(),
-    failed_at = null
-where id = 'c2000000-0000-0000-0000-000000000001';
-update public.jobs
-set status = 'deleted'
-where id = 'c4000000-0000-0000-0000-000000000001';
-
-set local role authenticated;
-select pg_catalog.set_config(
-  'request.jwt.claim.sub',
-  'c3000000-0000-0000-0000-000000000001',
-  true
-);
-select is(
-  (
-    select pg_catalog.count(*)
-    from public.summaries
-    where id = 'c2000000-0000-0000-0000-000000000001'
+    from public.jobs
+    where summary_id = 'c2000000-0000-0000-0000-000000000001'
   ),
   1::bigint,
-  'archiving preserves the owner read path without regenerating the summary'
+  'the second tenant sees only its own job for the same shared summary'
+);
+
+reset role;
+select results_eq(
+  $$
+    select
+      (select pg_catalog.count(*) from public.jobs
+       where summary_id = 'c2000000-0000-0000-0000-000000000001'),
+      (select pg_catalog.count(*) from public.summaries
+       where id = 'c2000000-0000-0000-0000-000000000001')
+  $$,
+  $$ values (2::bigint, 1::bigint) $$,
+  'the service sees two tenant jobs pointing to one global cached summary'
 );
 
 select * from finish();

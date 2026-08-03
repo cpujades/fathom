@@ -17,6 +17,22 @@ const getConfiguredOrigin = (name, value) => {
   return parsed.origin;
 };
 
+const isLoopbackOrigin = (origin) => {
+  const hostname = new URL(origin).hostname;
+  return hostname === "localhost" || hostname.endsWith(".localhost");
+};
+
+const requireProductionHttps = (name, origin, env) => {
+  if (
+    env.NODE_ENV === "production" &&
+    origin &&
+    !origin.startsWith("https://") &&
+    !isLoopbackOrigin(origin)
+  ) {
+    throw new Error(`Invalid ${name}. Hosted production origins must use https.`);
+  }
+};
+
 const buildContentSecurityPolicy = (env = process.env) => {
   const apiOrigin = getConfiguredOrigin(
     "NEXT_PUBLIC_API_BASE_URL",
@@ -30,6 +46,14 @@ const buildContentSecurityPolicy = (env = process.env) => {
     "NEXT_PUBLIC_SITE_URL",
     env.NEXT_PUBLIC_SITE_URL
   );
+  requireProductionHttps("NEXT_PUBLIC_API_BASE_URL", apiOrigin, env);
+  requireProductionHttps("NEXT_PUBLIC_SUPABASE_URL", supabaseOrigin, env);
+  requireProductionHttps("NEXT_PUBLIC_SITE_URL", siteOrigin, env);
+  if (env.NODE_ENV === "production" && !siteOrigin) {
+    throw new Error(
+      "Missing NEXT_PUBLIC_SITE_URL. Set the exact public frontend origin for a hosted build."
+    );
+  }
   const connectSources = [
     "'self'",
     ...new Set([apiOrigin, supabaseOrigin].filter(Boolean))

@@ -4,6 +4,7 @@ import logging
 from typing import Any
 from uuid import UUID
 
+from fathom.application.briefings.access import fetch_summary_for_owned_job
 from fathom.application.briefings.contract import (
     NormalizedSource,
     build_briefing_session_snapshot,
@@ -14,7 +15,6 @@ from fathom.core.config import Settings
 from fathom.core.errors import NotFoundError
 from fathom.core.logging import log_context
 from fathom.crud.supabase.jobs import fetch_job
-from fathom.crud.supabase.summaries import fetch_summary
 from fathom.crud.supabase.transcripts import fetch_transcript_by_id
 from fathom.schemas.briefing_sessions import BriefingSessionResolution, BriefingSessionResponse
 from fathom.services.supabase import (
@@ -61,7 +61,7 @@ async def build_session_snapshot(
     source: NormalizedSource,
     resolution_type: BriefingSessionResolution | None = None,
 ) -> BriefingSessionResponse:
-    summary, transcript = await fetch_summary_and_transcript_for_job(user_client, admin_client, job)
+    summary, transcript = await fetch_summary_and_transcript_for_job(admin_client, job)
     return build_briefing_session_snapshot(
         job=job,
         source=source,
@@ -72,18 +72,13 @@ async def build_session_snapshot(
 
 
 async def fetch_summary_and_transcript_for_job(
-    user_client: Any,
     admin_client: Any,
     job: dict[str, Any],
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
-    if str(job.get("status") or "") not in {"succeeded", "deleted"}:
+    summary = await fetch_summary_for_owned_job(admin_client=admin_client, job=job)
+    if summary is None:
         return None, None
 
-    summary_id = job.get("summary_id")
-    if not summary_id:
-        return None, None
-
-    summary = await fetch_summary(user_client, str(summary_id))
     transcript_id = summary.get("transcript_id")
     if not transcript_id:
         return summary, None
@@ -92,11 +87,10 @@ async def fetch_summary_and_transcript_for_job(
     return summary, transcript
 
 
-async def job_has_ready_summary(user_client: Any, job: dict[str, Any]) -> bool:
-    summary_id = job.get("summary_id")
-    if not summary_id:
+async def job_has_ready_summary(admin_client: Any, job: dict[str, Any]) -> bool:
+    summary = await fetch_summary_for_owned_job(admin_client=admin_client, job=job)
+    if summary is None:
         return False
 
-    summary = await fetch_summary(user_client, str(summary_id))
     markdown = summary.get("summary_markdown")
     return summary.get("status") == "ready" and isinstance(markdown, str) and bool(markdown.strip())

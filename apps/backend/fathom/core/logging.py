@@ -59,6 +59,13 @@ APP_LOGGER_PREFIX = "fathom"
 
 _CORRELATION_ID_PATTERN = re.compile(rf"[A-Za-z0-9][A-Za-z0-9._:-]{{0,{MAX_CORRELATION_ID_CHARS - 1}}}")
 _REDACTED = "[redacted]"
+_BEARER_PATTERN = re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/=-]+")
+_CREDENTIAL_ASSIGNMENT_PATTERN = re.compile(
+    r"(?i)\b(api[_-]?key|authorization|password|secret|token|webhook[_-]?signature)"
+    r"(\s*[:=]\s*)[^\s,;]+"
+)
+_EMAIL_PATTERN = re.compile(r"(?i)\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b")
+_URL_CREDENTIALS_PATTERN = re.compile(r"(?i)([a-z][a-z0-9+.-]*://)[^/\s:@]+:[^@\s/]+@")
 _SENSITIVE_LOG_KEYS = {
     "api_key",
     "authorization",
@@ -221,7 +228,7 @@ class ConsoleFormatter(SmartContextFormatter):
 
     @override
     def format(self, record: logging.LogRecord) -> str:
-        base_message = super().format(record)
+        base_message = _sanitize_log_text(super().format(record))
         extra_fields = {
             key: _sanitize_log_value(key, value)
             for key, value in record.__dict__.items()
@@ -244,12 +251,12 @@ class JsonFormatter(logging.Formatter):
             "level": record.levelname.lower(),
             "logger": record.name,
             "module": _module_path(record),
-            "event": record.getMessage(),
+            "event": _sanitize_log_text(record.getMessage()),
         }
         if record.exc_info:
-            payload["exception"] = self.formatException(record.exc_info)
+            payload["exception"] = _sanitize_log_text(self.formatException(record.exc_info))
         if record.stack_info:
-            payload["stack"] = self.formatStack(record.stack_info)
+            payload["stack"] = _sanitize_log_text(self.formatStack(record.stack_info))
 
         for key, value in record.__dict__.items():
             if key in _STANDARD_LOG_RECORD_ATTRS or value is None:
@@ -310,6 +317,13 @@ def normalize_correlation_id(value: str | None) -> str:
     return uuid.uuid4().hex
 
 
+def _sanitize_log_text(value: str) -> str:
+    value = _URL_CREDENTIALS_PATTERN.sub(r"\1[redacted]@", value)
+    value = _BEARER_PATTERN.sub("Bearer [redacted]", value)
+    value = _CREDENTIAL_ASSIGNMENT_PATTERN.sub(r"\1\2[redacted]", value)
+    return _EMAIL_PATTERN.sub("[redacted-email]", value)
+
+
 def _sanitize_log_value(key: str, value: Any) -> Any:
     normalized_key = key.lower()
     if (
@@ -326,8 +340,10 @@ def _sanitize_log_value(key: str, value: Any) -> Any:
         }
     if isinstance(value, (list, tuple, set)):
         return [_sanitize_log_value(key, item) for item in value]
-    if isinstance(value, str) and len(value) > MAX_LOG_VALUE_CHARS:
-        return f"{value[:MAX_LOG_VALUE_CHARS]}...[truncated]"
+    if isinstance(value, str):
+        value = _sanitize_log_text(value)
+        if len(value) > MAX_LOG_VALUE_CHARS:
+            return f"{value[:MAX_LOG_VALUE_CHARS]}...[truncated]"
     return value
 
 

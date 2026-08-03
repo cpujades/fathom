@@ -55,7 +55,12 @@ class Settings(BaseSettings):
     supabase_db_user: str = Field(default="postgres", validation_alias="SUPABASE_DB_USER")
     supabase_db_name: str = Field(default="postgres", validation_alias="SUPABASE_DB_NAME")
     supabase_db_host: str | None = Field(default=None, validation_alias="SUPABASE_DB_HOST")
-    supabase_db_port: int = DEFAULT_SUPABASE_DB_PORT
+    supabase_db_port: int = Field(
+        default=DEFAULT_SUPABASE_DB_PORT,
+        validation_alias="SUPABASE_DB_PORT",
+        ge=1,
+        le=65_535,
+    )
 
     # ---------------------------------------------------------------------------
     # Environment config (optional)
@@ -89,8 +94,18 @@ class Settings(BaseSettings):
     polar_checkout_return_url: str | None = Field(default=None, validation_alias="POLAR_CHECKOUT_RETURN_URL")
     polar_portal_return_url: str | None = Field(default=None, validation_alias="POLAR_PORTAL_RETURN_URL")
     polar_server: str = Field(default="sandbox", validation_alias="POLAR_SERVER")
-    billing_debt_cap_seconds: int = DEFAULT_BILLING_DEBT_CAP_SECONDS
-    worker_max_concurrent_jobs: int = DEFAULT_WORKER_MAX_CONCURRENT_JOBS
+    billing_debt_cap_seconds: int = Field(
+        default=DEFAULT_BILLING_DEBT_CAP_SECONDS,
+        validation_alias="BILLING_DEBT_CAP_SECONDS",
+        ge=0,
+        le=86_400,
+    )
+    worker_max_concurrent_jobs: int = Field(
+        default=DEFAULT_WORKER_MAX_CONCURRENT_JOBS,
+        validation_alias="WORKER_MAX_CONCURRENT_JOBS",
+        ge=1,
+        le=64,
+    )
     worker_shutdown_grace_seconds: float = Field(
         default=DEFAULT_WORKER_SHUTDOWN_GRACE_SECONDS,
         validation_alias="WORKER_SHUTDOWN_GRACE_SECONDS",
@@ -261,6 +276,8 @@ class Settings(BaseSettings):
 
         if not self.supabase_db_host or _is_loopback_hostname(self.supabase_db_host):
             raise ValueError("SUPABASE_DB_HOST must be a non-loopback host in staging or production.")
+        if not self.supabase_db_password:
+            raise ValueError("SUPABASE_DB_PASSWORD is required when APP_ENV is staging or production.")
 
         if self.app_env == "production" and self.polar_server != "production":
             raise ValueError("POLAR_SERVER must be production when APP_ENV is production.")

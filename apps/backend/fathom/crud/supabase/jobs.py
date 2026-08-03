@@ -89,6 +89,34 @@ async def fetch_job(client: AsyncClient, job_id: str) -> dict[str, Any]:
     )
 
 
+async def fetch_settled_job_for_summary(
+    client: AsyncClient,
+    *,
+    user_id: str,
+    summary_id: str,
+) -> dict[str, Any]:
+    """Return the caller's settled job that authorizes one shared summary."""
+    try:
+        response = await (
+            client.table("jobs")
+            .select("id,status,summary_id")
+            .eq("user_id", user_id)
+            .eq("summary_id", summary_id)
+            .in_("status", ["succeeded", "deleted"])
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+    except APIError as exc:
+        raise_for_postgrest_error(exc, "Failed to verify briefing access.")
+
+    return first_row(
+        response.data,
+        error_message="Supabase returned an unexpected jobs shape.",
+        not_found_message="Briefing not found.",
+    )
+
+
 async def fetch_active_job_for_source(
     client: AsyncClient,
     *,
@@ -212,6 +240,25 @@ async def claim_next_job(client: AsyncClient, *, lease_seconds: int) -> dict[str
     if not row.get("id"):
         return None
     return row
+
+
+async def fetch_next_queued_job_delay_seconds(client: AsyncClient) -> float | None:
+    """Return the database-clock delay until the next delayed job is runnable."""
+    try:
+        response = await client.rpc("next_queued_job_delay_seconds").execute()
+    except APIError as exc:
+        raise_for_postgrest_error(exc, "Failed to schedule the next queued job.")
+
+    data = response.data
+    if data is None:
+        return None
+    if isinstance(data, (int, float)) and not isinstance(data, bool):
+        return max(0.0, float(data))
+    if isinstance(data, dict):
+        value = data.get("next_queued_job_delay_seconds")
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return max(0.0, float(value))
+    raise ExternalServiceError("Supabase returned an unexpected queue schedule shape.")
 
 
 async def renew_job_lease(

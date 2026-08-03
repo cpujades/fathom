@@ -2,7 +2,7 @@ begin;
 
 set local search_path = extensions, public, pg_catalog;
 
-select plan(25);
+select plan(26);
 
 select ok(
   not has_function_privilege('authenticated', 'public.renew_job_lease(uuid,uuid,interval)', 'execute'),
@@ -107,6 +107,34 @@ values (
   'queued',
   5,
   true
+);
+
+insert into public.jobs (
+  id,
+  user_id,
+  status,
+  url,
+  source_key,
+  stage,
+  progress,
+  run_after,
+  usage_settlement_required
+)
+values (
+  '10000000-0000-0000-0000-000000000003',
+  '20000000-0000-0000-0000-000000000003',
+  'queued',
+  'https://www.youtube.com/watch?v=delayed-claim',
+  'youtube:delayed-claim',
+  'queued',
+  5,
+  pg_catalog.now() + interval '5 minutes',
+  true
+);
+
+select ok(
+  public.next_queued_job_delay_seconds() between 295::double precision and 300::double precision,
+  'the database reports one exact timer for the next delayed retry'
 );
 
 select ok(

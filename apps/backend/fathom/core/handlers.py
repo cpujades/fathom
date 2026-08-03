@@ -21,8 +21,7 @@ async def handle_app_error(request: Request, exc: AppError) -> JSONResponse:
     if exc.status_code >= 500:
         with log_context(request_id=request_id, method=request.method, path=request.url.path):
             logger.error(
-                "%s",
-                exc.detail,
+                "request.app_error",
                 extra={
                     "error_code": exc.code,
                     "status_code": exc.status_code,

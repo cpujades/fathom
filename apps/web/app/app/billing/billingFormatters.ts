@@ -59,7 +59,7 @@ export function getOrderLabel(
 export function getPlanBadge(plan: PlanResponse, groupKey: PlanGroup["key"]): string | null {
   const normalizedName = plan.name.toLowerCase();
   if (groupKey === "subscription") {
-    if (normalizedName.includes("starter")) return "Most popular";
+    if (normalizedName.includes("starter")) return "Recommended";
     if (normalizedName.includes("pro")) return "Best value";
     if (normalizedName.includes("agency")) return "High volume";
     return null;

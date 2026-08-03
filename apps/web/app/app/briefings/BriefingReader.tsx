@@ -312,11 +312,11 @@ export function BriefingReader({
           </div>
         ) : null}
         {isReady && deleteConfirming ? (
-          <div className={styles.footerDeleteConfirm} role="group" aria-label="Remove briefing">
-            <span>Remove this briefing from your library?</span>
+          <div className={styles.footerDeleteConfirm} role="group" aria-label="Archive briefing">
+            <span>Archive this briefing? Submitting the same source restores it.</span>
             <button className={styles.textActionLink} data-remove-cancel type="button" onClick={onCancelDelete} disabled={deleteLoading}>Cancel</button>
             <button className={`${styles.textActionLink} ${styles.removeTextButton}`} type="button" onClick={onConfirmDelete} disabled={deleteLoading}>
-              {deleteLoading ? "Removing..." : "Remove"}
+              {deleteLoading ? "Archiving..." : "Archive"}
             </button>
           </div>
         ) : null}
@@ -371,12 +371,12 @@ function ReaderActions({
       <Link className={styles.textActionLink} href="/app">Start another briefing</Link>
       {isReady && !deleteConfirming ? <DeleteTrigger disabled={deleteLoading} onClick={onRequestDelete} /> : null}
       {isReady && deleteConfirming ? (
-        <div className={styles.sidebarDeleteConfirm} role="group" aria-label="Remove briefing">
-          <p>Remove this briefing?</p>
+        <div className={styles.sidebarDeleteConfirm} role="group" aria-label="Archive briefing">
+          <p>Archive this briefing? Submitting the same source restores it.</p>
           <div className={styles.sidebarDeleteActions}>
             <button className={styles.textActionLink} data-remove-cancel type="button" onClick={onCancelDelete} disabled={deleteLoading}>Cancel</button>
             <button className={`${styles.textActionLink} ${styles.removeTextButton}`} type="button" onClick={onConfirmDelete} disabled={deleteLoading}>
-              {deleteLoading ? "Removing..." : "Remove"}
+              {deleteLoading ? "Archiving..." : "Archive"}
             </button>
           </div>
         </div>
@@ -388,7 +388,7 @@ function ReaderActions({
 function DeleteTrigger({ disabled, onClick }: { disabled: boolean; onClick: () => void }) {
   return (
     <button className={`${styles.textActionLink} ${styles.removeTextButton}`} data-remove-trigger type="button" onClick={onClick} disabled={disabled}>
-      Remove briefing
+      Archive briefing
     </button>
   );
 }

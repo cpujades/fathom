@@ -49,13 +49,15 @@ the authenticated role `SELECT` on only:
 | --- | --- |
 | `jobs` | `jobs.user_id = auth.uid()` |
 | `job_events` | The event’s job belongs to `auth.uid()` |
-| `summaries` | The summary is `ready`, non-empty, and linked to that user’s `succeeded` or `deleted` job |
 
 Authenticated clients have no direct insert, update, or delete privilege on
 application tables, no direct Storage access, and no direct reads of
-transcripts, plans, billing, usage, settlement, stream-lease, maintenance, or
+summaries, transcripts, plans, billing, usage, settlement, stream-lease, maintenance, or
 rate-limit data. The API reads those records with a service client only after
 authenticating the user and applying the corresponding ownership filter.
+For a summary, that filter is a caller-owned `succeeded` or `deleted` job whose
+`summary_id` matches the requested briefing. This keeps global cache rows
+reusable without exposing their internal columns to browser queries.
 
 `FORCE ROW LEVEL SECURITY` is not enabled because trusted table owners and the
 service role must run server operations. This makes secret-key handling a hard
@@ -68,7 +70,7 @@ grants live in `supabase/migrations/`; the Python CRUD modules call them.
 
 | Concern | Main RPCs | Invariant protected |
 | --- | --- | --- |
-| Queue and leases | `create_or_reuse_job`, `claim_next_job`, `renew_job_lease`, `update_job_with_valid_lease`, `requeue_stale_jobs`, `requeue_unsettled_jobs` | One user/source job resolution, atomic claim, lease fencing, and recoverability |
+| Queue and leases | `create_or_reuse_settled_job`, `claim_next_settled_job`, `next_queued_job_delay_seconds`, `renew_job_lease`, `update_job_with_valid_lease`, `requeue_stale_jobs`, `requeue_unsettled_jobs` | One user/source job resolution, atomic claim, event-driven delayed retry scheduling, lease fencing, and recoverability |
 | Transcripts | `create_transcript_with_segments` | One provider-contract transcript and contiguous validated segments |
 | Summaries | `prepare_summary`, `update_summary_draft`, `complete_summary_generation`, `fail_summary_generation` | One live producer, takeover after orphaning, ready-only cache reuse |
 | Usage | `settle_job_usage`, `complete_job_after_settlement` | One settlement per job; subscription then pack then debt accounting |

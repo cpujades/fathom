@@ -6,6 +6,7 @@ from typing import Any
 from urllib.parse import urlparse
 from uuid import UUID, uuid4
 
+from fathom.application.briefings.access import fetch_authorized_summary
 from fathom.application.briefings.contract import build_source_thumbnail_url, normalize_source, resolve_source_title
 from fathom.application.identity import AuthenticatedUser
 from fathom.core.config import Settings
@@ -18,10 +19,9 @@ from fathom.crud.supabase.summaries import (
     complete_summary_pdf,
     fail_summary_pdf,
     fetch_summaries_by_ids,
-    fetch_summary,
     prepare_summary_pdf,
 )
-from fathom.crud.supabase.transcripts import fetch_transcript_by_id, fetch_transcripts_by_ids
+from fathom.crud.supabase.transcripts import fetch_transcripts_by_ids
 from fathom.schemas.briefing_sessions import BriefingSessionState
 from fathom.schemas.briefings import (
     BriefingListItem,
@@ -53,10 +53,16 @@ BRIEFINGS_SCAN_BATCH_SIZE = 200
 async def get_briefing(briefing_id: UUID, auth: AuthenticatedUser, settings: Settings) -> BriefingResponse:
     briefing_id_str = str(briefing_id)
     with log_context(user_id=auth.user_id, briefing_id=briefing_id_str):
-        async with managed_supabase_client(
-            await create_supabase_user_client(settings, auth.access_token)
-        ) as user_client:
-            summary = await fetch_summary(user_client, briefing_id_str)
+        async with (
+            managed_supabase_client(await create_supabase_user_client(settings, auth.access_token)) as user_client,
+            managed_supabase_client(await create_supabase_admin_client(settings)) as admin_client,
+        ):
+            summary = await fetch_authorized_summary(
+                user_client=user_client,
+                admin_client=admin_client,
+                user_id=auth.user_id,
+                summary_id=briefing_id_str,
+            )
             _require_ready_summary(summary)
             object_key = _current_pdf_object_key(summary)
             has_pdf = object_key is not None
@@ -68,7 +74,6 @@ async def get_briefing(briefing_id: UUID, auth: AuthenticatedUser, settings: Set
                     pdf_url=None,
                 )
 
-        async with managed_supabase_client(await create_supabase_admin_client(settings)) as admin_client:
             pdf_url = await create_pdf_signed_url(
                 admin_client,
                 SUPABASE_PDF_BUCKET,
@@ -86,12 +91,17 @@ async def get_briefing(briefing_id: UUID, auth: AuthenticatedUser, settings: Set
 async def create_briefing_pdf(briefing_id: UUID, auth: AuthenticatedUser, settings: Settings) -> BriefingPdfResponse:
     briefing_id_str = str(briefing_id)
     with log_context(user_id=auth.user_id, briefing_id=briefing_id_str):
-        async with managed_supabase_client(
-            await create_supabase_user_client(settings, auth.access_token)
-        ) as user_client:
-            summary = await fetch_summary(user_client, briefing_id_str)
+        async with (
+            managed_supabase_client(await create_supabase_user_client(settings, auth.access_token)) as user_client,
+            managed_supabase_client(await create_supabase_admin_client(settings)) as admin_client,
+        ):
+            summary = await fetch_authorized_summary(
+                user_client=user_client,
+                admin_client=admin_client,
+                user_id=auth.user_id,
+                summary_id=briefing_id_str,
+            )
             _require_ready_summary(summary)
-        async with managed_supabase_client(await create_supabase_admin_client(settings)) as admin_client:
             return await _create_briefing_pdf(briefing_id, briefing_id_str, summary, admin_client)
 
 
@@ -104,10 +114,6 @@ async def _create_briefing_pdf(
     markdown = summary.get("summary_markdown")
     if not isinstance(markdown, str) or not markdown.strip():
         raise ExternalServiceError("Briefing markdown is missing; cannot generate PDF.")
-
-    user_id = summary.get("user_id")
-    if not isinstance(user_id, str) or not user_id:
-        raise ExternalServiceError("Briefing user id is missing; cannot generate PDF.")
 
     generation_token = str(uuid4())
     preparation = await prepare_summary_pdf(
@@ -131,17 +137,13 @@ async def _create_briefing_pdf(
         raise PDFBusyError(PDF_RENDER_BUSY_MESSAGE)
 
     object_key: str | None = None
+    stale_object_key = _stale_pdf_object_key(summary)
     uploaded = False
     published = False
     try:
         logger.info("briefing_pdf.generation.started")
         pdf_bytes = await render_markdown_pdf_bytes(markdown)
-        transcript = await fetch_transcript_by_id(admin_client, summary["transcript_id"])
-        video_id = transcript.get("video_id")
-        if not isinstance(video_id, str) or not video_id:
-            video_id = "unknown-video"
-
-        object_key = f"{user_id}/{video_id}/v{PDF_CACHE_VERSION}/{briefing_id}/{generation_token}.pdf"
+        object_key = f"briefings/{briefing_id}/v{PDF_CACHE_VERSION}/{generation_token}.pdf"
         await upload_pdf(
             admin_client,
             bucket=SUPABASE_PDF_BUCKET,
@@ -172,6 +174,16 @@ async def _create_briefing_pdf(
         )
         if not pdf_url:
             raise ExternalServiceError("Signed PDF URL was not returned.")
+
+        if stale_object_key and stale_object_key != object_key:
+            try:
+                await delete_object_with_retry(
+                    admin_client,
+                    bucket=SUPABASE_PDF_BUCKET,
+                    object_key=stale_object_key,
+                )
+            except Exception:
+                logger.warning("briefing_pdf.stale_object_cleanup_failed", exc_info=True)
 
         logger.info("briefing_pdf.signed_url.issued")
         return BriefingPdfResponse(briefing_id=summary["id"], pdf_url=pdf_url)
@@ -207,6 +219,20 @@ def _current_pdf_object_key(summary: dict[str, Any]) -> str | None:
     if not is_current_pdf_cache(object_key, summary.get("pdf_cache_version")):
         return None
     assert isinstance(object_key, str)
+    return object_key
+
+
+def _stale_pdf_object_key(summary: dict[str, Any]) -> str | None:
+    object_key = summary.get("pdf_object_key")
+    if (
+        not isinstance(object_key, str)
+        or not object_key
+        or is_current_pdf_cache(
+            object_key,
+            summary.get("pdf_cache_version"),
+        )
+    ):
+        return None
     return object_key
 
 

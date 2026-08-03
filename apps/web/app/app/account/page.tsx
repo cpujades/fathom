@@ -72,6 +72,9 @@ export default function ProfilePage() {
 
       setStatus("Account updated.");
       setStatusError(false);
+    } catch {
+      setStatus("Unable to update your account. Check your connection and try again.");
+      setStatusError(true);
     } finally {
       setSaving(false);
     }

@@ -5,9 +5,9 @@ operation through the backend:
 
 - `fathom_groq`: the worker uploads temporary audio with the service client,
   creates a short-lived URL for Groq, and deletes the object after use.
-- `fathom`: the API first reads the requested summary with the user's
-  authenticated client (and therefore summary RLS), then uses the service
-  client to upload a PDF or issue a short-lived signed URL.
+- `fathom`: the API first verifies an owned settled/archived `jobs` row with
+  the user's authenticated client, then reads the shared summary and uploads a
+  PDF or issues a short-lived signed URL with the service client.
 
 The browser does not list, read, upload, update, or delete Storage objects
 directly. Authenticated access to `storage.objects` is therefore intentionally

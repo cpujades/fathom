@@ -30,6 +30,7 @@ _REQUIRED_DATABASE_OBJECTS = (
     "briefing_stream_leases_table",
     "create_or_reuse_settled_job_function",
     "claim_next_settled_job_function",
+    "next_queued_job_delay_seconds_function",
     "renew_job_lease_function",
     "update_job_with_valid_lease_function",
     "prepare_summary_function",
@@ -67,6 +68,10 @@ select
     select 1 from pg_proc join pg_namespace on pg_namespace.oid = pg_proc.pronamespace
     where pg_namespace.nspname = 'public' and pg_proc.proname = 'claim_next_settled_job'
   ) as claim_next_settled_job_function,
+  exists (
+    select 1 from pg_proc join pg_namespace on pg_namespace.oid = pg_proc.pronamespace
+    where pg_namespace.nspname = 'public' and pg_proc.proname = 'next_queued_job_delay_seconds'
+  ) as next_queued_job_delay_seconds_function,
   exists (
     select 1 from pg_proc join pg_namespace on pg_namespace.oid = pg_proc.pronamespace
     where pg_namespace.nspname = 'public' and pg_proc.proname = 'renew_job_lease'
@@ -206,7 +211,7 @@ async def _check_postgres(settings: Settings) -> None:
             schema_status = await conn.fetchrow(_SCHEMA_CHECK_SQL)
     except ConfigurationError as exc:
         logger.warning("api.ready.failed", extra={"check": "postgres", "error_type": type(exc).__name__})
-        raise NotReadyError(f"Direct Postgres is not configured: {exc.detail}") from exc
+        raise NotReadyError("Direct Postgres is not configured.") from exc
     except Exception as exc:
         logger.warning("api.ready.failed", extra={"check": "postgres", "error_type": type(exc).__name__})
         raise NotReadyError("Direct Postgres is not reachable.") from exc

@@ -49,7 +49,9 @@ query propagation.
 The ordinary sign-in and sign-up paths support password, magic link, and Google
 OAuth. `/auth/callback` accepts either a verified email token or an exchanged
 authorization code, establishes the Supabase session cookie, and redirects to
-the validated destination.
+the validated destination. Signup is public rather than invitation-only; the
+`invite` token type accepted by the callback is a Supabase OTP protocol value,
+not a Talven invitation gate.
 
 Password recovery is intentionally separate from ordinary authentication:
 

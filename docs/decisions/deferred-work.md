@@ -1,34 +1,49 @@
 # Deferred work register
 
 **Status:** Accepted deferrals
-**Last reviewed:** 2026-08-01
+**Last reviewed:** 2026-08-03
 
 This register records work Talven has deliberately chosen not to include in
-the first invite-only pilot. A deferred item is not forgotten or assumed to be
-unimportant. It means the current behavior is understood, the pilot has a
-bounded safe path, and implementing the larger design now would create more
-risk than value.
+the current pre-launch candidate. A deferred item is not forgotten or assumed
+to be unimportant. It means the current behavior is understood and implementing
+the larger design now would create more risk than value.
 
 If a trigger below occurs, move that item into the implementation backlog and
 write or update a focused decision before changing product behavior.
 
+## Two kinds of deferral
+
+These categories must not be mixed:
+
+- **Optional feature deferral:** the product can remain complete without it.
+  It may stay deferred indefinitely unless user evidence triggers it. Q&A/chat
+  is the clearest example.
+- **Boundary-bound deferral:** it is reasonable not to decide while everything
+  runs only on `localhost`, but a named launch boundary ends the deferral.
+  Hosting, HTTPS origins, observability, retention, backups, and support cannot
+  remain undefined once external users can sign up.
+
+“Deferred until hosting is selected” therefore does not mean “deferred
+forever.” It means the decision belongs in the deployment task and must be
+completed before the boundary in the table below.
+
 ## Product and billing
 
-| Deferred item | Current pilot decision | Why it is deferred | Revisit trigger | Minimum safe future design |
+| Deferred item | Current decision | Why it is deferred | Revisit trigger | Minimum safe future design |
 | --- | --- | --- | --- | --- |
 | Cancel a running briefing | Do not offer cancellation after work starts | Cancellation needs precise charging, provider-call, worker, and recovery semantics. Redis is not required, but a durable cancel state is. | Users regularly abandon long jobs, provider cost becomes material, or product policy requires cancellation | Durable cancel request; checkpoints before expensive stages; fenced terminal transition; documented charge/refund policy; clear UI states |
 | Upfront usage reservations | Check estimated affordability at admission; charge atomically after a valid briefing | Reservations change when credits disappear and require expiry, cancellation, crash recovery, and refund rules | Concurrent usage produces unacceptable debt or paid launch requires a strict no-debt guarantee | Atomic reserve/commit/release ledger; expiry and reconciliation; visible pending balance; concurrency tests |
-| Content-suitability guardrail | Accept supported public YouTube sources within current limits | Simple rules can wrongly reject useful lectures, interviews, and technical videos | Pilot evidence shows abuse or a material share of low-value inputs | Labeled evaluation set; transcript-based suitability signal; explainable rejection; appeal/retry path; explicit charging policy |
-| Podcast question and answer chat | Keep the product focused on evidence-backed briefings | Chat adds retrieval, citation, privacy, latency, cost, and evaluation surfaces before the core workflow is proven | Briefing retention and interviews show repeated demand for follow-up questions | Timestamp-aware hybrid retrieval; reranking; grounded citations; abstention; evaluation set; bounded cost and retention |
-| Permanent account/source erasure | Users can archive and restore briefings; archive is reversible and is not physical deletion | User-owned records, reusable source processing, billing evidence, security logs, and legal retention have different owners and lifetimes. A single cascading delete could break another user's briefing or erase required audit evidence. | Before paid public launch, before promising deletion in policy or marketing, or earlier if a pilot user makes an erasure request | Approved data inventory and per-category retention schedule; separate user-owned versus reusable derived data; authenticated request and cooling-off flow; transactional deletion/anonymization; billing/legal exceptions; provider/storage cleanup; audit proof without retained private content |
+| Content-suitability guardrail | Accept supported public YouTube sources within current limits | Simple rules can wrongly reject useful lectures, interviews, and technical videos | Early usage shows abuse or a material share of low-value inputs | Labeled evaluation set; transcript-based suitability signal; explainable rejection; appeal/retry path; explicit charging policy |
+| Podcast question and answer chat | Keep the product focused on source-linked briefings | Chat adds retrieval, citation, privacy, latency, cost, and evaluation surfaces before the core workflow is proven | Optional and indefinite: activate only if repeated user evidence supports it | Timestamp-aware hybrid retrieval; reranking; grounded citations; abstention; evaluation set; bounded cost and retention |
+| Automated self-service account/source erasure | Keep archive reversible; handle a verified privacy request manually under the approved policy required before external launch | User-owned records, reusable source processing, billing evidence, security logs, and legal retention have different owners and lifetimes. A single cascading delete could break another user's briefing or erase required audit evidence. | Request volume makes manual handling unsafe or too slow, or policy requires automation | Separate user-owned versus reusable derived data; authenticated request and cooling-off flow; transactional deletion/anonymization; billing/legal exceptions; provider/storage cleanup; audit proof without retained private content |
 
 ## Processing, cache, and scale
 
-| Deferred item | Current pilot decision | Why it is deferred | Revisit trigger | Minimum safe future design |
+| Deferred item | Current decision | Why it is deferred | Revisit trigger | Minimum safe future design |
 | --- | --- | --- | --- | --- |
-| Global source producer before transcription | Separate user jobs may duplicate transcription when two users submit the same uncached source at nearly the same time | Current unique cache rows, summary ownership tokens, tenant isolation, and one settlement per user keep results correct. A shared producer adds cross-tenant lifecycle and fairness rules. | Duplicate provider cost is measurable in pilot data | Tenant-neutral `source_work` identity; producer/follower lifecycle; fenced takeover; failure propagation; retention/privacy/fairness policy |
-| Videos longer than two hours | Keep the two-hour and 100 MB pilot limits | Raising a number alone risks provider rejection, excessive memory, long retries, and losing the whole job after a late failure | Target users need longer sources and representative provider tests pass | Streaming download; bounded chunks; per-chunk retry/checkpointing; timestamp offsets; deterministic merge; progress, cost, and quality evaluation |
-| Shared event wake-ups and event retention | Persist events and poll once per second per open session; snapshots reconcile state; expiring database leases cap active streams per user/IP | It is simple and bounded for a small pilot. Shared notification infrastructure adds lifecycle and fan-out complexity. | Database event-query load, connection count, or event-table growth becomes material | Load measurement first; bounded shared wake-up mechanism; event retention/compaction; snapshot fallback retained |
+| Global source producer before transcription | Separate user jobs may duplicate transcription when two users submit the same uncached source at nearly the same time | Current unique cache rows, summary ownership tokens, tenant isolation, and one settlement per user keep results correct. A shared producer adds cross-tenant lifecycle and fairness rules. | Duplicate provider cost is measurable in real usage | Tenant-neutral `source_work` identity; producer/follower lifecycle; fenced takeover; failure propagation; retention/privacy/fairness policy |
+| Videos longer than two hours | Keep the two-hour and 100 MB initial limits | Raising a number alone risks provider rejection, excessive memory, long retries, and losing the whole job after a late failure | Target users need longer sources and representative provider tests pass | Streaming download; bounded chunks; per-chunk retry/checkpointing; timestamp offsets; deterministic merge; progress, cost, and quality evaluation |
+| Shared event wake-ups and event retention | Persist events and poll once per second per open session; snapshots reconcile state; expiring database leases cap active streams per user/IP | It is simple and bounded for early usage. Shared notification infrastructure adds lifecycle and fan-out complexity. | Database event-query load, connection count, or event-table growth becomes material | Load measurement first; bounded shared wake-up mechanism; event retention/compaction; snapshot fallback retained |
 | Cache retention and invalidation redesign | Key transcripts and summaries by their processing/model contract; retain ready shared work | Current versioned identities prevent incompatible reuse. Time-based retention and user-facing freshness have not yet been product-defined. | Models/prompts change often, storage growth matters, sources are removed, or users request freshness controls | Explicit freshness/retention policy; versioned invalidation; source-availability handling; operator metrics; deletion/privacy compatibility |
 
 ## Decision detail: archive, account deletion, and retention
@@ -37,7 +52,7 @@ This decision is deliberately visible because an apparently simple “Delete my
 account” button affects product access, shared cache correctness, billing,
 security, support, and privacy promises.
 
-### Current pilot behavior
+### Current pre-launch behavior
 
 - Archiving changes a user-owned `jobs` row from the active library state to an
   archived state. Restore reverses it.
@@ -117,16 +132,21 @@ Before implementation, decide:
    to their real capabilities.
 9. Record minimal non-content audit proof and give the user an honest result.
 
-Archive remains the correct pilot action until those decisions are approved.
-This is a public-launch decision, not a reason to hide or forget the work.
+Archive remains the correct product action until those decisions are approved.
+The retention schedule and manual request process are public-launch decisions;
+automating them may remain deferred.
 
 ## Platform and operations
 
-| Deferred item | Current pilot decision | Why it is deferred | Revisit trigger | Minimum safe future design |
+| Deferred item | Current decision | Why it is deferred | Revisit trigger | Minimum safe future design |
 | --- | --- | --- | --- | --- |
 | Strict nonce-based Content Security Policy | Keep the current restrictive CSP, including the narrowly documented inline-script allowance required by the current Next.js build | Nonces affect static rendering and caching and should be designed with the selected hosting path | Before paid public launch, or if the rendering/hosting model changes | Verify framework support; remove avoidable inline code; nonce or hash policy; browser regression suite; preserve caching intentionally |
-| Dedicated alerting/observability platform | Keep structured, privacy-safe application logs and reconciliation diagnostics | Platform choice depends on hosting, traffic, retention, and privacy requirements | Before unattended pilot operation or when an on-call owner is assigned | Central log destination; alerts for stuck/retried work and billing/webhook failures; redaction tests; retention/access policy |
-| Public hosting, domain, and provider selection | Reassess the application first, then choose infrastructure | These are intentionally later business and operating decisions, not application defects | Application gates pass and an invite-only candidate is chosen | Exact-candidate staging proof; secrets and origin configuration; backups/restore; capacity and cost envelope; deliberate production promotion |
+| Dedicated alerting/observability platform | Keep structured, privacy-safe application logs locally while the product is not deployed | Platform choice depends on hosting, traffic, retention, and privacy requirements | **Must resolve before unattended external signup is enabled** | Central log destination; worker/listener, stuck-job, billing/webhook, API-error, and capacity alerts; redaction tests; retention/access policy; named operator |
+| Public hosting, domain, and provider selection | Reassess the application first, then choose infrastructure | These are intentionally later business and operating decisions, not application defects | **Must resolve before any external user can reach the app** | Exact-candidate staging proof; separate web/API/continuous-worker processes; secrets and origin configuration; backups/restore; capacity and cost envelope; deliberate production promotion |
+| Retention schedule and manual privacy-request process | Do not invent deletion promises while testing only locally | Jobs, shared derivatives, PDFs, billing evidence, logs, backups, and provider-held data need different honest lifetimes | **Must resolve before public signup is enabled** | Written per-category periods and legal exceptions; provider/storage deletion behavior; verified request intake and identity check; owner and response target; privacy/terms alignment |
+| Backups, restore, and rollback | Keep local recovery tests; no hosted system exists yet | The exact controls depend on the selected database, storage, and application host | **Must resolve before external users create data** | Enabled backups; one proved restore; storage recovery decision; application rollback steps; recorded recovery owner and expected recovery times |
+| Ingress, abuse, and webhook edge controls | Keep application signature verification, request caps, rate limits, and strict origins; choose edge controls with the host | The public IP/proxy and available WAF/bot controls do not exist until hosting is selected | **Must resolve before the public URL is announced** | Trusted-proxy configuration; TLS; body and connection caps; Supabase signup abuse controls; Polar webhook route reachable without bypassing signature verification; load test using the real client IP |
+| PDF/storage provider choice, including Cloudflare R2 | Keep private Supabase Storage for temporary audio and signed PDF downloads | R2 may reduce download egress cost, but moving now adds another credential, adapter, signed-URL policy, cleanup path, CORS policy, and recovery surface before real cost is known | Storage/download cost or Supabase limits become material | Private bucket; short-lived signed URLs; server-mediated authorization; least-privilege credentials; CORS; object cleanup/retention; migration and rollback proof; measured total cost |
 
 ## Not deferred
 

@@ -133,7 +133,9 @@ export default function BriefingSessionPage() {
       const nextPdfUrl = data?.pdf_url ?? null;
       setPdfUrl(nextPdfUrl);
       if (nextPdfUrl) {
-        window.open(nextPdfUrl, "_blank", "noopener,noreferrer");
+        setExportNotice("PDF ready. Choose Download PDF to open it.");
+      } else {
+        setPdfError("The PDF finished without a download link. Try again.");
       }
     } catch (err) {
       setPdfError(err instanceof Error ? err.message : "Something went wrong.");
@@ -163,7 +165,7 @@ export default function BriefingSessionPage() {
       assertAuthenticatedRequestScopeCurrent(requestScope);
 
       if (error) {
-        setActionError(getApiErrorMessage(error, "Unable to remove this briefing."));
+        setActionError(getApiErrorMessage(error, "Unable to archive this briefing."));
         return;
       }
 
@@ -172,7 +174,7 @@ export default function BriefingSessionPage() {
       setDeleteConfirming(false);
       router.replace("/app/briefings");
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Unable to remove this briefing.");
+      setActionError(err instanceof Error ? err.message : "Unable to archive this briefing.");
     } finally {
       setDeleteLoading(false);
     }

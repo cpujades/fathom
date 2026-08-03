@@ -30,14 +30,14 @@ test("production CSP allows only configured service origins", () => {
 test("development CSP permits Next development evaluation without broad network wildcards", () => {
   const policy = buildContentSecurityPolicy({
     NODE_ENV: "development",
-    NEXT_PUBLIC_API_BASE_URL: "http://127.0.0.1:8080",
-    NEXT_PUBLIC_SUPABASE_URL: "http://127.0.0.1:54321"
+    NEXT_PUBLIC_API_BASE_URL: "http://localhost:8080",
+    NEXT_PUBLIC_SUPABASE_URL: "http://localhost:54321"
   });
 
   assert.match(policy, /script-src 'self' 'unsafe-inline' 'unsafe-eval'/);
   assert.match(
     policy,
-    /connect-src 'self' http:\/\/127\.0\.0\.1:8080 http:\/\/127\.0\.0\.1:54321/
+    /connect-src 'self' http:\/\/localhost:8080 http:\/\/localhost:54321/
   );
   assert.doesNotMatch(policy, /upgrade-insecure-requests/);
 });
@@ -73,5 +73,30 @@ test("invalid configured public URLs fail the build instead of widening CSP", ()
         NEXT_PUBLIC_SUPABASE_URL: "https://user:pass@project.supabase.co"
       }),
     /without credentials/
+  );
+});
+
+test("a production build requires an explicit canonical site origin", () => {
+  assert.throws(
+    () =>
+      buildSecurityHeaders({
+        NODE_ENV: "production",
+        NEXT_PUBLIC_API_BASE_URL: "https://api.talven.ai",
+        NEXT_PUBLIC_SUPABASE_URL: "https://project.supabase.co"
+      }),
+    /Missing NEXT_PUBLIC_SITE_URL/
+  );
+});
+
+test("hosted production origins must use HTTPS", () => {
+  assert.throws(
+    () =>
+      buildSecurityHeaders({
+        NODE_ENV: "production",
+        NEXT_PUBLIC_API_BASE_URL: "http://api.talven.ai",
+        NEXT_PUBLIC_SITE_URL: "https://app.talven.ai",
+        NEXT_PUBLIC_SUPABASE_URL: "https://project.supabase.co"
+      }),
+    /NEXT_PUBLIC_API_BASE_URL.*https/
   );
 });

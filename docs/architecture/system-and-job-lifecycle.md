@@ -1,6 +1,6 @@
 # System and job lifecycle
 
-Talven turns a public YouTube URL into a private, source-linked written
+Talven turns a public YouTube URL into an account-scoped, source-linked written
 briefing. The API handles authenticated requests, a separate worker performs
 long-running work, and Supabase Postgres is both the source of truth and the
 job queue. Redis is not part of the current design.
@@ -30,8 +30,8 @@ flowchart LR
 ```
 
 The browser never talks directly to Groq, OpenRouter, or Polar. It has limited
-read-only access to three RLS-protected database tables, but normal product
-requests still go through the API.
+read-only access to two RLS-protected database tables (`jobs` and
+`job_events`), but normal product requests still go through the API.
 
 ## Why there are 16 application tables
 
@@ -154,8 +154,9 @@ source key rather than a direct foreign key.
 Two users submitting the same compatible public video may have separate
 `jobs`, events, settlements, and billing records that point to the same ready
 `summaries` row. The summary points to one reusable transcript and evidence
-segments. RLS permits a user to read that summary only through their own
-successful or archived job.
+segments. The browser cannot select `summaries`. The API verifies the caller's
+own successful or archived job through RLS and only then reads the shared
+summary with its server client.
 
 Therefore, cache reuse saves provider work but does not expose who else watched
 the source, another user's library state, or another user's billing. It also
@@ -178,7 +179,7 @@ source without gaining access to each other's sessions or billing records.
    performs the current usage-admission check.
 3. A database command atomically creates, joins, or reuses the user's session.
 4. For new work, the `jobs` row is the queue item. A Postgres notification
-   wakes an idle worker quickly; polling remains the fallback.
+   wakes an idle worker after the creating transaction commits.
 5. A worker atomically claims the oldest runnable job, downloads the smallest
    suitable audio stream, uploads it temporarily to a private bucket, asks
    Groq for text and timestamped segments, then deletes the temporary object.
@@ -212,9 +213,103 @@ The current worker process can run up to 10 jobs concurrently by default.
 Several worker processes can run at once because the database performs the
 claim atomically.
 
-Postgres `NOTIFY` is only a wake-up hint. If a notification is missed or the
-listener reconnects, the worker continues checking the durable `jobs` table.
-No job exists only in memory.
+Postgres `NOTIFY` is only a wake-up hint. No job exists only in memory. The
+notification payload contains no job, user, URL, or content metadata. The
+worker reconciles the durable table once at startup and after each listener
+reconnection. New jobs and jobs rescheduled for retry both emit a wake hint.
+For a future `run_after`, the database returns the exact delay until the next
+retry is runnable, so the worker sets one timer instead of polling the queue.
+The direct Postgres connection also reports termination to the listener
+supervisor; a silently closed connection therefore enters reconnect and
+reconciliation instead of leaving the worker asleep forever.
+
+### Why a worker is still the right component
+
+The API request should finish quickly, while downloading audio, calling Groq,
+calling OpenRouter, retrying, and settling usage may take minutes. Keeping that
+work inside the API process would make deploys, request timeouts, concurrency,
+and crash recovery harder. A separate continuously running worker is therefore
+the correct boundary for the current product.
+
+The durable Postgres `jobs` table remains the queue authority. Adding Redis,
+RabbitMQ, or a hosted queue now would create two writes for every job: save the
+database row and publish a message. A crash between those writes can produce a
+saved job with no message, or a message with no committed job. Avoiding that
+requires a transactional outbox and another service to operate. Talven should
+add that machinery only when measured scale requires it; it does not improve
+correctness for the current workload.
+
+### Exactly what wakes an idle worker
+
+A healthy worker attempts a queue claim only when one of these occurs:
+
+1. the process starts;
+2. Postgres reports a new or rescheduled queued job;
+3. the notification listener reconnects, because notifications during a
+   disconnect are not replayed;
+4. an active job finishes and frees a concurrency slot;
+5. the database-calculated `run_after` timer becomes due; or
+6. stale-job recovery actually requeues an expired lease.
+
+The 30-second stale-lease sweep and 60-second billing maintenance pass still
+run because they repair crashes and delayed billing state. They are not job
+queue polling, and a maintenance pass that finds nothing does not trigger a
+queue claim.
+
+If `LISTEN` is temporarily unavailable, the durable queue must keep working.
+Only in that degraded state, reconnect attempts and recovery claim passes use
+bounded delays of 1, 2, 4, 8, 16, then at most 30 seconds. Successful
+reconnection immediately returns to event-driven waiting. Reconnect-loop
+alerts and worker-liveness monitoring remain deployment prerequisites because
+their destination depends on the selected host and observability system.
+
+### Before and after the event-driven change
+
+The worker is a separate, continuously running process because a briefing may
+take minutes. "Continuously running" does not mean "continuously querying". A
+healthy idle worker now holds one lightweight Postgres `LISTEN` connection and
+sleeps until a specific event matters.
+
+Before this change, an idle worker waited at most 10 seconds for a
+`job_created` notification. When nothing arrived, it woke, slept one more
+second, queried the queue, and repeated. In an empty system that meant a queue
+claim query roughly every 11 seconds. That fallback protected against missed
+notifications, but it also consumed database requests when there was no work.
+Only inserts sent the old notification, so delayed retry updates depended on
+that repeated query.
+
+Now the normal timeline is:
+
+1. At `10:00:00`, there are no jobs. The worker listens and makes no repeated
+   queue claim.
+2. At `10:05:00`, the API commits a new `queued` job. The database sends the
+   metadata-free message `{}` on `job_available`.
+3. The worker wakes and atomically claims the oldest runnable row. It reads the
+   actual job ID, user ID, URL, and timing from the durable table, never from
+   the transient notification.
+4. If a provider asks for a retry at `10:05:20`, the job is changed back to
+   `queued` with `run_after = 10:05:20`. That update sends another wake hint.
+   The database reports the exact remaining delay, and the worker sets one
+   timer for `10:05:20` instead of checking every few seconds.
+5. If several jobs arrive together, notifications may be combined. This is
+   safe because one wake causes the worker to drain runnable rows up to its
+   concurrency limit; the `jobs` table, not the number of messages, is the
+   source of truth.
+
+A notification can be lost if the database connection drops. The connection
+now reports its own termination. The worker reconnects after 1, 2, 4, 8, and
+16 seconds, capped at 30 seconds, and performs one recovery claim on each
+attempt. It also reconciles the durable queue after startup and reconnection.
+This temporary degraded-mode querying is deliberate: otherwise one connection
+failure could leave paid user work asleep forever. Once `LISTEN` is healthy,
+the worker returns to event-driven waiting.
+
+Two periodic safety tasks remain and are different from queue polling. Every
+30 seconds the stale-lease sweep checks whether a worker crashed while owning a
+job; it requests a new queue claim only when it actually requeues one. Every 60
+seconds billing maintenance gets an opportunity to repair billing work that is
+due. Healthy subscriptions are not sent to Polar every minute; their next due
+time is stored in the database and is normally six hours away.
 
 ## Lease and heartbeat model
 
@@ -298,15 +393,15 @@ that already happened.
 Summary rows have explicit `pending`, `ready`, and `failed` states. A pending
 row has one generation token tied to one live job lease. Another worker may
 take over only when that producer failed or became orphaned. Only a non-empty
-`ready` summary connected to the user's successful or archived job is readable
-from the browser.
+`ready` summary connected to the user's successful or archived job is returned
+through the API. The shared table itself is not browser-readable.
 
 Job events are persisted with one database sequence that never resets per
 connection. The SSE endpoint replays events after `Last-Event-ID`, then tails
 for new events. A full session snapshot is the reconciliation fallback.
 Current tailing performs roughly one event query per active viewer per second,
-plus a less frequent snapshot query. That is acceptable for a bounded pilot;
-measure it before adding a shared wake-up or retention system.
+plus a less frequent snapshot query. That is acceptable for bounded early
+usage; measure it before adding a shared wake-up or retention system.
 
 ## Primary code paths
 

@@ -32,6 +32,7 @@ def _strict_settings_values(**overrides: object) -> dict[str, object]:
         RATE_LIMIT=60,
         CORS_ALLOW_ORIGINS="https://app.talven.ai",
         SUPABASE_DB_HOST="db.project.supabase.co",
+        SUPABASE_DB_PASSWORD="test-database-password",
         POLAR_SERVER="production",
         POLAR_SUCCESS_URL="https://app.talven.ai/billing/success",
         POLAR_CHECKOUT_RETURN_URL="https://app.talven.ai/billing",
@@ -153,6 +154,15 @@ class RuntimeSecuritySettingsTests(unittest.TestCase):
         for overrides in invalid_values:
             with self.subTest(overrides=overrides), self.assertRaises(ValidationError):
                 Settings.model_validate(_strict_settings_values(**overrides))
+
+    def test_hosted_runtime_requires_direct_database_password(self) -> None:
+        with self.assertRaisesRegex(ValidationError, "SUPABASE_DB_PASSWORD is required"):
+            Settings.model_validate(_strict_settings_values(SUPABASE_DB_PASSWORD=""))
+
+    def test_database_port_is_bounded(self) -> None:
+        for port in (0, 65_536):
+            with self.subTest(port=port), self.assertRaises(ValidationError):
+                Settings.model_validate(_settings_values(SUPABASE_DB_PORT=port))
 
     def test_production_runtime_rejects_polar_sandbox(self) -> None:
         with self.assertRaisesRegex(ValidationError, "POLAR_SERVER must be production"):
