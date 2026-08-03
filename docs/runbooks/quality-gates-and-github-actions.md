@@ -138,6 +138,7 @@ by the PR database workflow.
 | Gate A fake recovery rehearsal | Covered by ordinary backend discovery; runnable directly | Focused, deterministic recovery and concurrency diagnosis |
 | Gate B Python database integrations | No; they skip without an explicit disposable database URL | Additional live-Postgres concurrency proof without risking shared data |
 | Gate C authenticated product rehearsal | No; explicit opt-in | Full local Auth/API/worker/SSE/PDF journey with fake providers |
+| Polar catalog sync | No live sync; frontend tests read the public plan contract and ordinary checks cover script syntax/lint | `--dry-run` validates locally; sandbox/production synchronization is an explicit provider operation with environment credentials |
 | Real Groq/OpenRouter/Polar exercises | No | Provider behavior, quality, latency, cost, and webhook delivery |
 | Human UX/accessibility review | No | Comprehension, visual quality, assistive technology, and real-device behavior |
 

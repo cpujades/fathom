@@ -136,6 +136,12 @@ contains those products. A non-dry run requires `SUPABASE_URL`,
 `SUPABASE_SECRET_KEY`, and `POLAR_ACCESS_TOKEN`, upserts Supabase by
 `(plan_code, version)`, and marks included rows active.
 
+PR frontend tests read `plan_contract.json` so public pricing and billing-intent
+expectations cannot drift silently, while the ordinary Python checks cover the
+generator's syntax and lint. PR CI deliberately does not execute a live catalog
+sync because that would mutate Polar and Supabase. Run `--dry-run` when the
+contract changes, then prove the non-dry behavior in sandbox before production.
+
 `--deactivate-missing` changes Supabase visibility only. It does not delete
 billing history or archive a Polar product, so use it only after deliberately
 reviewing which versions disappeared from the contract.
