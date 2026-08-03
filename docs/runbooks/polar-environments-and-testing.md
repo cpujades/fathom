@@ -46,6 +46,111 @@ map it to the corresponding Polar product. Do not edit only Polar and leave the
 tracked contract stale. `--deactivate-missing` deactivates missing Talven plan
 versions; it does not archive the provider product for you.
 
+### What `plan_contract.json` contains
+
+Each entry is a business version. For example:
+
+```json
+{
+  "plan_code": "creator_pack",
+  "version": 1,
+  "name": "Creator Pack",
+  "plan_type": "pack",
+  "currency": "usd",
+  "amount_cents": 1500,
+  "billing_interval": null,
+  "quota_seconds": 36000,
+  "rollover_cap_seconds": null,
+  "pack_expiry_days": 180
+}
+```
+
+`amount_cents = 1500` means `$15.00`; `quota_seconds = 36000` means ten
+hours of source duration. Subscriptions currently require a monthly interval;
+packs require `billing_interval = null`. The zero-price free subscription maps
+to the internal ID `internal_free` and is not created as a Polar product.
+
+Changing a public price, allowance, interval, or expiry rule changes the
+product promise. Preserve the earlier entry for existing purchases and add a
+new version instead of silently rewriting what version 1 means.
+
+### What optional `plans.json` contains
+
+`plans.json` is an environment-local mapping file. A sandbox example is:
+
+```json
+[
+  {
+    "plan_code": "creator_pack",
+    "version": 1,
+    "polar_product_id": "<sandbox-product-uuid>"
+  },
+  {
+    "plan_code": "starter",
+    "version": 1,
+    "polar_product_id": "<sandbox-product-uuid>"
+  }
+]
+```
+
+The script matches each override by `(plan_code, version)`. It rejects an
+unknown plan, an empty product ID, or any attempt to change a public contract
+field through this file. The file is ignored by Git because its UUIDs belong to
+one Polar environment. Replace or remove sandbox mappings before a production
+sync; production must use production UUIDs.
+
+The file is optional:
+
+- if it supplies a product UUID, the script fetches that Polar product and
+  verifies a matching amount, currency, and recurring interval;
+- otherwise, the script reuses the product UUID already stored on the matching
+  Supabase `(plan_code, version)` row; or
+- if neither mapping exists, the script creates the product in the selected
+  Polar environment and stores the resulting UUID in Supabase.
+
+It does not modify a mismatched Polar price. It stops and asks for a new plan
+version or a corrected mapping.
+
+### Exactly what the generator does
+
+`generate_polar_plans.py` loads the root `.env`; values explicitly exported in
+the shell take precedence. Its three modes are:
+
+```bash
+# Validate the contract without calling Polar or Supabase.
+uv run python scripts/polar/generate_polar_plans.py --dry-run
+
+# Create/verify sandbox products and upsert the selected Supabase plans.
+uv run python scripts/polar/generate_polar_plans.py --server sandbox
+
+# Deliberately deactivate Supabase plan versions no longer in the contract.
+uv run python scripts/polar/generate_polar_plans.py \
+  --server sandbox \
+  --deactivate-missing
+```
+
+Every mode writes ignored diagnostic output to
+`scripts/polar/plan_seed.json`. A dry run uses placeholder product IDs in that
+file; it proves the local contract is structurally valid, not that Polar
+contains those products. A non-dry run requires `SUPABASE_URL`,
+`SUPABASE_SECRET_KEY`, and `POLAR_ACCESS_TOKEN`, upserts Supabase by
+`(plan_code, version)`, and marks included rows active.
+
+`--deactivate-missing` changes Supabase visibility only. It does not delete
+billing history or archive a Polar product, so use it only after deliberately
+reviewing which versions disappeared from the contract.
+
+Polar product creation and the Supabase upsert are two different network
+operations, not one cross-provider transaction. If a run creates products and
+then fails before saving their Supabase mappings, inspect Polar, place the
+created UUIDs in the environment's `plans.json`, and rerun. That avoids creating
+duplicates while recovering from the partial run.
+
+For production, export or load production Supabase and Polar credentials,
+ensure `plans.json` contains only production UUIDs (or is absent), and run the
+dry run first. Then use `--server production` explicitly. Review the generated
+rows and the provider organization before allowing the non-dry run.
+
 ## What happens during checkout
 
 ```text

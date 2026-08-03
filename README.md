@@ -154,6 +154,10 @@ version. The Polar sync script rejects attempts to redefine public plan fields
 through that private file, preventing local provider identifiers from becoming
 a second pricing source of truth.
 
+See [Polar environments and testing](./docs/runbooks/polar-environments-and-testing.md#talven-plans-and-polar-products)
+for an exact override example, script modes, create/reuse behavior, recovery
+after a partial provider sync, and the production-safe procedure.
+
 Required frontend public variables:
 
 - `NEXT_PUBLIC_API_BASE_URL`

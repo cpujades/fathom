@@ -95,6 +95,9 @@ sections explain the contracts, data, operations, and deliberate trade-offs.
   protected-main behavior, rotation, failure diagnosis, and security tradeoffs.
 - [Local recovery rehearsal](./runbooks/local-recovery-rehearsal.md): the
   project-specific Gate A, Gate B, and Gate C checks.
+- [Quality gates and GitHub Actions](./runbooks/quality-gates-and-github-actions.md):
+  exact local checks, pre-commit behavior, every PR workflow, post-merge
+  release/staging/promotion automation, and what remains manual.
 - [Storage access boundary](./security/storage-access.md): intended Supabase
   Storage access patterns.
 
@@ -115,6 +118,9 @@ provider validation, privacy decisions, backups, or an exact-candidate staging
 rehearsal.
 
 ## Where checks run
+
+The complete command and workflow inventory is in
+[Quality gates and GitHub Actions](./runbooks/quality-gates-and-github-actions.md).
 
 - The pre-commit hook stays fast: syntax, accidental-secret/large-file checks,
   Ruff, formatting, and strict backend type checking.

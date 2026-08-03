@@ -107,6 +107,10 @@ also requires a reachable backend webhook at `/webhooks/polar` and the matching
 Polar sandbox webhook secret. Free briefing creation does not require a paid
 checkout.
 
+For an exact `plans.json` example, automatic create/reuse rules, generated
+output, partial-failure recovery, and the production-safe command sequence, see
+[Polar environments and testing](../runbooks/polar-environments-and-testing.md#talven-plans-and-polar-products).
+
 ## 5. Run all three processes
 
 API shell:
