@@ -154,7 +154,8 @@ Before an external user creates data, record:
   temporary audio, billing evidence, logs, and backups;
 - how a verified privacy/erasure request is received and handled manually;
 - provider-held data behavior and legal/payment exceptions;
-- enabled database and storage backups;
+- enabled database and Storage-object backups (Supabase database backups cover
+  Storage metadata, not the stored file objects themselves);
 - one successful restore rehearsal; and
 - support and incident owners with response expectations.
 

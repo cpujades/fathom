@@ -25,9 +25,11 @@ sections explain the contracts, data, operations, and deliberate trade-offs.
 7. [Cache and versioning](./architecture/cache-and-versioning.md): exactly
    what is reusable, which keys protect compatibility, and what “cache hit”
    means for a user and for billing.
-8. [Database, RLS, and persistence](./architecture/database-and-persistence.md):
+8. [Database, RLS, and persistence](./architecture/database-and-persistence.md)
+   and [Supabase environments and migrations](./runbooks/supabase-environments-and-migrations.md):
    the 16 application tables, foreign keys, row-level security, server RPCs,
-   and current Python CRUD modules.
+   and how the schema moves through local development, PR CI, staging, and
+   production.
 9. [Billing and Polar webhooks](./architecture/billing-and-webhooks.md):
    signature verification, normalized events, idempotency, ordering, refund
    behavior, and reconciliation.
@@ -77,9 +79,15 @@ sections explain the contracts, data, operations, and deliberate trade-offs.
   and opt-in paid evaluation.
 - [Worker and billing incidents](./runbooks/worker-and-billing-incidents.md):
   operator diagnosis and reconciliation.
+- [Polar environments and testing](./runbooks/polar-environments-and-testing.md):
+  sandbox versus production identities, plan/product mapping, local webhook
+  setup, provider proof boundaries, and official references.
 - [Hosted Auth and service probes](./runbooks/hosted-auth-and-service-probes.md):
   Supabase Dashboard configuration, real recovery-email proof, liveness,
   readiness, rate limits, and proxy behavior.
+- [Supabase environments and migrations](./runbooks/supabase-environments-and-migrations.md):
+  the separate local, CI, staging, and production databases; safe migration
+  commands; worker connection modes; and official provider references.
 - [First deployment checklist](./runbooks/first-deployment-checklist.md): the
   future web/API/worker topology, HTTPS/origins, public signup, ingress/WAF,
   webhook, observability, retention, backups, and R2 decision in plain terms.
