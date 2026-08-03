@@ -185,7 +185,7 @@ export default function PricingToggleSection({ mode }: PricingToggleSectionProps
                         <p className={styles.planTag}>{plan.tag}</p>
                         <h4 className={styles.planName}>{plan.name}</h4>
                       </div>
-                      {isFeatured ? <span className={styles.popularBadge}>Most popular</span> : null}
+                      {isFeatured ? <span className={styles.popularBadge}>Recommended</span> : null}
                     </header>
 
                     <div className={styles.planLedger}>

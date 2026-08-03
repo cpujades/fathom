@@ -309,6 +309,28 @@ class YouTubeWorkerDeadlineTests(unittest.IsolatedAsyncioTestCase):
         process.kill.assert_called_once()
         process.wait.assert_awaited_once()
 
+    async def test_metadata_worker_is_reaped_after_unexpected_ipc_failure(self) -> None:
+        process = SimpleNamespace(
+            returncode=None,
+            communicate=AsyncMock(side_effect=OSError("broken subprocess pipe")),
+            kill=Mock(),
+            wait=AsyncMock(),
+        )
+        with (
+            patch(
+                "fathom.services.downloader.asyncio.create_subprocess_exec",
+                AsyncMock(return_value=process),
+            ),
+            self.assertRaisesRegex(DownloadError, "source request failed"),
+        ):
+            await fetch_video_metadata_with_deadline(
+                "https://www.youtube.com/watch?v=test",
+                deadline_seconds=1,
+            )
+
+        process.kill.assert_called_once()
+        process.wait.assert_awaited_once()
+
 
 class StreamingStorageUploadTests(unittest.IsolatedAsyncioTestCase):
     async def test_upload_object_passes_path_without_reading_file_into_memory(self) -> None:

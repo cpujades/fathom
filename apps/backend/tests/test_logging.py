@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import sys
 import unittest
 
 from fathom.core.logging import JsonFormatter, normalize_correlation_id
@@ -49,6 +50,32 @@ class StructuredLogPrivacyTests(unittest.TestCase):
         self.assertEqual(payload["metadata"]["provider"], "fake")
         self.assertEqual(payload["metadata"]["email"], "[redacted]")
         self.assertEqual(payload["metadata"]["access_token"], "[redacted]")
+
+    def test_redacts_secrets_embedded_in_messages_and_tracebacks(self) -> None:
+        try:
+            raise RuntimeError(
+                "authorization=Bearer.secret password=hunter2 "
+                "postgresql://admin:database-secret@db.example.test/app "
+                "person@example.test"
+            )
+        except RuntimeError:
+            record = logging.LogRecord(
+                "fathom.test",
+                logging.ERROR,
+                __file__,
+                1,
+                "provider failed token=provider-secret for person@example.test",
+                (),
+                sys.exc_info(),
+            )
+
+        payload = json.loads(JsonFormatter().format(record))
+
+        encoded = json.dumps(payload)
+        for secret in ("provider-secret", "hunter2", "database-secret", "person@example.test"):
+            self.assertNotIn(secret, encoded)
+        self.assertIn("[redacted]", encoded)
+        self.assertIn("[redacted-email]", encoded)
 
 
 if __name__ == "__main__":

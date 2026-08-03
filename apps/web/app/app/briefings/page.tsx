@@ -292,10 +292,10 @@ export default function BriefingsPage() {
       });
       setConfirmDeleteSessionId(null);
       setError(null);
-      setLibraryNotice("Briefing removed from your library.");
+      setLibraryNotice("Briefing archived. Submitting the same source restores it.");
       window.requestAnimationFrame(() => libraryNoticeRef.current?.focus());
     } catch (err) {
-      setError(getApiErrorMessage(err, "Unable to remove this briefing from history."));
+      setError(getApiErrorMessage(err, "Unable to archive this briefing."));
     } finally {
       setDeletingSessionId(null);
     }

@@ -25,9 +25,11 @@ sections explain the contracts, data, operations, and deliberate trade-offs.
 7. [Cache and versioning](./architecture/cache-and-versioning.md): exactly
    what is reusable, which keys protect compatibility, and what “cache hit”
    means for a user and for billing.
-8. [Database, RLS, and persistence](./architecture/database-and-persistence.md):
+8. [Database, RLS, and persistence](./architecture/database-and-persistence.md)
+   and [Supabase environments and migrations](./runbooks/supabase-environments-and-migrations.md):
    the 16 application tables, foreign keys, row-level security, server RPCs,
-   and current Python CRUD modules.
+   and how the schema moves through local development, PR CI, staging, and
+   production.
 9. [Billing and Polar webhooks](./architecture/billing-and-webhooks.md):
    signature verification, normalized events, idempotency, ordering, refund
    behavior, and reconciliation.
@@ -58,31 +60,44 @@ sections explain the contracts, data, operations, and deliberate trade-offs.
   browser permissions, backend privileges, RLS, server commands, storage,
   billing, and export boundaries.
 - [Runtime safety, in plain language](./architecture/runtime-safety-explained.md):
-  account-scoped browser caching, password recovery, worker and stream leases,
-  billing recovery, refund concurrency, debt, URLs, and retention.
+  account-scoped browser caching, shared-cache privacy, password recovery,
+  worker and stream admission, downloader cleanup, hosted configuration,
+  billing recovery, PDF/download UX, launch evidence, debt, and retention.
 - [Briefing product behavior](./product/briefing-behavior.md): what a user sees,
   duplicate submissions, caching, charging, archive/restore, output quality,
   limits, and deliberately deferred features.
 - [Long-audio and transcription decision](./decisions/long-audio-and-transcription.md):
-  the current YouTube-to-Groq pipeline, the reason for the two-hour pilot limit,
+  the current YouTube-to-Groq pipeline, the reason for the initial two-hour limit,
   provider options, and the safe path to longer videos.
 - [Deferred work register](./decisions/deferred-work.md): accepted product and
-  technical deferrals, why they are not pilot blockers, and their revisit
+  technical deferrals, why they are not current blockers, and their revisit
   triggers.
 - [Pre-production review register](./decisions/pre-production-review-register.md):
   product decisions and operational evidence still required before an
-  invite-only pilot or paid public launch.
+  external public beta or paid public launch.
 - [Briefing quality evaluation](./quality/briefing-evaluation.md): deterministic
   and opt-in paid evaluation.
 - [Worker and billing incidents](./runbooks/worker-and-billing-incidents.md):
   operator diagnosis and reconciliation.
+- [Polar environments and testing](./runbooks/polar-environments-and-testing.md):
+  sandbox versus production identities, plan/product mapping, local webhook
+  setup, provider proof boundaries, and official references.
 - [Hosted Auth and service probes](./runbooks/hosted-auth-and-service-probes.md):
   Supabase Dashboard configuration, real recovery-email proof, liveness,
   readiness, rate limits, and proxy behavior.
+- [Supabase environments and migrations](./runbooks/supabase-environments-and-migrations.md):
+  the separate local, CI, staging, and production databases; safe migration
+  commands; worker connection modes; and official provider references.
+- [First deployment checklist](./runbooks/first-deployment-checklist.md): the
+  future web/API/worker topology, HTTPS/origins, public signup, ingress/WAF,
+  webhook, observability, retention, backups, and R2 decision in plain terms.
 - [Release automation](./runbooks/release-automation.md): token ownership,
   protected-main behavior, rotation, failure diagnosis, and security tradeoffs.
 - [Local recovery rehearsal](./runbooks/local-recovery-rehearsal.md): the
   project-specific Gate A, Gate B, and Gate C checks.
+- [Quality gates and GitHub Actions](./runbooks/quality-gates-and-github-actions.md):
+  exact local checks, pre-commit behavior, every PR workflow, post-merge
+  release/staging/promotion automation, and what remains manual.
 - [Storage access boundary](./security/storage-access.md): intended Supabase
   Storage access patterns.
 
@@ -103,6 +118,9 @@ provider validation, privacy decisions, backups, or an exact-candidate staging
 rehearsal.
 
 ## Where checks run
+
+The complete command and workflow inventory is in
+[Quality gates and GitHub Actions](./runbooks/quality-gates-and-github-actions.md).
 
 - The pre-commit hook stays fast: syntax, accidental-secret/large-file checks,
   Ruff, formatting, and strict backend type checking.

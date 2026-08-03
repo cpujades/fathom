@@ -175,7 +175,7 @@ export default function SignUpPage() {
           </div>
           <h1 className={styles.panelTitle}>Create your account</h1>
           <p className={styles.panelText}>
-            Turn long-form YouTube videos into concise, evidence-linked briefings you can reuse.
+            Turn long-form YouTube videos into concise, source-linked briefings you can reuse.
           </p>
           <ul className={styles.panelList}>
             <li>Begin with included monthly usage</li>

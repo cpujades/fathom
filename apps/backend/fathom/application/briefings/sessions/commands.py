@@ -95,7 +95,7 @@ async def _create_briefing_session(
             user_id=auth.user_id,
             source_key=source.source_identity_key,
         )
-        if completed_job and not await job_has_ready_summary(user_client, completed_job):
+        if completed_job and not await job_has_ready_summary(admin_client, completed_job):
             logger.warning(
                 "briefing_session.reusable_summary_not_ready",
                 extra={"session_id": completed_job["id"]},

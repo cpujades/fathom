@@ -75,7 +75,7 @@ The preferred later design is a tenant-neutral `source_work` record keyed by
 video, transcription model, and processing version. User jobs would follow
 that producer while retaining separate ownership and separate billing. It
 needs explicit retention, failure propagation, takeover, privacy, and fairness
-rules, so it should not be inserted as a quick pre-pilot change.
+rules, so it should not be inserted as a quick pre-launch change.
 
 ## Charging and debt
 
@@ -148,7 +148,7 @@ new job.
 
 ## Current input limits
 
-The current pilot guard accepts videos up to two hours, and the downloader
+The initial release guard accepts videos up to two hours, and the downloader
 rejects audio over 100 MB. The worker chooses the smallest available
 audio-only YouTube stream.
 
@@ -176,4 +176,4 @@ the [deferred work register](../decisions/deferred-work.md).
   set before adding a gate.
 - Podcast Q&A/chat: post-core-hardening and outside the first launch.
 - Shared SSE wake-ups and event retention: active stream leases bound clients,
-  but measure pilot query load before changing the one-second polling design.
+  but measure early-use query load before changing the one-second polling design.

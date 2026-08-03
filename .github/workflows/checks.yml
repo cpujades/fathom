@@ -91,3 +91,7 @@ jobs:
 
       - name: Build
         run: pnpm --filter @fathom/web build
+        env:
+          # Compile-only CI origin. Hosted builds must replace this with their
+          # exact public HTTPS origin.
+          NEXT_PUBLIC_SITE_URL: http://localhost:3000

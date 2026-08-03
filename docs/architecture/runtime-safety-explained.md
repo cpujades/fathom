@@ -21,6 +21,25 @@ instead of appearing in Bruno's screen. Two people on separate computers never
 shared this browser cache in the first place. Backend ownership checks and
 database RLS remain the security boundary for every device.
 
+## Shared processing does not expose a shared database row
+
+Talven may reuse one transcript and one summary when Ana and Bruno submit the
+same compatible public video. Each person still has a separate private `jobs`
+row and billing settlement. The browser cannot read the shared `summaries`
+table at all. FastAPI first proves that the caller owns a successful or archived
+job pointing to the summary, then its server-only client reads the summary and
+returns only `briefing_id`, `markdown`, and an optional short-lived `pdf_url`.
+
+Before this change, row-level security correctly required Bruno to have his own
+successful job, but then allowed him to select the complete shared summary row.
+That row could contain Ana's historical producer ID and internal generation or
+PDF fields. It was not a leak of Ana's job or billing record, but it was
+unnecessary cross-account metadata exposure. The browser's table permission is
+now revoked, while normal API access and global reuse still work. The
+[cache guide](./cache-and-versioning.md#concrete-two-user-example) gives the
+complete fake rows, UUIDs, column values, old query, new response, and Charlie's
+denied path.
+
 ## Password recovery has two configuration layers
 
 The web app provides the user flow: request a reset email, accept only a valid
@@ -83,6 +102,25 @@ Stream opening is also covered by the ordinary per-IP API rate limiter.
 the process is alive. `/meta/ready` is rate-limited because it performs real
 dependency checks. Local development normally has `RATE_LIMIT=0`; staging and
 production must configure a positive value.
+
+### Session ownership is checked before reserving a stream
+
+SSE means Server-Sent Events: the long-lived HTTP connection that carries live
+briefing progress to the browser. Each connection consumes one limited stream
+slot, so Talven reserves it with a short database lease.
+
+Previously the server reserved a slot and only then, after the streaming
+response started, loaded the requested session with the user's token. RLS still
+prevented another user's session from being read, so this was not a content
+leak. The problem was ordering: a missing, archived, or other user's session
+could briefly consume capacity, and an error discovered after streaming began
+is harder to return as a normal HTTP error.
+
+Now the server first performs a user-scoped lookup. For example, if Bruno asks
+for Ana's session UUID, RLS returns no row and Talven returns `404` before
+claiming a stream slot. If Bruno asks for his own active session, Talven then
+claims the slot and starts the stream. The already-authorized job row is passed
+into the stream so the lookup is not repeated.
 
 ## Billing recovery repairs missed or interrupted updates
 
@@ -182,6 +220,22 @@ an uncited fallback. Existing ready briefings remain readable through their
 owned jobs. For a fresh production database, there are no legacy rows to
 migrate; all newly processed sources use the evidence-aware path.
 
+### Unexpected downloader IPC failures clean up the child process
+
+The YouTube downloader runs in a separate child process so a difficult media
+library call cannot block the main async API or worker event loop. IPC means
+"inter-process communication": the parent process sends a small JSON request
+through the child's standard input, and the child sends a JSON response back
+through standard output.
+
+Timeout and cancellation paths already stopped that child. The missing case was
+an unexpected pipe/process error while the parent was exchanging data—for
+example, an operating-system `broken pipe` error. The request failed, but the
+child might have remained alive without useful work. The parent now catches
+that unexpected failure, kills and waits for the child, and returns the normal
+safe downloader error. This is process/resource cleanup; it does not expose
+the operating-system error or source details to the user.
+
 ## Loopback and external URLs
 
 A loopback address always points back to the same machine:
@@ -193,6 +247,69 @@ These are correct for local development. They are invalid for a hosted user,
 because that user's `localhost` means their own computer, not Talven's server.
 Staging and production therefore require HTTPS external URLs such as
 `https://app.talven.ai`, exact CORS origins, and a non-loopback database host.
+
+### Hosted configuration fails early instead of using a plausible wrong value
+
+Local development may use `NEXT_PUBLIC_SITE_URL=http://localhost:3000`. A
+hosted frontend must set the exact public origin, for example
+`https://app.talven.ai`. This value is used for canonical page metadata and
+authentication/recovery destinations. If a hosted build silently fell back to
+localhost, a password-recovery link could send a real user to that user's own
+computer. The production build now fails when the value is missing, is HTTP on
+a non-localhost domain, contains credentials, or contains a path, query, or
+fragment. No hosted value needs to be chosen while the project is local; this
+guard makes forgetting it at deployment visible.
+
+Supabase's HTTPS URL and API keys are not the same as a direct Postgres
+connection. Ordinary Auth/data/storage calls use `SUPABASE_URL` and keys. The
+worker's `LISTEN` wake-up connection and readiness schema checks need the
+database host, password, user, database name, and port. Staging and production
+therefore refuse to start without a non-loopback `SUPABASE_DB_HOST` and
+`SUPABASE_DB_PASSWORD`. `SUPABASE_DB_PORT` is simply the database's network
+door number; only values from 1 through 65,535 are possible, so values such as
+`0` or `70000` are rejected as configuration mistakes. Typical examples are
+port `54322` for the local Supabase CLI and `5432` for a hosted database.
+
+These checks do not choose a provider and do not open a port. Once hosting is
+selected, its connection details are supplied through secrets/environment
+configuration.
+
+## Two loading/download controls now behave honestly
+
+Generating or retrieving a PDF is asynchronous: the browser clicks, waits for
+the API, and receives a signed URL later. Browsers often block `window.open`
+when it runs after that wait because it no longer looks like the user's direct
+click. Talven no longer tries to open the late URL automatically. It displays a
+real `Download PDF` link when ready; the user's second click is explicit, so
+normal pop-up protection does not block it. This change is about reliable
+download UX, not the PDF renderer's content-security boundary.
+
+The billing page has a shared account header while plans and balances load.
+Its loading branch previously supplied an empty sign-out callback, so the menu
+showed a Sign out action that did nothing. It now retains the actual account
+label, balance, and sign-out function from the authenticated app shell. A slow
+billing request therefore cannot trap the user behind a dead control.
+
+## What "still pending" means while everything is local
+
+These items are not hidden code changes that can be completed without a host.
+They are runtime evidence or operator choices that must exist before external
+users are invited:
+
+| Pending proof or choice | What is already implemented | What cannot be proved or configured yet |
+| --- | --- | --- |
+| Clean Supabase migration/database suites | Migrations and pgTAP tests are committed; PR CI runs them for `supabase/**` changes | The local Docker stack was stopped during this review. A green clean-database PR job supplies this proof; it is not an open design question |
+| Groq and OpenRouter candidate rehearsal | Provider clients, deadlines, retries, validation, and fake-provider tests exist; local real calls may already work | On the exact release candidate, record representative short/long sources, output review, latency, provider limits, and bounded test spend |
+| Polar sandbox lifecycle | Checkout, portal, signed webhook, refund, replay, and reconciliation code/tests exist; sandbox use may already work locally | On the exact candidate, record one complete sandbox purchase/subscription/refund/cancel flow, including webhook delivery and local state convergence |
+| Hosted origins and HTTPS | Strict URL, CORS, proxy, and environment validation is in code | Exact web/API domains, Supabase redirect allow-list, Polar return URLs, TLS, and trusted proxy networks do not exist until a host/domain is selected |
+| Worker liveness and alerts | The worker logs startup, listener health, reconnects, claims, retries, lease loss, shutdown, and maintenance | A host must keep the worker process alive; an observability destination and alert recipient must be chosen and a deliberately triggered alert must be received |
+| Backups, restore, rollback, and capacity | Durable data/lease/retry behavior and deployment checklists exist | The selected Supabase/hosting plans determine backups and limits; the team must restore a backup, rehearse one rollback, measure representative load, and name the person who responds to incidents |
+| Retention/privacy policy | Data categories and the archive-versus-delete distinction are documented | Product/legal decisions must set actual retention periods and user promises before a paid public launch |
+
+A successful local call proves that one call worked from the development
+machine. The phrase "candidate rehearsal" means repeating and recording the
+complete journey using the exact commit and hosted configuration proposed for
+release. It does not mean the provider integrations are assumed broken today.
 
 ## Archive, deletion, and retention are different
 
@@ -208,7 +325,7 @@ access, and billing remain separate.
   relationships.
 - **Retention** means how long each category is kept before deletion.
 
-For the pilot, archive remains the product action. Self-service permanent
+For the initial release, archive remains the product action. Self-service permanent
 deletion is intentionally not improvised because billing, fraud prevention,
 account data, temporary audio, logs, and shared derived content need different
 retention rules. Those rules and the public privacy promise must be approved

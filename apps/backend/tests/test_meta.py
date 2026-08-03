@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from fathom.application.meta import _REQUIRED_DATABASE_OBJECTS, readiness_status, status_snapshot
-from fathom.core.errors import NotReadyError
+from fathom.core.errors import ConfigurationError, NotReadyError
 
 
 def _settings(**overrides: object) -> SimpleNamespace:
@@ -128,6 +128,22 @@ class ReadinessTests(unittest.IsolatedAsyncioTestCase):
                 await readiness_status(_settings())
 
         self.assertEqual(ctx.exception.detail, "Supabase is not reachable.")
+
+    async def test_readiness_does_not_expose_postgres_connection_details(self) -> None:
+        @asynccontextmanager
+        async def failed_postgres(_settings: SimpleNamespace):
+            raise ConfigurationError("password for postgres@example.internal was rejected")
+            yield  # pragma: no cover
+
+        admin_client = _admin_client()
+        with (
+            patch("fathom.application.meta.create_supabase_admin_client", AsyncMock(return_value=admin_client)),
+            patch("fathom.application.meta.create_postgres_connection", failed_postgres),
+        ):
+            with self.assertRaises(NotReadyError) as ctx:
+                await readiness_status(_settings())
+
+        self.assertEqual(ctx.exception.detail, "Direct Postgres is not configured.")
 
     async def test_status_snapshot_returns_version_and_uptime(self) -> None:
         result = await status_snapshot()

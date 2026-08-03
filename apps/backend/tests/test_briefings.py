@@ -27,7 +27,7 @@ class BriefingLibraryTests(unittest.IsolatedAsyncioTestCase):
         briefing_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
         user_client = object()
         admin_client = object()
-        object_key = "user-123/video/briefing.pdf"
+        object_key = f"briefings/{briefing_id}/v{PDF_CACHE_VERSION}/briefing.pdf"
 
         with (
             patch(
@@ -39,7 +39,11 @@ class BriefingLibraryTests(unittest.IsolatedAsyncioTestCase):
                 AsyncMock(return_value=admin_client),
             ),
             patch(
-                "fathom.application.briefings.fetch_summary",
+                "fathom.application.briefings.access.fetch_settled_job_for_summary",
+                AsyncMock(return_value={"id": "job-123", "status": "succeeded"}),
+            ) as fetch_access_job,
+            patch(
+                "fathom.application.briefings.access.fetch_summary",
                 AsyncMock(
                     return_value={
                         "id": str(briefing_id),
@@ -57,7 +61,12 @@ class BriefingLibraryTests(unittest.IsolatedAsyncioTestCase):
         ):
             response = await get_briefing(briefing_id, auth, settings)
 
-        fetch_summary.assert_awaited_once_with(user_client, str(briefing_id))
+        fetch_access_job.assert_awaited_once_with(
+            user_client,
+            user_id=auth.user_id,
+            summary_id=str(briefing_id),
+        )
+        fetch_summary.assert_awaited_once_with(admin_client, str(briefing_id))
         create_signed_url.assert_awaited_once()
         self.assertIs(create_signed_url.await_args.args[0], admin_client)
         self.assertEqual(response.pdf_url, "https://storage.example/signed")
@@ -67,6 +76,7 @@ class BriefingLibraryTests(unittest.IsolatedAsyncioTestCase):
         auth = AuthenticatedUser(access_token="access-token", user_id="user-123")
         briefing_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
         user_client = object()
+        admin_client = object()
 
         with (
             patch(
@@ -74,7 +84,7 @@ class BriefingLibraryTests(unittest.IsolatedAsyncioTestCase):
                 AsyncMock(return_value=user_client),
             ),
             patch(
-                "fathom.application.briefings.fetch_summary",
+                "fathom.application.briefings.fetch_authorized_summary",
                 AsyncMock(
                     return_value={
                         "id": str(briefing_id),
@@ -87,8 +97,8 @@ class BriefingLibraryTests(unittest.IsolatedAsyncioTestCase):
             ),
             patch(
                 "fathom.application.briefings.create_supabase_admin_client",
-                AsyncMock(),
-            ) as create_admin_client,
+                AsyncMock(return_value=admin_client),
+            ),
             patch(
                 "fathom.application.briefings.create_pdf_signed_url",
                 AsyncMock(),
@@ -97,7 +107,6 @@ class BriefingLibraryTests(unittest.IsolatedAsyncioTestCase):
             response = await get_briefing(briefing_id, auth, settings)
 
         self.assertIsNone(response.pdf_url)
-        create_admin_client.assert_not_awaited()
         create_signed_url.assert_not_awaited()
 
     async def test_detail_rejects_pending_partial_summary(self) -> None:
@@ -105,6 +114,7 @@ class BriefingLibraryTests(unittest.IsolatedAsyncioTestCase):
         auth = AuthenticatedUser(access_token="access-token", user_id="user-123")
         briefing_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
         user_client = object()
+        admin_client = object()
 
         with (
             patch(
@@ -112,7 +122,7 @@ class BriefingLibraryTests(unittest.IsolatedAsyncioTestCase):
                 AsyncMock(return_value=user_client),
             ),
             patch(
-                "fathom.application.briefings.fetch_summary",
+                "fathom.application.briefings.fetch_authorized_summary",
                 AsyncMock(
                     return_value={
                         "id": str(briefing_id),
@@ -123,19 +133,18 @@ class BriefingLibraryTests(unittest.IsolatedAsyncioTestCase):
             ),
             patch(
                 "fathom.application.briefings.create_supabase_admin_client",
-                AsyncMock(),
-            ) as create_admin_client,
+                AsyncMock(return_value=admin_client),
+            ),
         ):
             with self.assertRaises(NotReadyError):
                 await get_briefing(briefing_id, auth, settings)
-
-        create_admin_client.assert_not_awaited()
 
     async def test_pdf_rejects_pending_partial_summary_before_render_or_upload(self) -> None:
         settings = cast(Settings, SimpleNamespace())
         auth = AuthenticatedUser(access_token="access-token", user_id="user-123")
         briefing_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
         user_client = object()
+        admin_client = object()
 
         with (
             patch(
@@ -143,7 +152,7 @@ class BriefingLibraryTests(unittest.IsolatedAsyncioTestCase):
                 AsyncMock(return_value=user_client),
             ),
             patch(
-                "fathom.application.briefings.fetch_summary",
+                "fathom.application.briefings.fetch_authorized_summary",
                 AsyncMock(
                     return_value={
                         "id": str(briefing_id),
@@ -154,15 +163,14 @@ class BriefingLibraryTests(unittest.IsolatedAsyncioTestCase):
             ),
             patch(
                 "fathom.application.briefings.create_supabase_admin_client",
-                AsyncMock(),
-            ) as create_admin_client,
+                AsyncMock(return_value=admin_client),
+            ),
             patch("fathom.application.briefings.render_markdown_pdf_bytes", AsyncMock()) as render_pdf,
             patch("fathom.application.briefings.upload_pdf", AsyncMock()) as upload_pdf,
         ):
             with self.assertRaises(NotReadyError):
                 await create_briefing_pdf(briefing_id, auth, settings)
 
-        create_admin_client.assert_not_awaited()
         render_pdf.assert_not_awaited()
         upload_pdf.assert_not_awaited()
 
@@ -170,8 +178,6 @@ class BriefingLibraryTests(unittest.IsolatedAsyncioTestCase):
         briefing_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
         summary = {
             "id": str(briefing_id),
-            "user_id": "user-123",
-            "transcript_id": "transcript-123",
             "summary_markdown": "# Complete",
         }
         admin_client = object()
@@ -210,8 +216,6 @@ class BriefingLibraryTests(unittest.IsolatedAsyncioTestCase):
         briefing_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
         summary = {
             "id": str(briefing_id),
-            "user_id": "user-123",
-            "transcript_id": "transcript-123",
             "summary_markdown": "# Complete",
             "pdf_object_key": "user-123/video/legacy.pdf",
             "pdf_cache_version": None,
@@ -232,10 +236,6 @@ class BriefingLibraryTests(unittest.IsolatedAsyncioTestCase):
                 "fathom.application.briefings.render_markdown_pdf_bytes",
                 AsyncMock(return_value=b"%PDF-current"),
             ) as render_pdf,
-            patch(
-                "fathom.application.briefings.fetch_transcript_by_id",
-                AsyncMock(return_value={"video_id": "video-123"}),
-            ),
             patch(
                 "fathom.application.briefings.upload_pdf",
                 AsyncMock(),
@@ -267,7 +267,7 @@ class BriefingLibraryTests(unittest.IsolatedAsyncioTestCase):
         expected_key = upload_pdf.await_args.kwargs["object_key"]
         self.assertRegex(
             expected_key,
-            rf"^user-123/video-123/v{PDF_CACHE_VERSION}/{briefing_id}/"
+            rf"^briefings/{briefing_id}/v{PDF_CACHE_VERSION}/"
             r"[0-9a-f-]{36}\.pdf$",
         )
         self.assertEqual(response.pdf_url, "https://storage.example/current")
@@ -276,7 +276,11 @@ class BriefingLibraryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(complete_pdf.await_args.kwargs["pdf_object_key"], expected_key)
         self.assertEqual(complete_pdf.await_args.kwargs["cache_version"], PDF_CACHE_VERSION)
         fail_pdf.assert_not_awaited()
-        delete_pdf.assert_not_awaited()
+        delete_pdf.assert_awaited_once_with(
+            admin_client,
+            bucket=SUPABASE_PDF_BUCKET,
+            object_key="user-123/video/legacy.pdf",
+        )
 
     async def test_stale_pdf_renderer_cannot_overwrite_or_publish_the_winner(self) -> None:
         briefing_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
@@ -284,8 +288,6 @@ class BriefingLibraryTests(unittest.IsolatedAsyncioTestCase):
         stale_token = UUID("22222222-2222-2222-2222-222222222222")
         summary = {
             "id": str(briefing_id),
-            "user_id": "user-123",
-            "transcript_id": "transcript-123",
             "summary_markdown": "# Complete",
         }
         admin_client = object()
@@ -307,10 +309,6 @@ class BriefingLibraryTests(unittest.IsolatedAsyncioTestCase):
             patch(
                 "fathom.application.briefings.render_markdown_pdf_bytes",
                 AsyncMock(side_effect=[b"%PDF-winner", b"%PDF-stale"]),
-            ),
-            patch(
-                "fathom.application.briefings.fetch_transcript_by_id",
-                AsyncMock(return_value={"video_id": "video-123"}),
             ),
             patch(
                 "fathom.application.briefings.upload_pdf",
@@ -371,8 +369,6 @@ class BriefingLibraryTests(unittest.IsolatedAsyncioTestCase):
         briefing_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
         summary = {
             "id": str(briefing_id),
-            "user_id": "user-123",
-            "transcript_id": "transcript-123",
             "summary_markdown": "# Complete",
         }
         admin_client = object()

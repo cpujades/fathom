@@ -16,6 +16,7 @@ from fathom.crud.supabase.job_events import record_job_event_best_effort
 from fathom.crud.supabase.jobs import (
     JobLeaseLostError,
     claim_next_job,
+    fetch_next_queued_job_delay_seconds,
     mark_job_failed,
     mark_job_finalization_retry,
     mark_job_retry,
@@ -37,6 +38,7 @@ from fathom.services.supabase import (
     listen_for_notifications,
     managed_supabase_client,
 )
+from fathom.services.supabase.postgres import PostgresNotificationSignal
 from supabase import AsyncClient
 
 logger = logging.getLogger(__name__)
@@ -44,7 +46,6 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Worker configuration
 # ---------------------------------------------------------------------------
-WORKER_IDLE_SLEEP_SECONDS = 1
 WORKER_MAX_ATTEMPTS = 3
 WORKER_BACKOFF_BASE_SECONDS = 5
 WORKER_STALE_AFTER_SECONDS = 300  # 5 minutes
@@ -52,7 +53,8 @@ WORKER_LEASE_SECONDS = 120
 WORKER_HEARTBEAT_INTERVAL_SECONDS = 30.0
 WORKER_SWEEP_INTERVAL_SECONDS = 30.0
 WORKER_BILLING_MAINTENANCE_INTERVAL_SECONDS = 60.0
-WORKER_JOB_NOTIFY_TIMEOUT_SECONDS = 10.0
+WORKER_LISTENER_RECONNECT_BASE_SECONDS = 1.0
+WORKER_LISTENER_RECONNECT_MAX_SECONDS = 30.0
 WORKER_RETRY_POLICY = RetryPolicy(
     deadline_seconds=3600,
     max_attempts=WORKER_MAX_ATTEMPTS,
@@ -318,39 +320,79 @@ async def _stop_heartbeat(task: asyncio.Task[None]) -> None:
         logger.debug("worker.job.heartbeat_stopped", exc_info=True)
 
 
-async def _wait_for_job_notification(
-    queue: asyncio.Queue[dict[str, Any]],
-    *,
-    timeout_seconds: float,
-    shutdown_event: asyncio.Event | None = None,
-) -> bool:
-    if shutdown_event is None:
-        shutdown_event = asyncio.Event()
-
-    notification_task = asyncio.create_task(queue.get())
+async def _wait_for_signal(
+    signal: asyncio.Queue[PostgresNotificationSignal],
+    shutdown_event: asyncio.Event,
+) -> PostgresNotificationSignal | None:
+    signal_task = asyncio.create_task(signal.get())
     shutdown_task = asyncio.create_task(shutdown_event.wait())
     try:
-        done, _ = await asyncio.wait(
-            {notification_task, shutdown_task},
-            timeout=timeout_seconds,
-            return_when=asyncio.FIRST_COMPLETED,
-        )
-        if shutdown_task in done:
-            return False
-        if notification_task not in done:
-            return False
-        return notification_task.result() is not None
-    except Exception as exc:
-        logger.warning("worker.job_notification.listen_failed", exc_info=exc)
-        return False
+        done, _ = await asyncio.wait({signal_task, shutdown_task}, return_when=asyncio.FIRST_COMPLETED)
+        if signal_task in done and not shutdown_event.is_set():
+            return signal_task.result()
+        return None
     finally:
-        notification_task.cancel()
+        signal_task.cancel()
         shutdown_task.cancel()
-        await asyncio.gather(
-            notification_task,
-            shutdown_task,
-            return_exceptions=True,
-        )
+        await asyncio.gather(signal_task, shutdown_task, return_exceptions=True)
+
+
+async def _wait_for_shutdown(shutdown_event: asyncio.Event, timeout_seconds: float) -> bool:
+    try:
+        async with asyncio.timeout(timeout_seconds):
+            await shutdown_event.wait()
+    except TimeoutError:
+        return False
+    return True
+
+
+def _listener_reconnect_delay(attempt: int) -> float:
+    return min(
+        WORKER_LISTENER_RECONNECT_MAX_SECONDS,
+        WORKER_LISTENER_RECONNECT_BASE_SECONDS * (2 ** max(0, attempt - 1)),
+    )
+
+
+async def _run_job_listener(
+    settings: Settings,
+    *,
+    wake_event: asyncio.Event,
+    shutdown_event: asyncio.Event,
+) -> None:
+    reconnect_attempt = 0
+    while not shutdown_event.is_set():
+        try:
+            async with listen_for_notifications(settings, "job_available") as notification_signal:
+                reconnect_attempt = 0
+                logger.info("worker.job_listener.ready", extra={"channel": "job_available"})
+                # Notifications are not durable. Reconcile once after every
+                # connection so work created during a disconnect is recovered.
+                wake_event.set()
+                while not shutdown_event.is_set():
+                    listener_signal = await _wait_for_signal(notification_signal, shutdown_event)
+                    if listener_signal is None:
+                        return
+                    if listener_signal == "disconnected":
+                        raise ConnectionError("Postgres notification connection closed.")
+                    wake_event.set()
+        except Exception:
+            reconnect_attempt += 1
+            reconnect_in_seconds = _listener_reconnect_delay(reconnect_attempt)
+            # A failed notification channel must not stop the durable queue.
+            # This degraded wake performs one recovery claim pass per reconnect
+            # attempt, with bounded exponential backoff rather than constant polling.
+            wake_event.set()
+            logger.warning(
+                "worker.job_listener.reconnecting",
+                extra={
+                    "channel": "job_available",
+                    "attempt": reconnect_attempt,
+                    "reconnect_in_seconds": reconnect_in_seconds,
+                },
+                exc_info=True,
+            )
+            if await _wait_for_shutdown(shutdown_event, reconnect_in_seconds):
+                return
 
 
 def _drain_completed_tasks(tasks: set[asyncio.Task[None]]) -> None:
@@ -372,11 +414,13 @@ async def _run_scheduled_maintenance(
     last_sweep_at: float,
     last_billing_maintenance_at: float,
     billing_maintenance_task: asyncio.Task[dict[str, int]] | None,
-) -> tuple[float, float, asyncio.Task[dict[str, int]] | None]:
+) -> tuple[float, float, asyncio.Task[dict[str, int]] | None, bool]:
     billing_maintenance_task = _drain_billing_maintenance_task(billing_maintenance_task)
     now = time.monotonic()
+    work_requeued = False
     if now - last_sweep_at >= WORKER_SWEEP_INTERVAL_SECONDS:
         requeued_jobs = await requeue_stale_jobs(admin_client, stale_after_seconds=WORKER_STALE_AFTER_SECONDS)
+        work_requeued = requeued_jobs > 0
         log_level = logging.INFO if requeued_jobs else logging.DEBUG
         logger.log(
             log_level,
@@ -398,7 +442,7 @@ async def _run_scheduled_maintenance(
         )
         last_billing_maintenance_at = now
 
-    return last_sweep_at, last_billing_maintenance_at, billing_maintenance_task
+    return last_sweep_at, last_billing_maintenance_at, billing_maintenance_task, work_requeued
 
 
 def _drain_billing_maintenance_task(
@@ -478,72 +522,173 @@ async def _run_loop_with_client(
     shutdown_event: asyncio.Event,
     admin_client: AsyncClient,
 ) -> None:
-    max_concurrent_jobs = max(1, settings.worker_max_concurrent_jobs)
-    notify_timeout_seconds = WORKER_JOB_NOTIFY_TIMEOUT_SECONDS
+    max_concurrent_jobs = settings.worker_max_concurrent_jobs
     running_tasks: set[asyncio.Task[None]] = set()
     billing_maintenance_task: asyncio.Task[dict[str, int]] | None = None
     last_sweep_at = 0.0
     last_billing_maintenance_at = 0.0
+    scheduler_failure_attempt = 0
+    claim_requested = True
+    next_queue_wake_at: float | None = None
+    wake_event = asyncio.Event()
+    listener_task = asyncio.create_task(
+        _run_job_listener(
+            settings,
+            wake_event=wake_event,
+            shutdown_event=shutdown_event,
+        ),
+        name="job-listener",
+    )
 
     try:
         while not shutdown_event.is_set():
             try:
-                async with listen_for_notifications(settings, "job_created") as queue:
-                    logger.info("worker.job_listener.ready", extra={"channel": "job_created"})
-                    while not shutdown_event.is_set():
-                        _drain_completed_tasks(running_tasks)
-                        (
-                            last_sweep_at,
-                            last_billing_maintenance_at,
-                            billing_maintenance_task,
-                        ) = await _run_scheduled_maintenance(
-                            admin_client,
-                            settings=settings,
-                            last_sweep_at=last_sweep_at,
-                            last_billing_maintenance_at=last_billing_maintenance_at,
-                            billing_maintenance_task=billing_maintenance_task,
-                        )
-                        while not shutdown_event.is_set() and len(running_tasks) < max_concurrent_jobs:
-                            job = await claim_next_job(
-                                admin_client,
-                                lease_seconds=WORKER_LEASE_SECONDS,
-                            )
-                            if not job:
-                                break
-
-                            task = asyncio.create_task(
-                                _handle_claimed_job(job, settings, admin_client),
-                                name=f"job-{job.get('id', 'unknown')}",
-                            )
-                            running_tasks.add(task)
-
-                        if running_tasks:
-                            await asyncio.sleep(WORKER_IDLE_SLEEP_SECONDS)
-                            continue
-
-                        if await _wait_for_job_notification(
-                            queue,
-                            timeout_seconds=notify_timeout_seconds,
-                            shutdown_event=shutdown_event,
-                        ):
-                            continue
-
-                        if not shutdown_event.is_set():
-                            await asyncio.sleep(WORKER_IDLE_SLEEP_SECONDS)
+                _drain_completed_tasks(running_tasks)
+                (
+                    last_sweep_at,
+                    last_billing_maintenance_at,
+                    billing_maintenance_task,
+                    work_requeued,
+                ) = await _run_scheduled_maintenance(
+                    admin_client,
+                    settings=settings,
+                    last_sweep_at=last_sweep_at,
+                    last_billing_maintenance_at=last_billing_maintenance_at,
+                    billing_maintenance_task=billing_maintenance_task,
+                )
+                if claim_requested or work_requeued:
+                    next_queue_wake_at = await _claim_available_jobs(
+                        admin_client,
+                        settings=settings,
+                        shutdown_event=shutdown_event,
+                        running_tasks=running_tasks,
+                        max_concurrent_jobs=max_concurrent_jobs,
+                    )
+                scheduler_failure_attempt = 0
             except Exception:
+                scheduler_failure_attempt += 1
                 logger.warning(
-                    "worker.job_listener.reconnecting",
-                    extra={"channel": "job_created"},
+                    "worker.scheduler.cycle_failed",
+                    extra={"attempt": scheduler_failure_attempt},
                     exc_info=True,
                 )
-                if not shutdown_event.is_set():
-                    await asyncio.sleep(WORKER_IDLE_SLEEP_SECONDS)
+                retry_delay = _listener_reconnect_delay(scheduler_failure_attempt)
+                await _wait_for_work(
+                    wake_event=wake_event,
+                    shutdown_event=shutdown_event,
+                    running_tasks=running_tasks,
+                    billing_maintenance_task=billing_maintenance_task,
+                    timeout_seconds=retry_delay,
+                    next_queue_wake_at=next_queue_wake_at,
+                )
+                claim_requested = not shutdown_event.is_set()
+                continue
+
+            if shutdown_event.is_set():
+                break
+
+            claim_requested = await _wait_for_work(
+                wake_event=wake_event,
+                shutdown_event=shutdown_event,
+                running_tasks=running_tasks,
+                billing_maintenance_task=billing_maintenance_task,
+                timeout_seconds=_seconds_until_maintenance(
+                    last_sweep_at=last_sweep_at,
+                    last_billing_maintenance_at=last_billing_maintenance_at,
+                    billing_maintenance_task=billing_maintenance_task,
+                ),
+                next_queue_wake_at=next_queue_wake_at,
+            )
     finally:
+        listener_task.cancel()
+        await asyncio.gather(listener_task, return_exceptions=True)
         await _shutdown_billing_maintenance_task(billing_maintenance_task)
         await _shutdown_running_tasks(
             running_tasks,
             grace_seconds=settings.worker_shutdown_grace_seconds,
         )
+
+
+async def _claim_available_jobs(
+    admin_client: AsyncClient,
+    *,
+    settings: Settings,
+    shutdown_event: asyncio.Event,
+    running_tasks: set[asyncio.Task[None]],
+    max_concurrent_jobs: int,
+) -> float | None:
+    while not shutdown_event.is_set() and len(running_tasks) < max_concurrent_jobs:
+        job = await claim_next_job(
+            admin_client,
+            lease_seconds=WORKER_LEASE_SECONDS,
+        )
+        if not job:
+            delay_seconds = await fetch_next_queued_job_delay_seconds(admin_client)
+            return time.monotonic() + delay_seconds if delay_seconds is not None else None
+
+        task = asyncio.create_task(
+            _handle_claimed_job(job, settings, admin_client),
+            name=f"job-{job.get('id', 'unknown')}",
+        )
+        running_tasks.add(task)
+
+    return None
+
+
+def _seconds_until_maintenance(
+    *,
+    last_sweep_at: float,
+    last_billing_maintenance_at: float,
+    billing_maintenance_task: asyncio.Task[dict[str, int]] | None,
+) -> float:
+    deadlines = [last_sweep_at + WORKER_SWEEP_INTERVAL_SECONDS]
+    if billing_maintenance_task is None:
+        deadlines.append(last_billing_maintenance_at + WORKER_BILLING_MAINTENANCE_INTERVAL_SECONDS)
+    return max(0.0, min(deadlines) - time.monotonic())
+
+
+async def _wait_for_work(
+    *,
+    wake_event: asyncio.Event,
+    shutdown_event: asyncio.Event,
+    running_tasks: set[asyncio.Task[None]],
+    billing_maintenance_task: asyncio.Task[dict[str, int]] | None,
+    timeout_seconds: float,
+    next_queue_wake_at: float | None,
+) -> bool:
+    wake_task = asyncio.create_task(wake_event.wait())
+    shutdown_task = asyncio.create_task(shutdown_event.wait())
+    watched_tasks: set[asyncio.Task[Any]] = {
+        wake_task,
+        shutdown_task,
+        *running_tasks,
+    }
+    if billing_maintenance_task is not None:
+        watched_tasks.add(billing_maintenance_task)
+
+    queue_delay_seconds = max(0.0, next_queue_wake_at - time.monotonic()) if next_queue_wake_at is not None else None
+    effective_timeout = (
+        min(timeout_seconds, queue_delay_seconds) if queue_delay_seconds is not None else timeout_seconds
+    )
+
+    try:
+        done, _ = await asyncio.wait(
+            watched_tasks,
+            timeout=effective_timeout,
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        if shutdown_task in done or shutdown_event.is_set():
+            return False
+        if wake_task in done:
+            wake_event.clear()
+            return True
+        if any(task in done for task in running_tasks):
+            return True
+        return next_queue_wake_at is not None and time.monotonic() >= next_queue_wake_at
+    finally:
+        wake_task.cancel()
+        shutdown_task.cancel()
+        await asyncio.gather(wake_task, shutdown_task, return_exceptions=True)
 
 
 async def _run_worker(settings: Settings) -> None:

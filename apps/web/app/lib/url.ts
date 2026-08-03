@@ -24,11 +24,35 @@ const isAllowedNextPathname = (pathname: string): boolean => {
 export const getSiteUrl = (): string => {
   const configuredSiteUrl = getOptionalPublicUrlEnv("NEXT_PUBLIC_SITE_URL", process.env.NEXT_PUBLIC_SITE_URL);
   if (configuredSiteUrl) {
-    return configuredSiteUrl;
+    const parsed = new URL(configuredSiteUrl);
+    if (
+      parsed.username ||
+      parsed.password ||
+      parsed.pathname !== "/" ||
+      parsed.search ||
+      parsed.hash
+    ) {
+      throw new Error("Invalid NEXT_PUBLIC_SITE_URL. Set an exact origin without credentials, a path, query, or fragment.");
+    }
+    if (
+      process.env.NODE_ENV === "production" &&
+      parsed.protocol !== "https:" &&
+      parsed.hostname !== "localhost" &&
+      !parsed.hostname.endsWith(".localhost")
+    ) {
+      throw new Error("Invalid NEXT_PUBLIC_SITE_URL. Hosted production origins must use https.");
+    }
+    return parsed.origin;
   }
 
   if (typeof window !== "undefined") {
     return window.location.origin;
+  }
+
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "Missing NEXT_PUBLIC_SITE_URL. Set the exact public frontend origin for a hosted build."
+    );
   }
 
   return DEFAULT_SITE_URL;

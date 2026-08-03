@@ -6,13 +6,19 @@ For the application owner’s explanation of the resulting tables, foreign keys,
 RLS boundary, server RPCs, and Python CRUD modules, see
 `../docs/architecture/database-and-persistence.md`.
 
+For the end-to-end explanation of local Supabase, disposable PR CI, hosted
+staging, controlled production promotion, connection modes, and backup scope,
+see `../docs/runbooks/supabase-environments-and-migrations.md`.
+
 ### Migration guidelines
 - Migrations are immutable once pushed. If a change is needed later, create a new migration that updates the schema or policies.
   - Why: editing applied migrations makes envs drift and breaks reproducibility.
 
 ### Prerequisites
 - Install the Supabase CLI.
-- Link the project once before using remote commands.
+- Run a Docker-compatible container runtime for local commands.
+- Link a project only for an intentional remote recovery operation. Normal
+  staging and production migration pushes run through GitHub Actions.
 
 Docs: https://supabase.com/docs/reference/cli/introduction
 
@@ -51,13 +57,24 @@ Compare a target database against the shadow database built from local migration
 supabase db diff -f <name>
 ```
 
-### Pull schema from a linked project
+### Exceptional remote reconciliation
+
+Before either command, confirm exactly which project is linked. Do not use
+these as the normal staging or production deployment path, do not make routine
+schema changes in the Dashboard, and never reset a linked production project.
+
+Pull an intentional or accidental remote schema change so it can be reviewed
+and converted into committed migration history:
+
 ```bash
 supabase db pull
 ```
 
-### Push migrations to a linked project
+Preview and push only when deliberately repairing a linked non-production
+environment outside the normal workflow:
+
 ```bash
+supabase db push --dry-run
 supabase db push
 ```
 

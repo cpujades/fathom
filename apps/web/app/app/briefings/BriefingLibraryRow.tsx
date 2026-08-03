@@ -97,20 +97,22 @@ export function BriefingLibraryRow({
                 </a>
                 {!confirmingDelete ? (
                   <button className={styles.menuDangerAction} type="button" onClick={onRequestDelete} ref={setRemoveButtonRef}>
-                    Remove
+                    Archive
                   </button>
                 ) : null}
               </div>
 
               {confirmingDelete ? (
-                <div className={styles.confirmBlock} role="group" aria-label={`Remove ${entry.title}`}>
-                  <p className={styles.confirmText}>Remove this briefing from history?</p>
+                <div className={styles.confirmBlock} role="group" aria-label={`Archive ${entry.title}`}>
+                  <p className={styles.confirmText}>
+                    Archive this briefing? It will leave your library, but submitting the same source restores it.
+                  </p>
                   <div className={styles.confirmActions}>
                     <button autoFocus className={styles.confirmCancelButton} type="button" onClick={onCancelDelete}>
                       Keep briefing
                     </button>
                     <button className={styles.dangerButton} type="button" onClick={onDelete} disabled={deleting}>
-                      {deleting ? "Removing…" : "Remove from history"}
+                      {deleting ? "Archiving…" : "Archive briefing"}
                     </button>
                   </div>
                 </div>

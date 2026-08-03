@@ -25,7 +25,7 @@
 
 .sectionKicker {
   margin: 0;
-  color: #8e7b49;
+  color: #6e5d36;
   text-transform: uppercase;
   letter-spacing: 0;
   font-size: 0.72rem;
@@ -159,7 +159,7 @@
   position: absolute;
   left: 0;
   top: 0.9rem;
-  color: #8e7b49;
+  color: #6e5d36;
   font-size: 0.74rem;
   font-weight: 850;
   line-height: 1.4;
@@ -199,7 +199,7 @@
   position: absolute;
   left: 0.92rem;
   top: 0.94rem;
-  color: #8e7b49;
+  color: #6e5d36;
   font-size: 0.74rem;
   font-weight: 850;
   font-variant-numeric: tabular-nums;
@@ -280,7 +280,7 @@
 }
 
 .markdown li::marker {
-  color: #8e7b49;
+  color: #6e5d36;
 }
 
 .markdown {

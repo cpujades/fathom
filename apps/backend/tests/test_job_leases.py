@@ -11,6 +11,7 @@ from fathom.crud.supabase.jobs import (
     JobLeaseLostError,
     claim_next_job,
     create_or_reuse_job,
+    fetch_next_queued_job_delay_seconds,
     mark_job_succeeded,
     update_job_progress,
 )
@@ -44,6 +45,17 @@ class JobLeaseCrudTests(unittest.IsolatedAsyncioTestCase):
             "claim_next_settled_job",
             {"p_lease_for": "120 seconds"},
         )
+
+    async def test_next_retry_delay_uses_database_clock(self) -> None:
+        query = MagicMock()
+        query.execute = AsyncMock(return_value=SimpleNamespace(data=4.25))
+        client = MagicMock()
+        client.rpc.return_value = query
+
+        delay = await fetch_next_queued_job_delay_seconds(cast(AsyncClient, client))
+
+        self.assertEqual(delay, 4.25)
+        client.rpc.assert_called_once_with("next_queued_job_delay_seconds")
 
     async def test_cached_job_creation_uses_lease_owned_command(self) -> None:
         query = MagicMock()

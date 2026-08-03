@@ -1,7 +1,7 @@
 # Long-audio and transcription decision
 
 Status: keep the current provider and two-hour limit for the first bounded
-pilot; validate quality/privacy and design chunking before supporting longer
+initial release; validate quality/privacy and design chunking before supporting longer
 videos.
 
 Provider limits and prices below were reviewed on July 30, 2026. They are
@@ -41,7 +41,7 @@ can safely process the promised duration.
 
 | Option | Published transcription price | Long-input fit | Relevant trade-off |
 | --- | ---: | --- | --- |
-| Groq Whisper Large V3 Turbo | $0.04/audio hour | 25 MB free tier, 100 MB developer tier | Current fastest/cheapest pilot fit; segment timestamps; no diarization |
+| Groq Whisper Large V3 Turbo | $0.04/audio hour | 25 MB free tier, 100 MB developer tier | Current fastest/cheapest initial-release fit; segment timestamps; no diarization |
 | Groq Whisper Large V3 | $0.111/audio hour | Same upload limits | Groq describes higher accuracy; benchmark before paying more |
 | AssemblyAI Universal-2 | $0.15/audio hour | Up to 5 GB / 10 hours | Simplest whole-file long-audio alternative; word timestamps; diarization costs extra |
 | ElevenLabs Scribe v2 | $0.22/audio hour | File under 5 GB; internally chunks longer audio | Word timestamps and diarization; ordinary zero-retention availability is less favorable |
@@ -58,7 +58,7 @@ and retry behavior matter more than one headline price.
 
 ## Recommendation
 
-For the bounded pilot:
+For the bounded initial release:
 
 - keep Groq Turbo;
 - confirm the paid account's current file limit;

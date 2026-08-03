@@ -105,29 +105,29 @@ const subscriptionPlans: Plan[] = [
 
 const pricingCopy: Record<"packs" | "subscriptions", PricingCopy> = {
   packs: {
-    section_label: "Reserve access",
-    headline: "Prefer reserve credits instead?",
+    section_label: "One-time packs",
+    headline: "Prefer to pay only when you need more time?",
     subhead:
       "Use packs when briefing needs come in bursts. Buy video time when needed, keep it for six months, and extend the window when you top up.",
     secondary_cta: "Start with a free briefing",
-    notes_label: "Reserve notes",
+    notes_label: "Pack details",
     footnote:
-      "Credits remain valid for 6 months. Top up before expiry and the remaining time rolls into a fresh 6-month window."
+      "Credits remain valid for 6 months. Top up before expiry and the remaining time rolls into a fresh 6-month window. Prices are shown in USD; applicable taxes are calculated at checkout."
   },
   subscriptions: {
-    section_label: "Standing access",
-    headline: "Prefer a standing monthly brief?",
+    section_label: "Monthly plans",
+    headline: "Expect to create briefings regularly?",
     subhead:
       "Best for steady users who want ready access, rollover protection, and lower effective cost as the habit compounds.",
     secondary_cta: "Go straight to paid access",
-    notes_label: "Standing notes",
+    notes_label: "Plan details",
     benefits: [
       "Rollover - keep unused video time in play.",
       "Readiness - always have briefing capacity on hand.",
       "Lower cost - better economics than packs at recurring usage."
     ],
     footnote:
-      "Unused credits roll over for one month, up to 2x your monthly limit."
+      "Unused credits roll over for one month, up to 2x your monthly limit. Prices are shown in USD; applicable taxes are calculated at checkout."
   }
 };
 

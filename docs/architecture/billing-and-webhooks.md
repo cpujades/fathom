@@ -5,6 +5,23 @@ usage ledger. The browser starts checkout and displays local state, but only a
 verified provider event or a bounded reconciliation pass changes local billing
 records.
 
+For the owner setup path across tests, local sandbox, staging, and production,
+including product mapping and the exact evidence each environment can provide,
+see [Polar environments and testing](../runbooks/polar-environments-and-testing.md).
+
+## Plan and identity mapping
+
+Polar calls an offer a product; Talven stores a versioned plan. A checkout
+starts with Talven's `plans.id`, resolves that row's environment-specific
+`polar_product_id`, and sends the signed-in Supabase user UUID as
+`external_customer_id`. That user UUID is the join between the provider event
+and Talven's local billing owner. Sandbox and production use different Polar
+product UUIDs for the same Talven plan code and version.
+
+A checkout return page is not payment evidence. It only says the browser came
+back. The verified webhook or reconciliation path below must commit the local
+order and entitlement before the application treats payment as settled.
+
 ## Inbound webhook path
 
 ```mermaid
@@ -36,9 +53,11 @@ sequenceDiagram
 5. The service-role RPC `apply_polar_webhook_event` records the event and applies
    all local effects transactionally.
 
-Supported event families are customer creation/state changes, `order.paid`,
-`order.refunded`, and the supported `subscription.*` states. Unknown events are
-recorded as ignored rather than allowed to mutate billing.
+Talven applies `customer.created`, `customer.state_changed`, `order.paid`,
+`order.refunded`, `subscription.created`, `subscription.active`,
+`subscription.uncanceled`, `subscription.canceled`, `subscription.past_due`,
+`subscription.updated`, and `subscription.revoked`. Unknown events are recorded
+as ignored rather than allowed to mutate billing.
 
 ## Idempotency and ordering
 
@@ -100,3 +119,11 @@ The [worker and billing incident runbook](../runbooks/worker-and-billing-inciden
 explains safe replay and diagnosis. Do not edit billing rows manually: preserve
 the event ID and let the transactional command or maintenance pass converge
 the state.
+
+## Proof boundary
+
+Unit tests and fake-provider journeys prove Talven's branching and error
+behavior. Disposable database tests prove transactional, idempotency, ordering,
+and concurrency rules. Neither proves the Polar Dashboard, a real checkout,
+signed network delivery, portal behavior, or taxable refunds. Those require the
+bounded sandbox rehearsal in the provider runbook before paid launch.

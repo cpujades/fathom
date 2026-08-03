@@ -97,6 +97,8 @@ Optional backend runtime variables:
 - `SUPABASE_DB_PORT`
 - `POLAR_CHECKOUT_RETURN_URL`
 - `POLAR_SERVER`
+- `BILLING_DEBT_CAP_SECONDS`
+- `WORKER_MAX_CONCURRENT_JOBS`
 - `WORKER_SHUTDOWN_GRACE_SECONDS`
 - `SOURCE_DOWNLOAD_DEADLINE_SECONDS`
 - `SOURCE_METADATA_DEADLINE_SECONDS`
@@ -151,6 +153,10 @@ environment-specific `polar_product_id` overrides for the same plan code and
 version. The Polar sync script rejects attempts to redefine public plan fields
 through that private file, preventing local provider identifiers from becoming
 a second pricing source of truth.
+
+See [Polar environments and testing](./docs/runbooks/polar-environments-and-testing.md#talven-plans-and-polar-products)
+for an exact override example, script modes, create/reuse behavior, recovery
+after a partial provider sync, and the production-safe procedure.
 
 Required frontend public variables:
 
@@ -269,9 +275,10 @@ for ownership rules and the separate SSE runtime contract.
 - The API and worker should run as separate processes in every environment.
 - The worker should be configured to restart automatically on failure.
 - The frontend must set `NEXT_PUBLIC_API_BASE_URL`. It no longer falls back to localhost.
+- Hosted frontend builds must set the exact `NEXT_PUBLIC_SITE_URL`; missing it fails the build instead of generating localhost Auth links.
 - Rate limiting uses shared Postgres buckets keyed by client IP. Only enable `TRUST_PROXY_HEADERS=true` when the app is behind a trusted ingress/proxy that normalizes forwarded headers.
 - Polar webhooks and `/meta/health` bypass ordinary request throttling. SSE opens and readiness checks are rate-limited; active SSE connections also use expiring database leases with per-user/IP caps and a hard lifetime.
-- Staging and production require HTTPS Supabase/Polar URLs, a non-loopback database host, certificate-verified Postgres TLS, exact HTTPS CORS origins, and the Polar production server.
+- Staging and production require HTTPS Supabase/Polar URLs, a non-loopback database host, certificate-verified Postgres TLS, and exact HTTPS CORS origins. Production additionally requires `POLAR_SERVER=production`; staging may use the Polar sandbox.
 - `supabase/config.toml` configures the local Auth stack; hosted Supabase Auth settings and SMTP must be mirrored and verified in the Dashboard because database migrations do not deploy them.
 - Polar webhooks should target your public backend URL at `/webhooks/polar`.
 - Supabase migrations are managed from `supabase/` and deployed through GitHub Actions.
@@ -283,5 +290,8 @@ for ownership rules and the separate SSE runtime contract.
   [docs/architecture/runtime-safety-explained.md](./docs/architecture/runtime-safety-explained.md).
 - Hosted Supabase Auth, SMTP, health/readiness probes, and rate-limit setup are
   configured with [the hosted-operations runbook](./docs/runbooks/hosted-auth-and-service-probes.md).
+- The future host topology, public-signup controls, observability, retention,
+  backups, ingress/WAF, and storage-provider decision are tracked in the
+  [first deployment checklist](./docs/runbooks/first-deployment-checklist.md).
 - Release credential rotation and protected-branch behavior are documented in
   [the release automation runbook](./docs/runbooks/release-automation.md).

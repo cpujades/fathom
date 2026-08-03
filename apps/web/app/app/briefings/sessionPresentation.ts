@@ -41,7 +41,7 @@ export function getFailurePresentation(
       actionLabel: "Back to briefings",
       title: "Briefing not found",
       description: "This briefing is no longer available in your library.",
-      detail: "It may have been removed, or the link may be incomplete."
+      detail: "It may have been archived, or the link may be incomplete."
     };
   }
 

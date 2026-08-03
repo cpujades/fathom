@@ -35,7 +35,7 @@ class CreateBriefingSessionTests(unittest.IsolatedAsyncioTestCase):
     async def test_does_not_expose_summary_before_job_settlement_succeeds(self) -> None:
         with (
             patch(
-                "fathom.application.briefings.sessions.queries.fetch_summary",
+                "fathom.application.briefings.access.fetch_summary",
                 AsyncMock(),
             ) as fetch_summary_mock,
             patch(
@@ -44,7 +44,6 @@ class CreateBriefingSessionTests(unittest.IsolatedAsyncioTestCase):
             ) as fetch_transcript_mock,
         ):
             summary, transcript = await _fetch_summary_and_transcript_for_job(
-                object(),
                 object(),
                 {
                     "status": "running",
@@ -111,11 +110,12 @@ class CreateBriefingSessionTests(unittest.IsolatedAsyncioTestCase):
         client = object()
         job = {
             "id": "11111111-1111-1111-1111-111111111111",
+            "status": "succeeded",
             "summary_id": "22222222-2222-2222-2222-222222222222",
         }
 
         with patch(
-            "fathom.application.briefings.sessions.queries.fetch_summary",
+            "fathom.application.briefings.access.fetch_summary",
             AsyncMock(
                 return_value={
                     "id": job["summary_id"],
@@ -243,7 +243,7 @@ class CreateBriefingSessionTests(unittest.IsolatedAsyncioTestCase):
                 AsyncMock(return_value=archived_job),
             ),
             patch(
-                "fathom.application.briefings.sessions.queries.fetch_summary",
+                "fathom.application.briefings.access.fetch_summary",
                 AsyncMock(
                     return_value={
                         "id": "22222222-2222-2222-2222-222222222222",

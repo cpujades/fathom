@@ -106,7 +106,7 @@ const landingContent: LandingContent = {
     { label: "Questions", href: "#faq" }
   ],
   hero: {
-    eyebrow: "Private YouTube briefings",
+    eyebrow: "Source-linked YouTube briefings",
     deck: "Source-linked / Track progress / Export anytime",
     title: "Extract the signal. Keep the edge.",
     subtitle:
@@ -160,12 +160,12 @@ const landingContent: LandingContent = {
     ]
   },
   proof: {
-    eyebrow: "Evidence",
+    eyebrow: "Source traceability",
     title: "Built to read like a briefing, not a transcript.",
     subtitle: "Talven condenses the ideas worth keeping and anchors them to source moments you can verify.",
     sampleLabel: "Sample brief",
     sampleTitle: "58-minute video -> 4-minute briefing",
-    sampleNote: "Talven briefings use the same reading logic: key claims first, source moments attached, next moves made clear.",
+    sampleNote: "Illustrative example, not a customer result: key claims first, source moments attached, next moves made clear.",
     before: "A long conversation spanning strategy, execution, and personal operating principles.",
     after: [
       "Key claims ranked by importance",
@@ -209,8 +209,8 @@ const landingContent: LandingContent = {
   },
   pricingIntro: {
     eyebrow: "Pricing",
-    title: "Choose a standing brief or a measured reserve.",
-    subtitle: "Subscriptions fit steady use. Credit packs cover occasional bursts without a monthly commitment."
+    title: "Choose monthly access or a one-time pack.",
+    subtitle: "Monthly plans fit steady use. Video-time packs cover occasional bursts without a recurring charge."
   },
   faq: {
     eyebrow: "Questions",
@@ -236,7 +236,7 @@ const landingContent: LandingContent = {
     ]
   },
   finalCta: {
-    title: "Build a private edge from what you watch.",
+    title: "Keep the useful parts of what you watch.",
     text: "Start with one video. Read the briefing. Decide if Talven belongs in your weekly stack.",
     primaryCta: {
       label: "Get your first briefing",

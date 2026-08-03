@@ -6,6 +6,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import type { BillingOrderHistoryEntry, PackBillingState } from "@fathom/api-client";
 
 import { AppShellHeader } from "../../components/AppShellHeader";
+import { useAppShell } from "../../components/AppShellProvider";
 import chrome from "../../components/app-chrome";
 import dialogStyles from "./billing-dialog.module.css";
 import pageStyles from "./billing-page.module.css";
@@ -28,7 +29,12 @@ function BillingPageContent() {
   if (loading) {
     return (
       <div className={chrome.pageFrame}>
-        <AppShellHeader active="billing" remainingSeconds={null} accountLabel={null} onSignOut={() => undefined} />
+        <AppShellHeader
+          active="billing"
+          remainingSeconds={remainingSeconds}
+          accountLabel={getAccountLabel(user)}
+          onSignOut={signOut}
+        />
         <main id="main-content" className={chrome.mainFrame}>
           <section className={chrome.surface} aria-busy="true">
             <h1 className={chrome.surfaceTitle}>Loading your access...</h1>
@@ -205,7 +211,7 @@ function BillingPageContent() {
               <p className={styles.accessHint}>{subscriptionStatusText}</p>
             </article>
             <article className={styles.accessStat}>
-              <p className={styles.accessLabel}>Pack reserve</p>
+              <p className={styles.accessLabel}>One-time pack balance</p>
               <p className={styles.accessValue}>{formatDuration(usage?.pack_remaining_seconds ?? 0)}</p>
               <p className={styles.accessHint}>
                 {(usage?.pack_remaining_seconds ?? 0) > 0 ? `Expires ${formatDate(usage?.pack_expires_at ?? null)}` : "Add packs anytime"}
@@ -221,7 +227,7 @@ function BillingPageContent() {
             <div>
               <h2 className={chrome.surfaceTitle}>Get more video time</h2>
               <p className={chrome.surfaceText}>
-                Choose a monthly subscription or add a one-time reserve when your use grows.
+                Choose a monthly subscription or add a one-time video-time pack when you need it.
               </p>
             </div>
           </div>
@@ -302,6 +308,9 @@ function BillingPageContent() {
               })}
             </div>
           ) : null}
+          <p className={chrome.subtleText}>
+            Checkout shows the final currency, applicable taxes, and total before you pay.
+          </p>
         </section>
 
         <section className={`${chrome.surface} ${styles.pageColumn} ${styles.detailsSection}`}>
@@ -474,21 +483,30 @@ function RefundAction({
   );
 }
 
+function BillingPageFallback() {
+  const { remainingSeconds, signOut, user } = useAppShell();
+
+  return (
+    <div className={chrome.pageFrame}>
+      <AppShellHeader
+        active="billing"
+        remainingSeconds={remainingSeconds}
+        accountLabel={getAccountLabel(user)}
+        onSignOut={signOut}
+      />
+      <main id="main-content" className={chrome.mainFrame}>
+        <section className={chrome.surface} aria-busy="true">
+          <h1 className={chrome.surfaceTitle}>Loading your access...</h1>
+          <p className={chrome.surfaceText} role="status">Preparing your plan and billing details.</p>
+        </section>
+      </main>
+    </div>
+  );
+}
+
 export default function BillingPage() {
   return (
-    <Suspense
-      fallback={
-        <div className={chrome.pageFrame}>
-          <AppShellHeader active="billing" remainingSeconds={null} accountLabel={null} onSignOut={() => undefined} />
-          <main id="main-content" className={chrome.mainFrame}>
-            <section className={chrome.surface} aria-busy="true">
-              <h1 className={chrome.surfaceTitle}>Loading your access...</h1>
-              <p className={chrome.surfaceText} role="status">Preparing your plan and billing details.</p>
-            </section>
-          </main>
-        </div>
-      }
-    >
+    <Suspense fallback={<BillingPageFallback />}>
       <BillingPageContent />
     </Suspense>
   );
