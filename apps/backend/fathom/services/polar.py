@@ -238,10 +238,11 @@ async def create_checkout_session(
     product_id: str,
     external_customer_id: str,
     metadata: dict[str, str],
+    success_url: str | None = None,
 ) -> str:
     payload = {
         "products": [product_id],
-        "success_url": get_polar_success_url(settings),
+        "success_url": success_url or get_polar_success_url(settings),
         "external_customer_id": external_customer_id,
         "metadata": metadata,
     }

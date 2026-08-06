@@ -4,8 +4,13 @@ Status: keep the current provider and two-hour limit for the first bounded
 initial release; validate quality/privacy and design chunking before supporting longer
 videos.
 
-Provider limits and prices below were reviewed on July 30, 2026. They are
-time-sensitive and must be rechecked before a purchase or migration.
+Provider limits and prices below were reviewed on August 6, 2026. They are
+time-sensitive and must be rechecked before a purchase or migration. The
+broader hosted/open-source comparison and end-to-end file limits live in
+[Provider economics, limits, and scaling boundaries](./provider-economics-and-limits.md).
+Downloader, podcast RSS/upload, Supabase/R2, and provider-delivery alternatives
+live in
+[Audio acquisition and temporary delivery](./audio-acquisition-and-delivery.md).
 
 ## Current pipeline
 
@@ -41,16 +46,19 @@ can safely process the promised duration.
 
 | Option | Published transcription price | Long-input fit | Relevant trade-off |
 | --- | ---: | --- | --- |
+| Groq Batch | $0.02/audio hour | Same underlying request-size boundary | Cheapest provider-managed path, but completes asynchronously in a 24-hour to seven-day window |
+| Cloudflare Whisper Large V3 Turbo | $0.030-$0.031/audio hour | Surrounding Worker requests are 100 MB on Free/Pro and Cloudflare documents chunking for large audio | Synchronous cost challenger; benchmark timestamps, quality, latency, and chunk orchestration before migrating |
 | Groq Whisper Large V3 Turbo | $0.04/audio hour | 25 MB free tier, 100 MB developer tier | Current fastest/cheapest initial-release fit; segment timestamps; no diarization |
 | Groq Whisper Large V3 | $0.111/audio hour | Same upload limits | Groq describes higher accuracy; benchmark before paying more |
 | AssemblyAI Universal-2 | $0.15/audio hour | Up to 5 GB / 10 hours | Simplest whole-file long-audio alternative; word timestamps; diarization costs extra |
 | ElevenLabs Scribe v2 | $0.22/audio hour | File under 5 GB; internally chunks longer audio | Word timestamps and diarization; ordinary zero-retention availability is less favorable |
-| Deepgram Nova-3 | $0.462/audio hour, plus optional diarization | Up to 2 GB with a processing wall limit | Mature speech controls but materially higher base cost here |
+| Deepgram Nova-3 | $0.288-$0.348/audio hour, plus optional features | Up to 2 GB; no published audio-duration cap | Mature speech controls but materially higher base cost here |
 
 Approximate transcription-only cost for a five-hour source at those published
-rates: Groq Turbo $0.20, Groq Large V3 $0.56, AssemblyAI $0.75, ElevenLabs
-$1.10, and Deepgram $2.31 before diarization. Download, storage, summarization,
-retries, taxes, and plan minimums are not included.
+rates: Groq Batch $0.10, Cloudflare about $0.15, Groq Turbo $0.20, Groq Large V3
+$0.56, AssemblyAI $0.75, ElevenLabs $1.10, and Deepgram $1.44-$1.74 before
+optional features. Download, storage, summarization, retries, taxes, and plan
+minimums are not included.
 
 No provider is “better” without testing Talven's actual content. Speed claims,
 word-error rate, speaker overlap, accents, technical names, privacy controls,
@@ -106,7 +114,10 @@ request.
 ## Current source references
 
 - [Groq speech-to-text documentation](https://console.groq.com/docs/speech-to-text)
+- [Groq Batch](https://console.groq.com/docs/batch)
 - [Groq data controls](https://console.groq.com/docs/your-data)
+- [Cloudflare Whisper Large V3 Turbo](https://developers.cloudflare.com/workers-ai/models/whisper-large-v3-turbo/)
+- [Cloudflare large-audio chunking](https://developers.cloudflare.com/workers-ai/guides/tutorials/build-a-workers-ai-whisper-with-chunking/)
 - [AssemblyAI pricing](https://www.assemblyai.com/pricing/)
 - [AssemblyAI file limits](https://support.assemblyai.com/articles/9208125065-are-there-any-limits-on-file-size-or-file-duration-for-files-submitted-to-the-api)
 - [AssemblyAI retention](https://support.assemblyai.com/articles/2240096256-does-assemblyai-offer-zero-data-retention)

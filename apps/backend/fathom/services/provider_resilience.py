@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import random
-import time
 from collections.abc import Awaitable, Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from enum import StrEnum
@@ -12,7 +11,7 @@ from typing import Generic, Protocol, TypeVar
 
 from fathom.core.errors import ExternalServiceError
 
-DEFAULT_PROVIDER_MAX_ATTEMPTS = 3
+PROVIDER_MAX_ATTEMPTS = 3
 DEFAULT_PROVIDER_BACKOFF_BASE_SECONDS = 0.5
 DEFAULT_PROVIDER_BACKOFF_MAX_SECONDS = 8.0
 DEFAULT_PROVIDER_RETRY_AFTER_MAX_SECONDS = 60.0
@@ -26,6 +25,7 @@ class ProviderFailureKind(StrEnum):
     TRANSIENT = "transient"
     PERMANENT = "permanent"
     RATE_LIMIT = "rate_limit"
+    INVALID_RESPONSE = "invalid_response"
     CANCELLED = "cancelled"
 
 
@@ -52,23 +52,18 @@ class ProviderOperationError(ExternalServiceError):
         return self.kind in {
             ProviderFailureKind.TRANSIENT,
             ProviderFailureKind.RATE_LIMIT,
+            ProviderFailureKind.INVALID_RESPONSE,
         }
 
 
 @dataclass(frozen=True)
-class RetryPolicy:
-    deadline_seconds: float
-    max_attempts: int = DEFAULT_PROVIDER_MAX_ATTEMPTS
+class BackoffPolicy:
     backoff_base_seconds: float = DEFAULT_PROVIDER_BACKOFF_BASE_SECONDS
     backoff_max_seconds: float = DEFAULT_PROVIDER_BACKOFF_MAX_SECONDS
     retry_after_max_seconds: float = DEFAULT_PROVIDER_RETRY_AFTER_MAX_SECONDS
     jitter_ratio: float = DEFAULT_PROVIDER_JITTER_RATIO
 
     def __post_init__(self) -> None:
-        if self.deadline_seconds <= 0:
-            raise ValueError("deadline_seconds must be greater than zero")
-        if not 1 <= self.max_attempts <= 10:
-            raise ValueError("max_attempts must be between 1 and 10")
         if self.backoff_base_seconds < 0:
             raise ValueError("backoff_base_seconds cannot be negative")
         if self.backoff_max_seconds < self.backoff_base_seconds:
@@ -77,6 +72,19 @@ class RetryPolicy:
             raise ValueError("retry_after_max_seconds cannot be negative")
         if not 0 <= self.jitter_ratio <= 1:
             raise ValueError("jitter_ratio must be between zero and one")
+
+
+@dataclass(frozen=True)
+class RetryPolicy:
+    attempt_timeout_seconds: float
+    max_attempts: int = PROVIDER_MAX_ATTEMPTS
+    backoff: BackoffPolicy = field(default_factory=BackoffPolicy)
+
+    def __post_init__(self) -> None:
+        if self.attempt_timeout_seconds <= 0:
+            raise ValueError("attempt_timeout_seconds must be greater than zero")
+        if not 1 <= self.max_attempts <= 10:
+            raise ValueError("max_attempts must be between 1 and 10")
 
 
 class AsyncProviderAdapter(Protocol[T_co]):
@@ -90,7 +98,7 @@ class AsyncProviderAdapter(Protocol[T_co]):
 
     def classify_error(self, exc: Exception) -> ProviderOperationError: ...
 
-    def deadline_error(self) -> ProviderOperationError: ...
+    def timeout_error(self) -> ProviderOperationError: ...
 
 
 @dataclass(frozen=True)
@@ -99,7 +107,7 @@ class CallableProviderAdapter(Generic[T]):
     stage: str
     operation: Callable[[], Awaitable[T]]
     error_classifier: Callable[[Exception], ProviderOperationError]
-    deadline_error_factory: Callable[[], ProviderOperationError]
+    timeout_error_factory: Callable[[], ProviderOperationError]
 
     async def invoke(self) -> T:
         return await self.operation()
@@ -107,8 +115,8 @@ class CallableProviderAdapter(Generic[T]):
     def classify_error(self, exc: Exception) -> ProviderOperationError:
         return self.error_classifier(exc)
 
-    def deadline_error(self) -> ProviderOperationError:
-        return self.deadline_error_factory()
+    def timeout_error(self) -> ProviderOperationError:
+        return self.timeout_error_factory()
 
 
 async def call_with_resilience(
@@ -117,24 +125,18 @@ async def call_with_resilience(
     *,
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     random_source: Callable[[], float] = random.random,
-    monotonic: Callable[[], float] = time.monotonic,
 ) -> T:
-    """Run one provider operation within a total deadline and bounded retry budget."""
-    deadline_at = monotonic() + policy.deadline_seconds
+    """Run a provider operation with a timeout per attempt and bounded retries."""
     last_error: ProviderOperationError | None = None
 
     for attempt in range(1, policy.max_attempts + 1):
-        remaining_seconds = deadline_at - monotonic()
-        if remaining_seconds <= 0:
-            raise adapter.deadline_error() from last_error
-
         try:
-            async with asyncio.timeout(remaining_seconds):
+            async with asyncio.timeout(policy.attempt_timeout_seconds):
                 return await adapter.invoke()
         except asyncio.CancelledError:
             raise
-        except TimeoutError as exc:
-            raise adapter.deadline_error() from exc
+        except TimeoutError:
+            provider_error = adapter.timeout_error()
         except ProviderOperationError as exc:
             provider_error = exc
         except Exception as exc:
@@ -145,21 +147,18 @@ async def call_with_resilience(
             raise provider_error
 
         delay_seconds = compute_retry_delay(
-            policy,
+            policy.backoff,
             attempt=attempt,
             retry_after_seconds=provider_error.retry_after_seconds,
             random_value=random_source(),
         )
-        remaining_seconds = deadline_at - monotonic()
-        if delay_seconds >= remaining_seconds:
-            raise adapter.deadline_error() from provider_error
         await sleep(delay_seconds)
 
-    raise adapter.deadline_error() from last_error
+    raise RuntimeError("Provider retry loop exited unexpectedly.") from last_error
 
 
 def compute_retry_delay(
-    policy: RetryPolicy,
+    policy: BackoffPolicy,
     *,
     attempt: int,
     retry_after_seconds: float | None = None,

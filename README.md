@@ -97,17 +97,7 @@ Optional backend runtime variables:
 - `SUPABASE_DB_PORT`
 - `POLAR_CHECKOUT_RETURN_URL`
 - `POLAR_SERVER`
-- `BILLING_DEBT_CAP_SECONDS`
 - `WORKER_MAX_CONCURRENT_JOBS`
-- `WORKER_SHUTDOWN_GRACE_SECONDS`
-- `SOURCE_DOWNLOAD_DEADLINE_SECONDS`
-- `SOURCE_METADATA_DEADLINE_SECONDS`
-- `PROVIDER_TRANSCRIPTION_DEADLINE_SECONDS`
-- `PROVIDER_SUMMARY_DEADLINE_SECONDS`
-- `SSE_MAX_STREAMS_PER_USER`
-- `SSE_MAX_STREAMS_PER_IP`
-- `SSE_STREAM_LEASE_SECONDS`
-- `SSE_STREAM_MAX_LIFETIME_SECONDS`
 
 `APP_ENV` accepts `local`, `test`, `staging`, or `production` and defaults to
 `local`. Hosted modes fail closed unless rate limiting and exact HTTPS CORS
@@ -115,11 +105,8 @@ origins are configured. If proxy headers are enabled, set
 `TRUSTED_PROXY_NETWORKS` to the ingress IPs or CIDR ranges; forwarded client
 addresses are ignored for every other peer.
 
-Optional backend logging variables:
-
-- `LOG_FORMAT`
-
-Leave logging variables unset locally unless you need JSON logs. For hosted production logs, set `LOG_FORMAT=json` so platforms can index fields like `request_id`, `job_id`, `status_code`, and `duration_ms`.
+Backend logs use readable console output in `local` and `test`, and structured
+JSON output in `staging` and `production`, based on `APP_ENV`.
 
 ### Frontend
 
@@ -253,7 +240,6 @@ For a durable product and architecture map, start with the
 pnpm --filter @fathom/web lint
 pnpm --filter @fathom/web typecheck
 pnpm --filter @fathom/web test
-pnpm --filter @fathom/web test:browser
 pnpm --filter @fathom/web build
 ```
 

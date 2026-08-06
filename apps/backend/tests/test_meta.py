@@ -5,6 +5,10 @@ from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
+
+from fathom.api.routers.meta import router as meta_router
 from fathom.application.meta import _REQUIRED_DATABASE_OBJECTS, readiness_status, status_snapshot
 from fathom.core.errors import ConfigurationError, NotReadyError
 
@@ -67,6 +71,7 @@ class ReadinessTests(unittest.IsolatedAsyncioTestCase):
             result = await readiness_status(_settings())
 
         self.assertEqual(result.status, "ok")
+        self.assertEqual(result.event_delivery, "degraded")
         selected_tables = [call.args[0] for call in admin_client.table.call_args_list]
         self.assertEqual(
             selected_tables,
@@ -145,9 +150,74 @@ class ReadinessTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(ctx.exception.detail, "Direct Postgres is not configured.")
 
-    async def test_status_snapshot_returns_version_and_uptime(self) -> None:
-        result = await status_snapshot()
+    async def test_public_status_endpoint_returns_only_coarse_event_delivery_state(self) -> None:
+        coordinator = SimpleNamespace(
+            status_snapshot=lambda: {
+                "listener_healthy": True,
+                "active_jobs": 2,
+                "queued_jobs": 0,
+                "inflight_jobs": 1,
+                "notification_hints": 4,
+                "notification_overflows": 0,
+                "refresh_count": 3,
+                "refresh_failures": 0,
+                "fallback_reconciliations": 0,
+            }
+        )
+        app = FastAPI()
+        app.include_router(meta_router)
+        app.state.job_event_coordinator = coordinator
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://localhost") as client:
+            response = await client.get("/meta/status")
+        payload = response.json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(payload["status"], "ok")
+        self.assertIsNotNone(payload["version"])
+        self.assertIsNotNone(payload["uptime_seconds"])
+        self.assertEqual(payload["event_delivery"], "healthy")
+        self.assertEqual(
+            set(payload),
+            {"status", "version", "uptime_seconds", "event_delivery"},
+        )
+        self.assertNotIn("active_jobs", str(payload))
+        self.assertNotIn("notification_overflows", str(payload))
+
+    async def test_status_snapshot_retains_detailed_event_metrics_in_structured_logs(self) -> None:
+        event_delivery_metrics = {
+            "listener_healthy": True,
+            "active_jobs": 2,
+            "queued_jobs": 0,
+            "inflight_jobs": 1,
+            "notification_hints": 4,
+            "notification_overflows": 0,
+            "refresh_count": 3,
+            "refresh_failures": 0,
+            "fallback_reconciliations": 0,
+        }
+        coordinator = SimpleNamespace(status_snapshot=lambda: event_delivery_metrics)
+
+        with patch("fathom.application.meta.logger.info") as log_info:
+            result = await status_snapshot(coordinator)
+
+        self.assertEqual(result.event_delivery, "healthy")
+        log_info.assert_called_once()
+        self.assertEqual(log_info.call_args.args[0], "api.status.snapshot")
+        self.assertEqual(
+            log_info.call_args.kwargs["extra"]["event_delivery_metrics"],
+            event_delivery_metrics,
+        )
+
+    async def test_listener_failure_degrades_but_does_not_fail_readiness(self) -> None:
+        admin_client = _admin_client()
+        coordinator = SimpleNamespace(status_snapshot=lambda: {"listener_healthy": False})
+
+        with (
+            patch("fathom.application.meta.create_supabase_admin_client", AsyncMock(return_value=admin_client)),
+            patch("fathom.application.meta.create_postgres_connection", _postgres_ok),
+        ):
+            result = await readiness_status(_settings(), coordinator)
 
         self.assertEqual(result.status, "ok")
-        self.assertIsNotNone(result.version)
-        self.assertIsNotNone(result.uptime_seconds)
+        self.assertEqual(result.event_delivery, "degraded")

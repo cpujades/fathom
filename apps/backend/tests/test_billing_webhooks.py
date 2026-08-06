@@ -4,7 +4,7 @@ import json
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import ANY, AsyncMock, patch
 
 from fathom.application.billing.webhooks import handle_polar_webhook
 from fathom.core.errors import ExternalServiceError
@@ -13,6 +13,85 @@ FIXTURE_PATH = Path(__file__).parent / "fixtures" / "polar_webhook_replay.json"
 
 
 class BillingWebhookTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self) -> None:
+        self.resolve_checkout_operation = self.enterContext(
+            patch(
+                "fathom.application.billing.webhooks.resolve_billing_sync_operation",
+                AsyncMock(return_value="resolved"),
+            )
+        )
+        self.resolve_refund_operations = self.enterContext(
+            patch(
+                "fathom.application.billing.webhooks.resolve_refund_sync_operations",
+                AsyncMock(return_value=1),
+            )
+        )
+
+    async def test_paid_order_resolves_exact_metadata_operation_for_event_owner(self) -> None:
+        event = json.loads(FIXTURE_PATH.read_text())["events"][0]
+        operation_id = "97000000-0000-0000-0000-000000000001"
+        plan_id = "97000000-0000-0000-0000-000000000002"
+        event["data"]["metadata"] = {"billing_operation_id": operation_id, "plan_id": plan_id}
+
+        with (
+            patch(
+                "fathom.application.billing.webhooks.polar.verify_and_parse_webhook",
+                return_value=event,
+            ),
+            patch(
+                "fathom.application.billing.webhooks.create_supabase_admin_client",
+                AsyncMock(return_value=object()),
+            ),
+            patch(
+                "fathom.application.billing.webhooks.apply_polar_webhook_transaction",
+                AsyncMock(return_value={"resolution_type": "processed", "outcome": "applied"}),
+            ),
+        ):
+            await handle_polar_webhook(
+                b"fixture",
+                {"webhook-id": event["id"]},
+                SimpleNamespace(),
+            )
+
+        self.resolve_checkout_operation.assert_awaited_once_with(
+            ANY,
+            operation_id=operation_id,
+            user_id=event["data"]["customer_external_id"],
+            operation_type="checkout",
+            plan_id=plan_id,
+            polar_order_id=event["data"]["id"],
+            status="succeeded",
+        )
+
+    async def test_correlation_mismatch_is_observable_without_rolling_back_billing(self) -> None:
+        event = json.loads(FIXTURE_PATH.read_text())["events"][0]
+        event["data"]["metadata"] = {
+            "billing_operation_id": "97000000-0000-0000-0000-000000000001",
+            "plan_id": "97000000-0000-0000-0000-000000000002",
+        }
+        apply_transaction = AsyncMock(return_value={"resolution_type": "processed", "outcome": "applied"})
+        self.resolve_checkout_operation.return_value = "correlation_mismatch"
+
+        with (
+            patch(
+                "fathom.application.billing.webhooks.polar.verify_and_parse_webhook",
+                return_value=event,
+            ),
+            patch(
+                "fathom.application.billing.webhooks.create_supabase_admin_client",
+                AsyncMock(return_value=object()),
+            ),
+            patch(
+                "fathom.application.billing.webhooks.apply_polar_webhook_transaction",
+                apply_transaction,
+            ),
+            self.assertLogs("fathom.application.billing.webhooks", level="WARNING") as logs,
+        ):
+            await handle_polar_webhook(b"fixture", {"webhook-id": event["id"]}, SimpleNamespace())
+
+        apply_transaction.assert_awaited_once()
+        self.assertTrue(any("operation_correlation_mismatch" in entry for entry in logs.output))
+
     async def test_replay_fixtures_are_normalized_and_sent_to_one_transaction_command(self) -> None:
         fixture = json.loads(FIXTURE_PATH.read_text())
         events = fixture["events"]
@@ -43,7 +122,7 @@ class BillingWebhookTests(unittest.IsolatedAsyncioTestCase):
                 await handle_polar_webhook(
                     b"fixture",
                     {"webhook-id": event["id"]},
-                    SimpleNamespace(billing_debt_cap_seconds=600),
+                    SimpleNamespace(),
                 )
 
         self.assertEqual(apply_transaction.await_count, len(events))
@@ -84,7 +163,7 @@ class BillingWebhookTests(unittest.IsolatedAsyncioTestCase):
             await handle_polar_webhook(
                 b"fixture",
                 {"webhook-id": event["id"]},
-                SimpleNamespace(billing_debt_cap_seconds=600),
+                SimpleNamespace(),
             )
 
         apply_transaction.assert_awaited_once()
@@ -110,5 +189,5 @@ class BillingWebhookTests(unittest.IsolatedAsyncioTestCase):
                 await handle_polar_webhook(
                     b"fixture",
                     {"webhook-id": event["id"]},
-                    SimpleNamespace(billing_debt_cap_seconds=600),
+                    SimpleNamespace(),
                 )

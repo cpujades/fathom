@@ -16,12 +16,25 @@ class BillingRefundTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.admin_client = object()
         self.auth = AuthenticatedUser(access_token="token", user_id="user_123")
-        self.settings = cast(Settings, SimpleNamespace(billing_debt_cap_seconds=600))
+        self.settings = cast(Settings, SimpleNamespace())
         self.started = {
             "resolution_type": "started",
             "refundable_amount_cents": 2250,
             "remaining_seconds_before_refund": 2700,
         }
+        self.operation_id = "97000000-0000-0000-0000-000000000001"
+        self.create_operation = self.enterContext(
+            patch(
+                "fathom.application.billing.refunds.create_billing_sync_operation",
+                AsyncMock(return_value=self.operation_id),
+            )
+        )
+        self.resolve_operation = self.enterContext(
+            patch(
+                "fathom.application.billing.refunds.resolve_billing_sync_operation",
+                AsyncMock(return_value="resolved"),
+            )
+        )
 
     async def test_refund_uses_authoritative_amount_from_atomic_command(self) -> None:
         with (
@@ -57,6 +70,7 @@ class BillingRefundTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(response.requested_amount_cents, 2250)
         self.assertEqual(response.remaining_seconds_before_refund, 2700)
+        self.assertEqual(str(response.operation_id), self.operation_id)
 
     async def test_duplicate_refund_conflict_keeps_order_refund_pending(self) -> None:
         with (
@@ -74,14 +88,14 @@ class BillingRefundTests(unittest.IsolatedAsyncioTestCase):
                 AsyncMock(side_effect=PolarInvalidRequestError("duplicate", http_status=409)),
             ),
         ):
-            with self.assertRaises(InvalidRequestError):
-                await request_pack_refund(
-                    polar_order_id="ord_123",
-                    auth=self.auth,
-                    settings=self.settings,
-                )
+            response = await request_pack_refund(
+                polar_order_id="ord_123",
+                auth=self.auth,
+                settings=self.settings,
+            )
 
         reopen_refund.assert_not_awaited()
+        self.assertEqual(response.status, "pending_webhook_confirmation")
 
     async def test_definitive_refund_failure_atomically_reopens_order(self) -> None:
         with (
@@ -132,14 +146,15 @@ class BillingRefundTests(unittest.IsolatedAsyncioTestCase):
                 AsyncMock(side_effect=RuntimeError("network wobble")),
             ),
         ):
-            with self.assertRaises(RuntimeError):
-                await request_pack_refund(
-                    polar_order_id="ord_123",
-                    auth=self.auth,
-                    settings=self.settings,
-                )
+            response = await request_pack_refund(
+                polar_order_id="ord_123",
+                auth=self.auth,
+                settings=self.settings,
+            )
 
         reopen_refund.assert_not_awaited()
+        self.assertEqual(str(response.operation_id), self.operation_id)
+        self.assertEqual(response.status, "pending_webhook_confirmation")
 
     async def test_database_resolution_is_mapped_without_calling_polar(self) -> None:
         cases = {

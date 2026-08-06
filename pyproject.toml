@@ -1,6 +1,6 @@
 [project]
 name = "fathom"
-version = "0.20.6"
+version = "0.21.0"
 description = "Talven source-linked YouTube briefing service"
 readme = "README.md"
 # Why: some compiled dependencies (e.g. pydantic-core via PyO3) may not support Python 3.14 yet.

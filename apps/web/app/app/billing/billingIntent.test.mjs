@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { packPlans, subscriptionPlans } from "../../content/pricing.ts";
-import { resolveRequestedPlan } from "./billingIntent.ts";
+import { resolveBillingOfferMode, resolveRequestedPlan } from "./billingIntent.ts";
 
 const catalog = JSON.parse(
   readFileSync(new URL("../../../../../scripts/polar/plan_contract.json", import.meta.url), "utf8")
@@ -32,4 +32,11 @@ test("missing, unrelated, and malformed intent cannot select a plan", () => {
 test("display names and legacy slugs cannot ambiguously select a plan", () => {
   assert.equal(resolveRequestedPlan(plans, "paid", "creator"), null);
   assert.equal(resolveRequestedPlan(plans, "paid", "trial-pack"), null);
+});
+
+test("the billing view parameter can open packs without selecting checkout", () => {
+  assert.equal(resolveBillingOfferMode("packs"), "pack");
+  assert.equal(resolveBillingOfferMode("subscriptions"), "subscription");
+  assert.equal(resolveBillingOfferMode("https://example.com"), "subscription");
+  assert.equal(resolveBillingOfferMode(null), "subscription");
 });

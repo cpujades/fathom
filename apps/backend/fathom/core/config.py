@@ -11,18 +11,8 @@ from urllib.parse import urlsplit
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
-DEFAULT_BILLING_DEBT_CAP_SECONDS = 600
 DEFAULT_SUPABASE_DB_PORT = 5432
 DEFAULT_WORKER_MAX_CONCURRENT_JOBS = 10
-DEFAULT_WORKER_SHUTDOWN_GRACE_SECONDS = 30.0
-DEFAULT_SOURCE_DOWNLOAD_DEADLINE_SECONDS = 600.0
-DEFAULT_SOURCE_METADATA_DEADLINE_SECONDS = 30.0
-DEFAULT_PROVIDER_SUMMARY_DEADLINE_SECONDS = 1805.0
-DEFAULT_PROVIDER_TRANSCRIPTION_DEADLINE_SECONDS = 190.0
-DEFAULT_SSE_MAX_STREAMS_PER_IP = 12
-DEFAULT_SSE_MAX_STREAMS_PER_USER = 3
-DEFAULT_SSE_STREAM_LEASE_SECONDS = 90
-DEFAULT_SSE_STREAM_MAX_LIFETIME_SECONDS = 3600
 
 
 class Settings(BaseSettings):
@@ -94,71 +84,11 @@ class Settings(BaseSettings):
     polar_checkout_return_url: str | None = Field(default=None, validation_alias="POLAR_CHECKOUT_RETURN_URL")
     polar_portal_return_url: str | None = Field(default=None, validation_alias="POLAR_PORTAL_RETURN_URL")
     polar_server: str = Field(default="sandbox", validation_alias="POLAR_SERVER")
-    billing_debt_cap_seconds: int = Field(
-        default=DEFAULT_BILLING_DEBT_CAP_SECONDS,
-        validation_alias="BILLING_DEBT_CAP_SECONDS",
-        ge=0,
-        le=86_400,
-    )
     worker_max_concurrent_jobs: int = Field(
         default=DEFAULT_WORKER_MAX_CONCURRENT_JOBS,
         validation_alias="WORKER_MAX_CONCURRENT_JOBS",
         ge=1,
         le=64,
-    )
-    worker_shutdown_grace_seconds: float = Field(
-        default=DEFAULT_WORKER_SHUTDOWN_GRACE_SECONDS,
-        validation_alias="WORKER_SHUTDOWN_GRACE_SECONDS",
-        ge=0,
-        le=300,
-    )
-    source_download_deadline_seconds: float = Field(
-        default=DEFAULT_SOURCE_DOWNLOAD_DEADLINE_SECONDS,
-        validation_alias="SOURCE_DOWNLOAD_DEADLINE_SECONDS",
-        gt=0,
-        le=3600,
-    )
-    source_metadata_deadline_seconds: float = Field(
-        default=DEFAULT_SOURCE_METADATA_DEADLINE_SECONDS,
-        validation_alias="SOURCE_METADATA_DEADLINE_SECONDS",
-        gt=0,
-        le=120,
-    )
-    provider_transcription_deadline_seconds: float = Field(
-        default=DEFAULT_PROVIDER_TRANSCRIPTION_DEADLINE_SECONDS,
-        validation_alias="PROVIDER_TRANSCRIPTION_DEADLINE_SECONDS",
-        gt=0,
-        le=3600,
-    )
-    provider_summary_deadline_seconds: float = Field(
-        default=DEFAULT_PROVIDER_SUMMARY_DEADLINE_SECONDS,
-        validation_alias="PROVIDER_SUMMARY_DEADLINE_SECONDS",
-        gt=0,
-        le=3600,
-    )
-    sse_max_streams_per_user: int = Field(
-        default=DEFAULT_SSE_MAX_STREAMS_PER_USER,
-        validation_alias="SSE_MAX_STREAMS_PER_USER",
-        ge=1,
-        le=20,
-    )
-    sse_max_streams_per_ip: int = Field(
-        default=DEFAULT_SSE_MAX_STREAMS_PER_IP,
-        validation_alias="SSE_MAX_STREAMS_PER_IP",
-        ge=1,
-        le=100,
-    )
-    sse_stream_lease_seconds: int = Field(
-        default=DEFAULT_SSE_STREAM_LEASE_SECONDS,
-        validation_alias="SSE_STREAM_LEASE_SECONDS",
-        ge=30,
-        le=300,
-    )
-    sse_stream_max_lifetime_seconds: int = Field(
-        default=DEFAULT_SSE_STREAM_MAX_LIFETIME_SECONDS,
-        validation_alias="SSE_STREAM_MAX_LIFETIME_SECONDS",
-        ge=60,
-        le=86_400,
     )
 
     @field_validator(

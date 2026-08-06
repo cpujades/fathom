@@ -26,8 +26,10 @@ cache TTL, keys, and invalidation rules, read
 | `/app/billing` | Plans, checkout, portal, pack refund, balance, and billing history |
 | `/app/account` | Supabase Auth profile metadata |
 
-`apps/web/proxy.ts` protects every `/app/**` request by asking Supabase for the
-current user. The `AppShellProvider` then owns browser session state, the API
+`apps/web/proxy.ts` asks Supabase for the current user at both sides of the auth
+boundary. It protects every `/app/**` request and redirects a signed-in request
+for `/signin` or `/signup` to its validated app destination before an auth form
+can render. The `AppShellProvider` then owns browser session state, the API
 access token, sign-out, and the small account-scoped usage cache used by the
 authenticated shell.
 
@@ -36,7 +38,9 @@ authenticated shell.
 Authentication has two related checks:
 
 1. The Next.js proxy prevents an unauthenticated request from rendering an app
-   route and preserves its intended `/app/**` destination in `next`.
+   route and preserves its intended `/app/**` destination in `next`. The same
+   server-verified check prevents an authenticated user from rendering either
+   authentication entry route.
 2. The backend verifies the Supabase bearer token on every private API request.
    A frontend route being visible is never treated as API authorization.
 
@@ -52,6 +56,16 @@ authorization code, establishes the Supabase session cookie, and redirects to
 the validated destination. Signup is public rather than invitation-only; the
 `invite` token type accepted by the callback is a Supabase OTP protocol value,
 not a Talven invitation gate.
+
+A valid paid intent resolves against the hard-coded public pricing catalog and
+adds product, price, included-time, and cadence context to both auth pages.
+Unknown plans never become display copy. When password sign-up returns an
+explicit existing-account result, the adjacent sign-in action carries only the
+validated navigation context in its URL. The email is transferred through
+`sessionStorage`, consumed once on sign-in, and never accompanied by the
+proposed password. Magic-link sign-up retains its safe callback and describes
+the combined behavior accurately: the link signs in an existing user and
+creates an account only for a new user.
 
 Password recovery is intentionally separate from ordinary authentication:
 
@@ -80,9 +94,11 @@ Hosted callback URLs, email behavior, and real-flow proof are documented in the
 
 The create response says whether work is new, joined, or reused. The session
 page first has an authoritative snapshot, then applies runtime-validated SSE
-events. On a disconnect it sends `Last-Event-ID`, replays bounded persisted
-events, and reconciles with another snapshot. Invalid event payloads do not
-enter React state. Detailed cache, charging, and archive behavior is in
+events. Received bytes and keepalive comments track transport health separately
+from visible state changes. After 30 seconds without transport activity, or on
+a dropped stream, the page reads one recovery snapshot and reconnects with
+`Last-Event-ID` so bounded persisted events replay without duplicating content.
+Invalid event payloads do not enter React state. Detailed cache, charging, and archive behavior is in
 [briefing product behavior](../product/briefing-behavior.md); event ownership is
 in [API contract and client generation](./api-contract.md).
 

@@ -6,8 +6,16 @@ from typing import Any
 
 from fathom.core.errors import AppError
 from fathom.services.downloader import DownloadError
+from fathom.services.provider_resilience import ProviderFailureKind, ProviderOperationError
 from fathom.services.summarizer import SummarizationError
 from fathom.services.transcriber import TranscriptionError
+
+PROVIDER_TEMPORARILY_UNAVAILABLE_MESSAGE = (
+    "A service Talven relies on is temporarily unavailable. Your source is fine. Please try again in a few minutes."
+)
+PROVIDER_CAPACITY_REACHED_MESSAGE = (
+    "Talven is handling unusually high demand. Your source is fine. Please try again in a few minutes."
+)
 
 
 def elapsed_ms(started_at: float) -> float:
@@ -38,6 +46,10 @@ def log_step(
 
 
 def extract_job_error(exc: Exception) -> tuple[str, str]:
+    if isinstance(exc, ProviderOperationError) and exc.kind == ProviderFailureKind.RATE_LIMIT:
+        return "provider_capacity_reached", PROVIDER_CAPACITY_REACHED_MESSAGE
+    if isinstance(exc, ProviderOperationError) and exc.kind == ProviderFailureKind.TRANSIENT:
+        return "provider_temporarily_unavailable", PROVIDER_TEMPORARILY_UNAVAILABLE_MESSAGE
     if isinstance(exc, DownloadError):
         return "source_download_failed", exc.detail
     if isinstance(exc, TranscriptionError):

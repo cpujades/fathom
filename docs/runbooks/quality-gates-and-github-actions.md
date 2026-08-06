@@ -55,8 +55,7 @@ The configuration in `.pre-commit-config.yaml` checks:
 - strict `ty` type checking when backend Python files are involved.
 
 The hook is intentionally a fast first line of defense. Passing it does not run
-the complete backend test suite, frontend browser tests, a database stack, or a
-real provider.
+the complete backend test suite, a database stack, or a real provider.
 
 ## Full local checks
 
@@ -74,7 +73,6 @@ PYTHONPATH=apps/backend ./.venv/bin/python -m unittest discover -s apps/backend/
 pnpm --filter @fathom/web lint
 pnpm --filter @fathom/web typecheck
 pnpm --filter @fathom/web test
-pnpm --filter @fathom/web test:browser
 pnpm --filter @fathom/web build
 
 # Generated API contract
@@ -97,7 +95,7 @@ in [Supabase environments and migrations](./supabase-environments-and-migrations
 
 | Workflow | When it runs | What it proves |
 | --- | --- | --- |
-| `.github/workflows/checks.yml` | Every PR | Locked dependency installation; backend lint, format, types, pre-commit, OpenAPI drift, and tests; frontend lint, application/API-client types, generated-client drift, unit tests, browser accessibility tests, and production build |
+| `.github/workflows/checks.yml` | Every PR | Locked dependency installation; backend lint, format, types, pre-commit, OpenAPI drift, and tests; frontend lint, application/API-client types, generated-client drift, unit tests, and production build |
 | `.github/workflows/commit-messages.yml` | PR opened, updated, reopened, edited, or marked ready | At least one non-merge commit uses the accepted Conventional Commit format, so the release can classify the change |
 | `.github/workflows/security.yml` | Every PR | Dependency Review plus CodeQL analysis for Python, JavaScript/TypeScript, and Actions workflow code |
 | `.github/workflows/supabase-pr.yml` | Every PR, doing database work only when `supabase/**` or its workflow changed | A temporary local database can apply every migration, pass all pgTAP suites, and pass schema lint |

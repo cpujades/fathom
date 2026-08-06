@@ -12,6 +12,7 @@ import dialogStyles from "./billing-dialog.module.css";
 import pageStyles from "./billing-page.module.css";
 import { formatDate, formatDuration } from "../../lib/format";
 import { getAccountLabel } from "../../lib/accountLabel";
+import { BillingSyncNotice } from "./BillingSyncNotice";
 import { formatPrice, getPlanBadge, getStatusTone } from "./billingFormatters";
 import { useBillingController } from "./useBillingController";
 
@@ -78,65 +79,21 @@ function BillingPageContent() {
         </section>
 
         {purchaseSync ? (
-          <section
-            className={`${chrome.notice} ${styles.pageColumn} ${
-              purchaseSync.status === "delayed" ? chrome.noticeWarning : chrome.noticeInfo
-            }`}
-            role="status"
-            aria-live="polite"
-          >
-            <h2 className={chrome.noticeTitle}>Purchase status</h2>
-            <p className={chrome.noticeText}>
-              {purchaseSync.status === "syncing"
-                ? "Payment received. We are updating your video-time balance now."
-                : purchaseSync.status === "synced"
-                  ? `${purchaseSync.orderLabel ?? "Your purchase"} is confirmed and your access is updated below.`
-                  : "Payment succeeded, but provider confirmation is taking longer than expected. You do not need to pay again."}
-            </p>
-            {purchaseSync.status === "delayed" ? (
-              <div className={chrome.actionRow}>
-                <button
-                  className={chrome.secondaryButton}
-                  type="button"
-                  onClick={() => void handleRefreshSyncStatus()}
-                  disabled={syncRefreshLoading}
-                >
-                  {syncRefreshLoading ? "Refreshing status..." : "Refresh status"}
-                </button>
-              </div>
-            ) : null}
-          </section>
+          <BillingSyncNotice
+            kind="purchase"
+            state={purchaseSync}
+            refreshLoading={syncRefreshLoading}
+            onRefresh={() => void handleRefreshSyncStatus()}
+          />
         ) : null}
 
         {refundSync ? (
-          <section
-            className={`${chrome.notice} ${styles.pageColumn} ${
-              refundSync.status === "delayed" ? chrome.noticeWarning : chrome.noticeInfo
-            }`}
-            role="status"
-            aria-live="polite"
-          >
-            <h2 className={chrome.noticeTitle}>Refund status</h2>
-            <p className={chrome.noticeText}>
-              {refundSync.status === "syncing"
-                ? `Refund requested for ${refundSync.orderLabel ?? "this pack"}. Waiting for provider confirmation now.`
-                : refundSync.status === "synced"
-                  ? `${refundSync.orderLabel ?? "This pack"} is now marked refunded.`
-                  : "The refund request was accepted, but confirmation is still arriving from the provider. You do not need to submit it again."}
-            </p>
-            {refundSync.status === "delayed" ? (
-              <div className={chrome.actionRow}>
-                <button
-                  className={chrome.secondaryButton}
-                  type="button"
-                  onClick={() => void handleRefreshSyncStatus()}
-                  disabled={syncRefreshLoading}
-                >
-                  {syncRefreshLoading ? "Refreshing status..." : "Refresh status"}
-                </button>
-              </div>
-            ) : null}
-          </section>
+          <BillingSyncNotice
+            kind="refund"
+            state={refundSync}
+            refreshLoading={syncRefreshLoading}
+            onRefresh={() => void handleRefreshSyncStatus()}
+          />
         ) : null}
 
         {error ? (

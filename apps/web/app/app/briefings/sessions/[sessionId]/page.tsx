@@ -23,7 +23,7 @@ import {
   getDeliveryFailurePresentation,
   getFailurePresentation,
   getFinalizationPresentation,
-  isCreditOrPaymentError
+  isBillingAdmissionErrorCode
 } from "../../sessionPresentation";
 import { parseTakeawayItems } from "../../takeawayParser";
 import {
@@ -50,7 +50,15 @@ export default function BriefingSessionPage() {
     const queryString = searchParams.toString();
     return buildSignInPath(`${pathname}${queryString ? `?${queryString}` : ""}`);
   }, [pathname, searchParams]);
-  const { accessToken, loading, refreshUsage, remainingSeconds, signOut, user } = useAppShell();
+  const {
+    accessToken,
+    hasActivePaidSubscription,
+    loading,
+    refreshUsage,
+    remainingSeconds,
+    signOut,
+    user
+  } = useAppShell();
   const userId = user?.id ?? null;
   const { retrySessionLoad, sessionLoadError, sessionLoadErrorCode, sessionState } = useBriefingSession({
     accessToken,
@@ -185,9 +193,16 @@ export default function BriefingSessionPage() {
   const isLoadFailed = phase === "load_failed";
   const isDeliveryFailed = phase === "delivery_failed";
   const isStreaming = phase === "streaming";
+  const sourceUrl = session?.canonical_source_url ?? session?.submitted_url ?? "";
   const failurePresentation = isDeliveryFailed
     ? getDeliveryFailurePresentation()
-    : getFailurePresentation(session, sessionLoadError, sessionLoadErrorCode);
+    : getFailurePresentation(
+        session,
+        sessionLoadError,
+        sessionLoadErrorCode,
+        sourceUrl,
+        hasActivePaidSubscription
+      );
   const rawMarkdown = streamedMarkdown || session?.briefing_markdown || "";
   const markdownToRender = removeGenericBriefingHeading(rawMarkdown);
   const parsedBriefing = useMemo(
@@ -216,10 +231,7 @@ export default function BriefingSessionPage() {
         ? parsedBriefing.title
         : session?.source_title || "Opening briefing";
   const subhead = isFailed || isLoadFailed || isDeliveryFailed ? failurePresentation.description : "";
-  const creditCtaMessage = session?.error_message ?? sessionLoadError;
-  const showCreditCta =
-    failurePresentation.actionHref === "/app/billing#billing-offers" ||
-    Boolean(creditCtaMessage && isCreditOrPaymentError(creditCtaMessage));
+  const showCreditCta = isBillingAdmissionErrorCode(session?.error_code ?? sessionLoadErrorCode);
   const canShowReader = phase === "streaming" || phase === "ready" || phase === "failed";
   const showLifecyclePanel =
     phase !== "ready" && phase !== "failed" && phase !== "load_failed" && phase !== "delivery_failed";
@@ -250,7 +262,6 @@ export default function BriefingSessionPage() {
     : session?.briefing_has_pdf || pdfUrl
       ? "Download PDF"
       : "Generate PDF";
-  const sourceUrl = session?.canonical_source_url ?? session?.submitted_url ?? "";
   const sourceActionLabel = session?.source_type === "youtube" ? "Original video" : "Original source";
   const sourceLabel = session?.source_type === "youtube" ? "YouTube" : "Source";
   const sourceDurationLabel = session?.source_duration_seconds ? formatExactDuration(session.source_duration_seconds) : null;

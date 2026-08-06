@@ -33,6 +33,13 @@ const AUTH_CALLBACK_ERROR_MESSAGES: Record<string, string> = {
   session_exchange_failed: "We could not complete sign-in. Please try again."
 };
 
+const EXISTING_ACCOUNT_ERROR_CODES = new Set(["email_exists", "user_already_exists"]);
+
+const isExistingAccountAuthError = (error: AuthErrorShape | null): boolean => {
+  const code = error?.code?.toLowerCase();
+  return Boolean(code && EXISTING_ACCOUNT_ERROR_CODES.has(code));
+};
+
 const mapAuthError = (error: AuthErrorShape | null, fallback: string): string => {
   if (!error) {
     return fallback;
@@ -62,5 +69,5 @@ const mapAuthCallbackErrorCode = (code: string | null | undefined): string | nul
   return AUTH_CALLBACK_ERROR_MESSAGES[code] ?? AUTH_CALLBACK_ERROR_MESSAGES.authentication_failed;
 };
 
-export { mapAuthCallbackErrorCode, mapAuthError };
+export { isExistingAccountAuthError, mapAuthCallbackErrorCode, mapAuthError };
 export type { AuthErrorShape };

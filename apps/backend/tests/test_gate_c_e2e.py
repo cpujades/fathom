@@ -12,12 +12,14 @@ import warnings
 from collections.abc import AsyncGenerator
 from typing import Any, cast
 from unittest.mock import AsyncMock, patch
+from urllib.parse import urlsplit
 
 import asyncpg
 import httpx
 
 from fathom.application.briefings.sessions import commands as session_commands
 from fathom.application.briefings.sessions import streaming as session_streaming
+from fathom.application.briefings.sessions.event_coordinator import JobEventCoordinator
 from fathom.application.identity import AuthenticatedUser
 from fathom.core.config import Settings, get_settings
 from fathom.crud.supabase.jobs import claim_next_job
@@ -61,11 +63,13 @@ class AuthenticatedGateCE2ETests(unittest.IsolatedAsyncioTestCase):
         self.http: httpx.AsyncClient | None = None
         self.connection: asyncpg.Connection | None = None
         self.admin_client: SupabaseAsyncClient | None = None
+        self.event_coordinator: JobEventCoordinator | None = None
         self.test_video_ids = (
             f"g{self.run_id[:10]}",
             f"r{self.run_id[:10]}",
             f"f{self.run_id[:10]}",
         )
+        database_url = urlsplit(os.environ["FATHOM_GATE_C_DATABASE_URL"])
         self.settings = Settings.model_validate(
             {
                 "OPENROUTER_API_KEY": "gate-c-fake-openrouter",
@@ -73,8 +77,11 @@ class AuthenticatedGateCE2ETests(unittest.IsolatedAsyncioTestCase):
                 "SUPABASE_URL": os.environ["FATHOM_GATE_C_SUPABASE_URL"],
                 "SUPABASE_PUBLISHABLE_KEY": os.environ["FATHOM_GATE_C_PUBLISHABLE_KEY"],
                 "SUPABASE_SECRET_KEY": os.environ["FATHOM_GATE_C_SECRET_KEY"],
-                "SUPABASE_DB_PASSWORD": "postgres",
-                "SUPABASE_DB_HOST": "127.0.0.1",
+                "SUPABASE_DB_PASSWORD": database_url.password or "postgres",
+                "SUPABASE_DB_USER": database_url.username or "postgres",
+                "SUPABASE_DB_NAME": database_url.path.lstrip("/") or "postgres",
+                "SUPABASE_DB_HOST": database_url.hostname or "localhost",
+                "SUPABASE_DB_PORT": database_url.port or 5432,
                 "APP_ENV": "local",
                 "RATE_LIMIT": 0,
             }
@@ -84,6 +91,8 @@ class AuthenticatedGateCE2ETests(unittest.IsolatedAsyncioTestCase):
             self.connection = await asyncpg.connect(os.environ["FATHOM_GATE_C_DATABASE_URL"])
             await self._insert_free_plan()
             self.admin_client = await create_supabase_admin_client(self.settings)
+            self.event_coordinator = JobEventCoordinator(self.settings, self.admin_client)
+            await self.event_coordinator.start()
             access_token = await self._create_ephemeral_auth_session()
 
             with patch.dict(
@@ -149,6 +158,7 @@ class AuthenticatedGateCE2ETests(unittest.IsolatedAsyncioTestCase):
                 settings=self.settings,
                 last_event_id=None,
                 is_disconnected=stream_request.is_disconnected,
+                event_coordinator=self._event_coordinator(),
             ),
         )
         self.assertEqual(await anext(stream), "retry: 2000\n\n")
@@ -161,19 +171,15 @@ class AuthenticatedGateCE2ETests(unittest.IsolatedAsyncioTestCase):
             summary=_briefing_contract(),
         )
 
-        poll = AsyncMock(wraps=session_streaming.list_job_events_after)
-        with patch.object(session_streaming, "list_job_events_after", poll):
-            poll_started = time.perf_counter()
-            first_live_event = await anext(stream)
-            poll_elapsed = time.perf_counter() - poll_started
-        self.assertGreaterEqual(poll_elapsed, 0.85)
-        self.assertLess(poll_elapsed, 2.5)
-        self.assertEqual(poll.await_count, 1)
+        delivery_started = time.perf_counter()
+        first_live_event = await anext(stream)
+        delivery_elapsed = time.perf_counter() - delivery_started
+        self.assertLess(delivery_elapsed, 2.5)
         self.assertIn("event: session.event", first_live_event)
         reconnect_cursor = _event_id(first_live_event)
         self.assertGreater(reconnect_cursor, initial_cursor)
         await stream.aclose()
-        print(f"GATE_C_POLL_METRIC elapsed_seconds={poll_elapsed:.3f} queries=1 viewers=1 interval_seconds=1.0")
+        print(f"GATE_C_EVENT_METRIC delivery_seconds={delivery_elapsed:.3f} transport=listen_notify")
 
         reconnect_request = _StreamRequest(last_event_id=str(reconnect_cursor))
         reconnect_chunks = [
@@ -184,6 +190,7 @@ class AuthenticatedGateCE2ETests(unittest.IsolatedAsyncioTestCase):
                 settings=self.settings,
                 last_event_id=reconnect_request.headers.get("last-event-id"),
                 is_disconnected=reconnect_request.is_disconnected,
+                event_coordinator=self._event_coordinator(),
             )
         ]
         reconnect_body = "".join(reconnect_chunks)
@@ -450,6 +457,12 @@ class AuthenticatedGateCE2ETests(unittest.IsolatedAsyncioTestCase):
     async def _cleanup(self) -> None:
         first_error: Exception | None = None
         try:
+            if self.event_coordinator is not None:
+                await self.event_coordinator.close()
+        except Exception as exc:
+            first_error = first_error or exc
+
+        try:
             if self.http is not None:
                 await self.http.aclose()
         except Exception as exc:
@@ -540,6 +553,11 @@ class AuthenticatedGateCE2ETests(unittest.IsolatedAsyncioTestCase):
         if self.admin_client is None:
             raise AssertionError("Gate C admin client is not initialized.")
         return self.admin_client
+
+    def _event_coordinator(self) -> JobEventCoordinator:
+        if self.event_coordinator is None:
+            raise AssertionError("Gate C event coordinator is not initialized.")
+        return self.event_coordinator
 
     def _connection(self) -> asyncpg.Connection:
         if self.connection is None:

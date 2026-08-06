@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import HttpUrl, TypeAdapter
 
@@ -8,7 +9,12 @@ from fathom.application.billing.parsing import as_str
 from fathom.application.identity import AuthenticatedUser
 from fathom.core.config import Settings
 from fathom.core.errors import InvalidRequestError
-from fathom.crud.supabase.billing import fetch_plan_by_id, upsert_polar_customer
+from fathom.crud.supabase.billing import (
+    create_billing_sync_operation,
+    fetch_plan_by_id,
+    resolve_billing_sync_operation,
+    upsert_polar_customer,
+)
 from fathom.schemas.billing import CheckoutSessionRequest, CheckoutSessionResponse, CustomerPortalSessionResponse
 from fathom.services import polar
 from fathom.services.supabase import create_supabase_admin_client, managed_supabase_client
@@ -53,21 +59,61 @@ async def _create_checkout_session(
         external_customer_id=auth.user_id,
     )
 
-    checkout_url = await polar.create_checkout_session(
-        settings,
-        product_id=product_id,
-        external_customer_id=auth.user_id,
-        metadata={
-            "user_id": auth.user_id,
-            "plan_id": plan_id,
-            "plan_code": str(plan.get("plan_code") or ""),
-            "version": str(plan.get("version") or 1),
-            "plan_type": plan_type,
-        },
+    operation_id = await create_billing_sync_operation(
+        admin_client,
+        user_id=auth.user_id,
+        operation_type="checkout",
+        plan_id=plan_id,
+    )
+    try:
+        checkout_url = await polar.create_checkout_session(
+            settings,
+            product_id=product_id,
+            external_customer_id=auth.user_id,
+            success_url=_checkout_success_url(settings, operation_id),
+            metadata={
+                "user_id": auth.user_id,
+                "plan_id": plan_id,
+                "plan_code": str(plan.get("plan_code") or ""),
+                "version": str(plan.get("version") or 1),
+                "plan_type": plan_type,
+                "billing_operation_id": operation_id,
+            },
+        )
+    except Exception:
+        try:
+            await resolve_billing_sync_operation(
+                admin_client,
+                operation_id=operation_id,
+                user_id=auth.user_id,
+                operation_type="checkout",
+                plan_id=plan_id,
+                status="failed",
+                failure_code="checkout_initialization_failed",
+            )
+        except Exception:
+            logger.warning(
+                "billing.checkout.operation_resolution_failed",
+                exc_info=True,
+            )
+        raise
+
+    logger.info(
+        "billing.checkout.created",
+        extra={"plan_type": plan_type},
+    )
+    return CheckoutSessionResponse(
+        checkout_url=HTTP_URL_ADAPTER.validate_python(checkout_url),
+        operation_id=operation_id,
     )
 
-    logger.info("billing.checkout.created", extra={"user_id": auth.user_id, "plan_id": plan_id, "plan_type": plan_type})
-    return CheckoutSessionResponse(checkout_url=HTTP_URL_ADAPTER.validate_python(checkout_url))
+
+def _checkout_success_url(settings: Settings, operation_id: str) -> str:
+    success_url = polar.get_polar_success_url(settings)
+    parsed = urlsplit(success_url)
+    operation_query = f"billing_operation={operation_id}"
+    query = f"{parsed.query}&{operation_query}" if parsed.query else operation_query
+    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, query, parsed.fragment))
 
 
 async def create_portal_session(auth: AuthenticatedUser, settings: Settings) -> CustomerPortalSessionResponse:

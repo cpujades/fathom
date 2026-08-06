@@ -15,15 +15,14 @@ from groq import RateLimitError as GroqRateLimitError
 from openai import APIConnectionError as OpenAIConnectionError
 from openai import APIStatusError as OpenAIStatusError
 from openai import RateLimitError as OpenAIRateLimitError
-from pydantic import ValidationError
 
-from fathom.core.config import (
-    DEFAULT_PROVIDER_SUMMARY_DEADLINE_SECONDS,
-    DEFAULT_PROVIDER_TRANSCRIPTION_DEADLINE_SECONDS,
-    Settings,
-)
+from fathom.core.config import Settings
+from fathom.core.constants import GROQ_SIGNED_URL_TTL_SECONDS
+from fathom.orchestration.observability import extract_job_error
 from fathom.orchestration.runner import _handle_claimed_job
 from fathom.services.provider_resilience import (
+    PROVIDER_MAX_ATTEMPTS,
+    BackoffPolicy,
     CallableProviderAdapter,
     ProviderFailureKind,
     ProviderOperationError,
@@ -34,8 +33,17 @@ from fathom.services.provider_resilience import (
     extract_retry_after_seconds,
     retryable_status,
 )
-from fathom.services.summarizer import _classify_openrouter_error
-from fathom.services.transcriber import _classify_groq_error, transcribe_url
+from fathom.services.summarizer import (
+    OPENROUTER_SUMMARY_TIMEOUT_SECONDS,
+    SummarizationError,
+    _classify_openrouter_error,
+)
+from fathom.services.transcriber import (
+    GROQ_TRANSCRIPTION_TIMEOUT_SECONDS,
+    TranscriptionError,
+    _classify_groq_error,
+    transcribe_url,
+)
 from supabase import AsyncClient
 
 
@@ -63,7 +71,7 @@ def _fake_adapter(
         stage="testing",
         operation=operation,
         error_classifier=lambda exc: FakeProviderError(kind=ProviderFailureKind.PERMANENT),
-        deadline_error_factory=lambda: FakeProviderError(kind=ProviderFailureKind.TRANSIENT),
+        timeout_error_factory=lambda: FakeProviderError(kind=ProviderFailureKind.TRANSIENT),
     )
 
 
@@ -84,7 +92,7 @@ class ProviderResilienceTests(unittest.IsolatedAsyncioTestCase):
 
         result = await call_with_resilience(
             _fake_adapter(operation),
-            RetryPolicy(deadline_seconds=30),
+            RetryPolicy(attempt_timeout_seconds=30),
             sleep=record_sleep,
             random_source=lambda: 0.0,
         )
@@ -99,7 +107,7 @@ class ProviderResilienceTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(FakeProviderError) as raised:
             await call_with_resilience(
                 _fake_adapter(operation),
-                RetryPolicy(deadline_seconds=30),
+                RetryPolicy(attempt_timeout_seconds=30),
             )
 
         self.assertEqual(raised.exception.kind, ProviderFailureKind.PERMANENT)
@@ -124,7 +132,7 @@ class ProviderResilienceTests(unittest.IsolatedAsyncioTestCase):
 
         result = await call_with_resilience(
             _fake_adapter(operation),
-            RetryPolicy(deadline_seconds=180),
+            RetryPolicy(attempt_timeout_seconds=180),
             sleep=record_sleep,
         )
 
@@ -137,29 +145,33 @@ class ProviderResilienceTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(FakeProviderError):
             await call_with_resilience(
                 _fake_adapter(operation),
-                RetryPolicy(deadline_seconds=30),
+                RetryPolicy(attempt_timeout_seconds=30),
                 sleep=AsyncMock(),
             )
 
         self.assertEqual(operation.await_count, 3)
 
-    async def test_deadline_expires_without_additional_attempt(self) -> None:
-        operation = AsyncMock(side_effect=FakeProviderError(kind=ProviderFailureKind.TRANSIENT))
-        monotonic_values = iter([0.0, 0.0, 0.0, 0.4])
+    async def test_each_timed_out_attempt_uses_the_retry_budget(self) -> None:
+        attempts = 0
+
+        async def operation() -> str:
+            nonlocal attempts
+            attempts += 1
+            await asyncio.Event().wait()
+            raise AssertionError("unreachable")
 
         with self.assertRaises(FakeProviderError) as raised:
             await call_with_resilience(
                 _fake_adapter(operation),
                 RetryPolicy(
-                    deadline_seconds=0.25,
-                    backoff_base_seconds=0.5,
-                    backoff_max_seconds=0.5,
+                    attempt_timeout_seconds=0.001,
+                    max_attempts=2,
+                    backoff=BackoffPolicy(backoff_base_seconds=0, backoff_max_seconds=0),
                 ),
-                monotonic=lambda: next(monotonic_values),
             )
 
         self.assertEqual(raised.exception.kind, ProviderFailureKind.TRANSIENT)
-        operation.assert_awaited_once()
+        self.assertEqual(attempts, 2)
 
     async def test_cancellation_propagates_without_retry(self) -> None:
         operation = AsyncMock(side_effect=asyncio.CancelledError)
@@ -167,7 +179,7 @@ class ProviderResilienceTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(asyncio.CancelledError):
             await call_with_resilience(
                 _fake_adapter(operation),
-                RetryPolicy(deadline_seconds=30),
+                RetryPolicy(attempt_timeout_seconds=30),
             )
 
         operation.assert_awaited_once()
@@ -178,17 +190,16 @@ class ProviderResilienceTests(unittest.IsolatedAsyncioTestCase):
 
     def test_retry_policy_rejects_invalid_limits(self) -> None:
         with self.assertRaises(ValueError):
-            RetryPolicy(deadline_seconds=0)
+            RetryPolicy(attempt_timeout_seconds=0)
         with self.assertRaises(ValueError):
-            RetryPolicy(deadline_seconds=1, max_attempts=0)
+            RetryPolicy(attempt_timeout_seconds=1, max_attempts=0)
         with self.assertRaises(ValueError):
-            RetryPolicy(deadline_seconds=1, backoff_base_seconds=2, backoff_max_seconds=1)
+            BackoffPolicy(backoff_base_seconds=2, backoff_max_seconds=1)
         with self.assertRaises(ValueError):
-            RetryPolicy(deadline_seconds=1, jitter_ratio=1.1)
+            BackoffPolicy(jitter_ratio=1.1)
 
     def test_backoff_jitter_and_retry_after_are_bounded(self) -> None:
-        policy = RetryPolicy(
-            deadline_seconds=30,
+        policy = BackoffPolicy(
             backoff_base_seconds=2,
             backoff_max_seconds=4,
             retry_after_max_seconds=10,
@@ -270,6 +281,45 @@ class ProviderResilienceTests(unittest.IsolatedAsyncioTestCase):
             ProviderFailureKind.TRANSIENT,
         )
 
+    def test_exhausted_capacity_is_user_safe_but_invalid_outputs_remain_stage_specific(self) -> None:
+        groq_request = httpx.Request("POST", "https://api.groq.com/openai/v1/audio/transcriptions")
+        groq_rate_limit = _classify_groq_error(
+            GroqRateLimitError(
+                "limited",
+                response=httpx.Response(429, request=groq_request),
+                body=None,
+            )
+        )
+        openrouter_request = httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions")
+        openrouter_rate_limit = _classify_openrouter_error(
+            OpenAIRateLimitError(
+                "limited",
+                response=httpx.Response(429, request=openrouter_request),
+                body=None,
+            )
+        )
+
+        for error in (groq_rate_limit, openrouter_rate_limit):
+            code, message = extract_job_error(error)
+            self.assertEqual(code, "provider_capacity_reached")
+            self.assertIn("Your source is fine", message)
+            self.assertNotIn("Groq", message)
+            self.assertNotIn("OpenRouter", message)
+
+        transient_code, transient_message = extract_job_error(FakeProviderError(kind=ProviderFailureKind.TRANSIENT))
+        self.assertEqual(transient_code, "provider_temporarily_unavailable")
+        self.assertIn("temporarily unavailable", transient_message)
+        self.assertNotIn("high demand", transient_message)
+
+        transcript_code, _ = extract_job_error(
+            TranscriptionError("Invalid timestamp evidence.", kind=ProviderFailureKind.INVALID_RESPONSE)
+        )
+        summary_code, _ = extract_job_error(
+            SummarizationError("Invalid briefing evidence.", kind=ProviderFailureKind.INVALID_RESPONSE)
+        )
+        self.assertEqual(transcript_code, "transcription_failed")
+        self.assertEqual(summary_code, "summary_failed")
+
     async def test_groq_transcription_uses_cancellable_async_client(self) -> None:
         create = AsyncMock(
             return_value=SimpleNamespace(
@@ -323,41 +373,12 @@ class ProviderResilienceTests(unittest.IsolatedAsyncioTestCase):
         )
 
 
-class ProviderDeadlineSettingsTests(unittest.TestCase):
-    def _settings_values(self) -> dict[str, str]:
-        return {
-            "OPENROUTER_API_KEY": "openrouter",
-            "GROQ_API_KEY": "groq",
-            "SUPABASE_URL": "https://example.supabase.co",
-            "SUPABASE_PUBLISHABLE_KEY": "publishable",
-            "SUPABASE_SECRET_KEY": "secret",
-            "APP_ENV": "local",
-            "RATE_LIMIT": "0",
-            "CORS_ALLOW_ORIGINS": "",
-        }
-
-    def test_provider_deadline_defaults_preserve_existing_retry_envelopes(self) -> None:
-        settings = Settings.model_validate(self._settings_values())
-
-        self.assertEqual(
-            settings.provider_transcription_deadline_seconds,
-            DEFAULT_PROVIDER_TRANSCRIPTION_DEADLINE_SECONDS,
-        )
-        self.assertEqual(
-            settings.provider_summary_deadline_seconds,
-            DEFAULT_PROVIDER_SUMMARY_DEADLINE_SECONDS,
-        )
-
-    def test_provider_deadlines_must_be_positive_and_bounded(self) -> None:
-        values = self._settings_values()
-        values["PROVIDER_TRANSCRIPTION_DEADLINE_SECONDS"] = "0"
-        with self.assertRaises(ValidationError):
-            Settings.model_validate(values)
-
-        values = self._settings_values()
-        values["PROVIDER_SUMMARY_DEADLINE_SECONDS"] = "3601"
-        with self.assertRaises(ValidationError):
-            Settings.model_validate(values)
+class ProviderRuntimeConstantsTests(unittest.TestCase):
+    def test_provider_retry_and_timeout_constants_are_explicit(self) -> None:
+        self.assertEqual(PROVIDER_MAX_ATTEMPTS, 3)
+        self.assertEqual(GROQ_TRANSCRIPTION_TIMEOUT_SECONDS, 120.0)
+        self.assertEqual(OPENROUTER_SUMMARY_TIMEOUT_SECONDS, 300.0)
+        self.assertEqual(GROQ_SIGNED_URL_TTL_SECONDS, 600)
 
 
 class ProviderWorkerRetryTests(unittest.IsolatedAsyncioTestCase):
@@ -388,8 +409,9 @@ class ProviderWorkerRetryTests(unittest.IsolatedAsyncioTestCase):
 
         retry.assert_not_awaited()
         failed.assert_awaited_once()
+        self.assertEqual(failed.await_args.kwargs["error_code"], "external_service_error")
 
-    async def test_rate_limit_requeues_using_retry_after(self) -> None:
+    async def test_exhausted_provider_retries_do_not_requeue_the_whole_job(self) -> None:
         settings = cast(Settings, SimpleNamespace())
         admin_client = cast(AsyncClient, object())
         error = FakeProviderError(
@@ -404,18 +426,14 @@ class ProviderWorkerRetryTests(unittest.IsolatedAsyncioTestCase):
             ),
             patch("fathom.orchestration.runner.record_job_event_best_effort", AsyncMock()),
             patch("fathom.orchestration.runner.mark_job_retry", AsyncMock()) as retry,
-            patch("fathom.orchestration.runner.mark_job_failed", AsyncMock()),
-            patch("fathom.orchestration.runner.datetime") as current_datetime,
+            patch("fathom.orchestration.runner.mark_job_failed", AsyncMock()) as failed,
         ):
-            now = datetime(2026, 7, 29, 12, 0, tzinfo=UTC)
-            current_datetime.now.return_value = now
             await _handle_claimed_job(self._job(), settings, admin_client)
 
-        retry.assert_awaited_once()
-        self.assertEqual(
-            retry.await_args.kwargs["run_after"],
-            now + timedelta(seconds=45),
-        )
+        retry.assert_not_awaited()
+        failed.assert_awaited_once()
+        self.assertEqual(failed.await_args.kwargs["error_code"], "provider_capacity_reached")
+        self.assertIn("Your source is fine", failed.await_args.kwargs["error_message"])
 
 
 if __name__ == "__main__":

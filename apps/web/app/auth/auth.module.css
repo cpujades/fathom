@@ -130,6 +130,38 @@
   line-height: 1.55;
 }
 
+.planSummary {
+  display: grid;
+  gap: 0.22rem;
+  border: 1px solid rgba(117, 140, 126, 0.24);
+  border-radius: 12px;
+  padding: 0.72rem 0.78rem;
+  background: rgba(46, 102, 79, 0.07);
+}
+
+.planSummaryTitle,
+.planSummaryDetails,
+.planSummaryNote {
+  margin: 0;
+}
+
+.planSummaryTitle {
+  color: #203b2e;
+  font-size: 0.92rem;
+}
+
+.planSummaryDetails {
+  color: #315c47;
+  font-size: 0.86rem;
+  font-weight: 650;
+}
+
+.planSummaryNote {
+  color: #65756b;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
 .form {
   display: grid;
   gap: 0.78rem;
@@ -221,6 +253,18 @@
   border-radius: 10px;
   padding: 0.52rem 0.64rem;
   font-size: 0.82rem;
+}
+
+.error p {
+  margin: 0;
+}
+
+.errorAction {
+  display: inline-block;
+  margin-top: 0.34rem;
+  color: inherit;
+  font-weight: 700;
+  text-underline-offset: 0.18em;
 }
 
 .notice {

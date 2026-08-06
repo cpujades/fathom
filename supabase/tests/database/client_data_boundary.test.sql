@@ -20,6 +20,7 @@ select is(
         'usage_ledger',
         'polar_customers',
         'billing_webhook_events',
+        'billing_sync_operations',
         'billing_orders',
         'credit_lots',
         'api_rate_limit_buckets',
@@ -31,7 +32,7 @@ select is(
       )
       and pg_class.relrowsecurity
   ),
-  16::bigint,
+  17::bigint,
   'every application table has row-level security enabled'
 );
 
@@ -48,6 +49,7 @@ select is(
         ('usage_ledger'),
         ('polar_customers'),
         ('billing_webhook_events'),
+        ('billing_sync_operations'),
         ('billing_orders'),
         ('credit_lots'),
         ('api_rate_limit_buckets'),
@@ -101,6 +103,7 @@ select is(
         ('usage_ledger'),
         ('polar_customers'),
         ('billing_webhook_events'),
+        ('billing_sync_operations'),
         ('billing_orders'),
         ('credit_lots'),
         ('api_rate_limit_buckets'),
@@ -131,6 +134,7 @@ select is(
         ('usage_ledger'),
         ('polar_customers'),
         ('billing_webhook_events'),
+        ('billing_sync_operations'),
         ('billing_orders'),
         ('credit_lots'),
         ('api_rate_limit_buckets'),

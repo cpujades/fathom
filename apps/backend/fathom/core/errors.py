@@ -1,12 +1,18 @@
+from __future__ import annotations
+
+from collections.abc import Mapping
+
+
 class AppError(Exception):
     """Base class for all application errors."""
 
     status_code = 500
     code = "internal_error"
 
-    def __init__(self, detail: str) -> None:
+    def __init__(self, detail: str, *, details: Mapping[str, int] | None = None) -> None:
         super().__init__(detail)
         self.detail = detail
+        self.details = dict(details) if details else None
 
 
 class InvalidRequestError(AppError):
@@ -14,6 +20,36 @@ class InvalidRequestError(AppError):
 
     status_code = 400
     code = "invalid_request"
+
+
+class SourceDurationUnknownError(InvalidRequestError):
+    """A source is valid but its complete duration cannot be verified."""
+
+    code = "source_duration_unknown"
+
+
+class SourceTooLongError(InvalidRequestError):
+    """A readable source exceeds Talven's supported duration ceiling."""
+
+    code = "source_too_long"
+
+
+class InsufficientVideoTimeError(InvalidRequestError):
+    """A known source duration exceeds the account's spendable balance."""
+
+    code = "insufficient_video_time"
+
+
+class NoVideoTimeError(InvalidRequestError):
+    """An account has no spendable video time."""
+
+    code = "no_video_time"
+
+
+class BalanceBlockedError(InvalidRequestError):
+    """Outstanding usage debt currently blocks new briefing admission."""
+
+    code = "balance_blocked"
 
 
 class AuthenticationError(AppError):

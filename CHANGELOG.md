@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.21.0](https://github.com/cpujades/fathom/compare/v0.20.6...v0.21.0) (2026-08-06)
+
+_Automated release from [#168](https://github.com/cpujades/fathom/pull/168) feat: complete user workflow improvements_
+
+### Features
+
+- feat: complete user workflow improvements (bae3c68)
+
+### Bug Fixes
+
+- fix: simplify CI tests and sanitize billing logs (29fc936)
+- fix: restore pnpm executable metadata (bb2fb65)
+- fix: remove sensitive webhook log context (bdbde8e)
+
+### Documentation
+
+- docs: document infrastructure and audio scaling (b09c7a4)
+- docs: consolidate launch and operations guidance (b50ebfb)
+
 ## [0.20.6](https://github.com/cpujades/fathom/compare/v0.20.5...v0.20.6) (2026-08-03)
 
 _Automated release from [#165](https://github.com/cpujades/fathom/pull/165) fix: harden launch readiness and user experience_

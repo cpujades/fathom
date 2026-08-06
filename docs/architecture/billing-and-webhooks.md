@@ -22,6 +22,85 @@ A checkout return page is not payment evidence. It only says the browser came
 back. The verified webhook or reconciliation path below must commit the local
 order and entitlement before the application treats payment as settled.
 
+Talven creates a 24-hour `billing_sync_operations` row for each checkout or
+refund request. Checkout metadata carries the opaque operation UUID into the
+resulting Polar order, and the success URL returns the same UUID to the billing
+page. Refund operations are linked to the owned Polar order. The authenticated
+`GET /billing/operations/{operation_id}` endpoint filters by both operation and
+current user; unknown, expired, and other-user identifiers all return the same
+not-found response.
+
+After the authoritative webhook transaction commits, a separate atomic
+database command resolves the browser operation only when its UUID, owner,
+operation type, plan, Polar order, and terminal transition agree. Missing or
+mismatched metadata is logged as a correlation failure but does not roll back a
+valid billing update. Duplicate matching resolution is idempotent.
+
+## What a webhook is
+
+A webhook is an HTTP request that one service sends to another when something
+happens. Talven does not continuously ask Polar whether somebody paid. Polar
+sends a signed event to:
+
+```text
+POST https://<talven-api>/webhooks/polar
+```
+
+A simplified paid-order event looks like this:
+
+```json
+{
+  "id": "evt_order_paid_001",
+  "timestamp": "2026-07-29T10:00:00Z",
+  "type": "order.paid",
+  "data": {
+    "id": "ord_replay_001",
+    "customer_external_id": "<supabase-user-uuid>",
+    "customer_id": "cus_replay_001",
+    "product_id": "<polar-product-uuid>",
+    "currency": "usd",
+    "total_amount": 3000
+  }
+}
+```
+
+This is the replay-test shape, shortened to explain the identifiers. It is not
+evidence for a live taxable checkout. The real request also carries signature,
+event-ID, and timestamp headers.
+
+Conceptually, the handler does this:
+
+```python
+@router.post("/webhooks/polar")
+async def polar_webhook(request: Request) -> dict[str, str]:
+    raw_body = await request.body()
+    event = verify_signature_and_parse(raw_body, request.headers)
+    result = await apply_event_idempotently_in_one_transaction(event)
+    if result == "failed":
+        raise RetryableProviderError()
+    return {"status": "ok"}
+```
+
+That is teaching pseudocode. The real route is
+`apps/backend/fathom/api/routers/webhooks.py`; the application handler is
+`apps/backend/fathom/application/billing/webhooks.py`; signature verification
+lives in `apps/backend/fathom/services/polar.py`; and
+`apps/backend/fathom/crud/supabase/billing_webhooks.py` invokes the
+`apply_polar_webhook_event` Postgres RPC.
+
+The important ideas are:
+
+- verify the signature against the exact raw body before trusting the JSON;
+- use the event ID to make duplicate delivery safe;
+- use provider timestamps so an old event cannot overwrite newer state;
+- apply related billing changes in one database transaction; and
+- treat the browser's checkout redirect as navigation, not proof of payment.
+
+The replay fixture is in
+`apps/backend/tests/fixtures/polar_webhook_replay.json`. Application examples
+are in `apps/backend/tests/test_billing_webhooks.py`; database ordering and
+transaction examples are in `supabase/tests/database/polar_webhooks.test.sql`.
+
 ## Inbound webhook path
 
 ```mermaid
@@ -59,6 +138,11 @@ Talven applies `customer.created`, `customer.state_changed`, `order.paid`,
 `subscription.updated`, and `subscription.revoked`. Unknown events are recorded
 as ignored rather than allowed to mutate billing.
 
+Polar scheduled cancellation keeps the subscription `active` and its benefits
+available through `current_period_end`; the terminal `canceled` state means the
+subscription has ended. Talven therefore treats only current active status as
+the paid-subscription top-up path and labels terminal status “Canceled.”
+
 ## Idempotency and ordering
 
 `billing_webhook_events.event_id` is the deduplication key. The RPC also takes
@@ -81,15 +165,27 @@ are locked and updated in one transaction.
 
 For `order.paid`, Talven resolves the plan by Polar product ID, upserts the
 order, creates a pack credit lot once, pays down debt from newly granted credit,
-and refreshes the entitlement snapshot. For `order.refunded`, Talven locks the
+refreshes the entitlement snapshot, and resolves the matching checkout sync
+operation. For `order.refunded`, Talven locks the
 order, clamps the refunded amount to the paid amount, revokes remaining pack
-credit when the pack becomes refunded, and refreshes spendable balance.
+credit when the pack becomes refunded, refreshes spendable balance, and
+resolves pending refund operations for that order. Duplicate webhook delivery
+repeats the operation resolution safely.
+
+The browser checks only the narrow operation resource: immediately, then after
+1, 2, 4, and capped 5-second delays. Requests never overlap. Success or a safe
+failure triggers one full billing refresh. A timeout or operation-read failure
+also triggers one full authoritative refresh without claiming that the
+individual operation was confirmed. Manual refresh checks the operation once
+and then reloads the balance, subscription, and orders, so unresolved
+correlation cannot hide an already-applied billing change. Unmount or
+authenticated user change aborts the work without updating another session.
 
 ## Refund and subscription repair
 
-The worker runs one supervised billing-maintenance pass every 60 seconds. The
+The worker runs one supervised billing-maintenance pass every five minutes. The
 tick is only an opportunity to find due work; it does not call Polar for every
-account every minute. A distributed `billing-recovery` lease allows one worker
+account every five minutes. A distributed `billing-recovery` lease allows one worker
 to run the pass at a time for 120 seconds, renewed every 30 seconds.
 
 Each pass:

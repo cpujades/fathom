@@ -5,8 +5,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
+import { AuthPlanSummary } from "../auth/AuthPlanSummary";
 import styles from "../auth/auth.module.css";
-import { mapAuthCallbackErrorCode, mapAuthError } from "../lib/authErrors";
+import { resolveAuthPlanSummary } from "../content/pricing";
+import { storeSignInEmail } from "../lib/authEmailTransfer";
+import { isExistingAccountAuthError, mapAuthCallbackErrorCode, mapAuthError } from "../lib/authErrors";
 import { getPasswordPolicyError } from "../lib/authPolicy";
 import { getSupabaseClient } from "../lib/supabaseClient";
 import {
@@ -51,6 +54,10 @@ export default function SignUpPage() {
     });
   }, [intent, nextPath, plan]);
 
+  const selectedPlan = useMemo(() => {
+    return resolveAuthPlanSummary(intent, plan);
+  }, [intent, plan]);
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [firstName, setFirstName] = useState("");
@@ -59,11 +66,13 @@ export default function SignUpPage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [duplicateAccount, setDuplicateAccount] = useState(false);
 
   const handleSignUp = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
     setMessage(null);
+    setDuplicateAccount(false);
 
     try {
       if (!email.trim()) {
@@ -111,7 +120,9 @@ export default function SignUpPage() {
         if (otpError) {
           setError(mapAuthError(otpError, "Unable to send a sign-up link."));
         } else {
-          setMessage("Check your inbox to continue with account creation.");
+          setMessage(
+            "Check your inbox to continue with Talven. The link will sign you in; if you are new, it will create your account."
+          );
         }
         return;
       }
@@ -126,8 +137,10 @@ export default function SignUpPage() {
       });
 
       if (signUpError) {
+        setDuplicateAccount(isExistingAccountAuthError(signUpError));
         setError(mapAuthError(signUpError, "Unable to create your account."));
       } else if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+        setDuplicateAccount(true);
         setError("An account with this email already exists. Try signing in instead.");
       } else if (data.session) {
         router.replace(destinationPath);
@@ -138,6 +151,14 @@ export default function SignUpPage() {
       setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleExistingAccountSignIn = () => {
+    try {
+      storeSignInEmail(window.sessionStorage, email);
+    } catch {
+      // Storage can be unavailable in privacy-restricted browsers; the sign-in route still works.
     }
   };
 
@@ -193,9 +214,16 @@ export default function SignUpPage() {
             <p className={styles.subtitle}>Magic link is the fastest way to start. You can switch to password anytime.</p>
           </div>
 
+          <AuthPlanSummary intent={intent} plan={plan} />
+
           {error ? (
             <div className={styles.error} role="alert">
-              {error}
+              <p>{error}</p>
+              {duplicateAccount ? (
+                <Link className={styles.errorAction} href={signInHref} onClick={handleExistingAccountSignIn}>
+                  Sign in to continue{selectedPlan ? ` with ${selectedPlan.productName}` : ""}
+                </Link>
+              ) : null}
             </div>
           ) : null}
           {message ? (

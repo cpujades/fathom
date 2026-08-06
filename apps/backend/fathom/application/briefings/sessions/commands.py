@@ -39,7 +39,7 @@ from fathom.schemas.briefing_sessions import (
     BriefingSessionResolution,
     BriefingSessionResponse,
 )
-from fathom.services.downloader import fetch_video_metadata_with_deadline
+from fathom.services.downloader import SOURCE_METADATA_TIMEOUT_SECONDS, fetch_video_metadata_with_deadline
 from fathom.services.summarizer import OPENROUTER_MODEL
 from fathom.services.supabase import (
     create_supabase_admin_client,
@@ -124,7 +124,7 @@ async def _create_briefing_session(
 
         metadata = await fetch_video_metadata_with_deadline(
             source.canonical_url,
-            deadline_seconds=settings.source_metadata_deadline_seconds,
+            deadline_seconds=SOURCE_METADATA_TIMEOUT_SECONDS,
         )
         validate_video_duration(metadata.duration_seconds)
         logger.info(
