@@ -8,6 +8,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any, Literal, cast
 from urllib.parse import quote
+from uuid import UUID
 
 import asyncpg
 
@@ -17,6 +18,7 @@ from fathom.core.errors import ConfigurationError
 logger = logging.getLogger(__name__)
 
 PostgresNotificationSignal = Literal["notification", "disconnected"]
+JobEventNotificationSignal = str | Literal["disconnected", "overflow"]
 
 
 def _build_postgres_url(settings: Settings) -> str | None:
@@ -66,6 +68,43 @@ def _enqueue_disconnect_signal(
     # A disconnect must win over a queued notification so the supervisor does
     # not wait forever on a dead LISTEN connection.
     if signal.full():
+        signal.get_nowait()
+    signal.put_nowait("disconnected")
+
+
+def _enqueue_job_event_signal(
+    _connection: asyncpg.Connection,
+    _pid: int,
+    _channel: str,
+    payload: str,
+    *,
+    signal: asyncio.Queue[JobEventNotificationSignal],
+) -> None:
+    data = _parse_notification_payload(payload)
+    if data is None:
+        return
+
+    try:
+        job_id = str(UUID(str(data.get("job_id") or "")))
+    except ValueError:
+        logger.error("postgres.notification.invalid_job_id")
+        return
+
+    if signal.full():
+        logger.warning("postgres.notification.queue_full", extra={"channel": _channel})
+        while not signal.empty():
+            signal.get_nowait()
+        signal.put_nowait("overflow")
+        return
+    signal.put_nowait(job_id)
+
+
+def _enqueue_job_event_disconnect_signal(
+    _connection: asyncpg.Connection,
+    *,
+    signal: asyncio.Queue[JobEventNotificationSignal],
+) -> None:
+    while not signal.empty():
         signal.get_nowait()
     signal.put_nowait("disconnected")
 
@@ -141,6 +180,44 @@ async def listen_for_notifications(
 
         def termination_handler(connection: asyncpg.Connection) -> None:
             _enqueue_disconnect_signal(connection, signal=signal)
+
+        await conn.add_listener(channel, notification_handler)
+        conn.add_termination_listener(termination_handler)
+        logger.info("postgres.listen.started", extra={"channel": channel})
+        try:
+            yield signal
+        finally:
+            conn.remove_termination_listener(termination_handler)
+            if not conn.is_closed():
+                await conn.remove_listener(channel, notification_handler)
+            logger.info("postgres.listen.stopped", extra={"channel": channel})
+
+
+@asynccontextmanager
+async def listen_for_job_event_notifications(
+    settings: Settings,
+    channel: str,
+) -> AsyncIterator[asyncio.Queue[JobEventNotificationSignal]]:
+    """Listen for job-scoped wake hints while keeping event data durable."""
+    async with create_postgres_connection(settings) as conn:
+        signal: asyncio.Queue[JobEventNotificationSignal] = asyncio.Queue(maxsize=1024)
+
+        def notification_handler(
+            connection: asyncpg.Connection,
+            pid: int,
+            notification_channel: str,
+            payload: str,
+        ) -> None:
+            _enqueue_job_event_signal(
+                connection,
+                pid,
+                notification_channel,
+                payload,
+                signal=signal,
+            )
+
+        def termination_handler(connection: asyncpg.Connection) -> None:
+            _enqueue_job_event_disconnect_signal(connection, signal=signal)
 
         await conn.add_listener(channel, notification_handler)
         conn.add_termination_listener(termination_handler)

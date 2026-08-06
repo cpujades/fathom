@@ -82,6 +82,7 @@ async def get_session_events(
         client_subject=f"ip:{get_request_client_ip(request)}",
         last_event_id=request.headers.get("last-event-id"),
         is_disconnected=request.is_disconnected,
+        event_coordinator=getattr(request.app.state, "job_event_coordinator", None),
     )
     return StreamingResponse(
         event_stream,

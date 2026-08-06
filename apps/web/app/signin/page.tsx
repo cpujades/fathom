@@ -5,7 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
+import { AuthPlanSummary } from "../auth/AuthPlanSummary";
 import styles from "../auth/auth.module.css";
+import { takeSignInEmail } from "../lib/authEmailTransfer";
 import { mapAuthCallbackErrorCode, mapAuthError } from "../lib/authErrors";
 import { getSupabaseClient } from "../lib/supabaseClient";
 import {
@@ -34,6 +36,15 @@ export default function SignInPage() {
     setIntent(authIntent.intent);
     setPlan(authIntent.plan);
     setError(mapAuthCallbackErrorCode(params.get("auth_error")));
+
+    try {
+      const transferredEmail = takeSignInEmail(window.sessionStorage);
+      if (transferredEmail) {
+        setEmail(transferredEmail);
+      }
+    } catch {
+      // Storage can be unavailable in privacy-restricted browsers; sign-in remains usable.
+    }
   }, []);
 
   const callbackUrl = useMemo(() => {
@@ -182,6 +193,8 @@ export default function SignInPage() {
             </h2>
             <p className={styles.subtitle}>Use password or magic link. Google sign-in is also available.</p>
           </div>
+
+          <AuthPlanSummary intent={intent} plan={plan} />
 
           {error ? (
             <div className={styles.error} role="alert">

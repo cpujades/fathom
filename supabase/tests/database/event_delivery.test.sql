@@ -2,7 +2,7 @@ begin;
 
 set local search_path = extensions, public, pg_catalog;
 
-select plan(21);
+select plan(25);
 
 select col_not_null(
   'public',
@@ -86,6 +86,39 @@ select ok(
     'execute'
   ),
   'authenticated users cannot invoke the trigger function'
+);
+select trigger_is(
+  'public',
+  'job_events',
+  'job_event_available_trigger',
+  'public',
+  'notify_job_event_available',
+  'persisted events publish a replica wake hint'
+);
+select is(
+  (
+    select proconfig
+    from pg_catalog.pg_proc
+    where oid = 'public.notify_job_event_available()'::regprocedure
+  ),
+  array['search_path=pg_catalog']::text[],
+  'event notification function has an immutable search path'
+);
+select ok(
+  not has_function_privilege(
+    'authenticated',
+    'public.notify_job_event_available()',
+    'execute'
+  ),
+  'authenticated users cannot invoke the event notification function'
+);
+select ok(
+  not has_function_privilege(
+    'service_role',
+    'public.notify_job_event_available()',
+    'execute'
+  ),
+  'service code cannot publish event notifications directly'
 );
 
 insert into public.jobs (

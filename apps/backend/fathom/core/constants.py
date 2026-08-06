@@ -1,6 +1,11 @@
 """Application-wide constants."""
 
 # ---------------------------------------------------------------------------
+# Billing
+# ---------------------------------------------------------------------------
+BILLING_DEBT_CAP_SECONDS = 600
+
+# ---------------------------------------------------------------------------
 # Summarization
 # ---------------------------------------------------------------------------
 SUMMARY_PROMPT_KEY_EVIDENCE = "briefing-v6-evidence-links"
@@ -32,7 +37,7 @@ SIGNED_URL_TTL_SECONDS = 3600  # 1 hour
 # ---------------------------------------------------------------------------
 GROQ_MODEL = "whisper-large-v3-turbo"
 GROQ_TRANSCRIPT_PROVIDER_MODEL = f"groq:{GROQ_MODEL}:segments-v1"
-GROQ_SIGNED_URL_TTL_SECONDS = 60
+GROQ_SIGNED_URL_TTL_SECONDS = 600
 
 # ---------------------------------------------------------------------------
 # Buckets

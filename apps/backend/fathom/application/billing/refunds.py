@@ -5,10 +5,13 @@ import logging
 from fathom.application.billing.parsing import as_str, is_definitive_duplicate_refund_error
 from fathom.application.identity import AuthenticatedUser
 from fathom.core.config import Settings
+from fathom.core.constants import BILLING_DEBT_CAP_SECONDS
 from fathom.core.errors import ExternalServiceError, InvalidRequestError
 from fathom.crud.supabase.billing import (
     begin_pack_refund,
+    create_billing_sync_operation,
     reopen_pack_refund,
+    resolve_billing_sync_operation,
 )
 from fathom.schemas.billing import PackRefundResponse
 from fathom.services import polar
@@ -40,13 +43,27 @@ async def _request_pack_refund(
     settings: Settings,
     admin_client: AsyncClient,
 ) -> PackRefundResponse:
+    operation_id = await create_billing_sync_operation(
+        admin_client,
+        user_id=auth.user_id,
+        operation_type="refund",
+        polar_order_id=polar_order_id,
+    )
     resolution = await begin_pack_refund(
         admin_client,
         user_id=auth.user_id,
         polar_order_id=polar_order_id,
-        debt_cap_seconds=settings.billing_debt_cap_seconds,
+        debt_cap_seconds=BILLING_DEBT_CAP_SECONDS,
     )
     resolution_type = str(resolution.get("resolution_type") or "")
+    if resolution_type != "started":
+        await _fail_operation(
+            admin_client,
+            operation_id=operation_id,
+            user_id=auth.user_id,
+            polar_order_id=polar_order_id,
+            failure_code="refund_not_started",
+        )
     if resolution_type == "not_found":
         raise InvalidRequestError("Pack order not found.")
     if resolution_type == "not_pack":
@@ -67,6 +84,13 @@ async def _request_pack_refund(
     refundable_amount_cents = int(resolution.get("refundable_amount_cents") or 0)
     remaining_seconds = int(resolution.get("remaining_seconds_before_refund") or 0)
     if refundable_amount_cents <= 0 or remaining_seconds <= 0:
+        await _fail_operation(
+            admin_client,
+            operation_id=operation_id,
+            user_id=auth.user_id,
+            polar_order_id=polar_order_id,
+            failure_code="refund_invalid_amount",
+        )
         raise ExternalServiceError("Pack refund returned an invalid authoritative amount.")
 
     try:
@@ -81,27 +105,72 @@ async def _request_pack_refund(
                 "billing.refund.duplicate_or_conflict",
                 extra={"polar_order_id": polar_order_id, "http_status": exc.http_status},
             )
-            raise InvalidRequestError(
-                "Refund request already exists or may have already been processed. "
-                "Please wait for webhook confirmation."
-            ) from exc
+            return PackRefundResponse(
+                operation_id=operation_id,
+                polar_order_id=polar_order_id,
+                refund_id=None,
+                requested_amount_cents=refundable_amount_cents,
+                remaining_seconds_before_refund=remaining_seconds,
+                status="pending_webhook_confirmation",
+            )
 
         await reopen_pack_refund(
             admin_client,
             user_id=auth.user_id,
             polar_order_id=polar_order_id,
-            debt_cap_seconds=settings.billing_debt_cap_seconds,
+            debt_cap_seconds=BILLING_DEBT_CAP_SECONDS,
+        )
+        await _fail_operation(
+            admin_client,
+            operation_id=operation_id,
+            user_id=auth.user_id,
+            polar_order_id=polar_order_id,
+            failure_code="refund_rejected",
         )
         raise
     except Exception:
         logger.exception("billing.refund.outcome_unknown", extra={"polar_order_id": polar_order_id})
-        raise
+        return PackRefundResponse(
+            operation_id=operation_id,
+            polar_order_id=polar_order_id,
+            refund_id=None,
+            requested_amount_cents=refundable_amount_cents,
+            remaining_seconds_before_refund=remaining_seconds,
+            status="pending_webhook_confirmation",
+        )
 
     refund_id = as_str(refund.get("id"))
     return PackRefundResponse(
+        operation_id=operation_id,
         polar_order_id=polar_order_id,
         refund_id=refund_id,
         requested_amount_cents=refundable_amount_cents,
         remaining_seconds_before_refund=remaining_seconds,
         status="pending_webhook_confirmation",
     )
+
+
+async def _fail_operation(
+    admin_client: AsyncClient,
+    *,
+    operation_id: str,
+    user_id: str,
+    polar_order_id: str,
+    failure_code: str,
+) -> None:
+    try:
+        await resolve_billing_sync_operation(
+            admin_client,
+            operation_id=operation_id,
+            user_id=user_id,
+            operation_type="refund",
+            polar_order_id=polar_order_id,
+            status="failed",
+            failure_code=failure_code,
+        )
+    except Exception:
+        logger.warning(
+            "billing.refund.operation_resolution_failed",
+            exc_info=True,
+            extra={"operation_id": operation_id},
+        )

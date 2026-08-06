@@ -53,7 +53,9 @@ Supported event names are:
 | `session.event` | Persisted diagnostic event metadata |
 
 The parser accepts LF and CRLF framing, handles chunk boundaries and comments,
-and rejects invalid JSON or payload shapes before they enter React state. When
+reports every received chunk as transport activity, and rejects invalid JSON or
+payload shapes before they enter React state. Keepalive comments therefore
+prevent false stale-stream recovery without becoming product-state events. When
 an SSE payload changes, update the producer, validator, reducer types, and
 `sessionStream.test.mjs` together.
 

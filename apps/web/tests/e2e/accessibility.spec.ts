@@ -1,6 +1,8 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
+import { SIGN_IN_EMAIL_TRANSFER_KEY } from "../../app/lib/authEmailTransfer";
+
 const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 
 async function expectNoAutomaticAccessibilityViolations(page: Page): Promise<void> {
@@ -63,6 +65,41 @@ test("public pack choices carry the exact catalog plan code into signup", async 
   await expect(page.getByRole("link", { name: "Select Trial" })).toHaveAttribute("href", /plan=trial_pack/);
   await expect(page.getByRole("link", { name: "Select Creator" })).toHaveAttribute("href", /plan=creator_pack/);
   await expect(page.getByRole("link", { name: "Select Studio" })).toHaveAttribute("href", /plan=studio_pack/);
+});
+
+test("auth pages show only trusted paid-plan context", async ({ page }) => {
+  await page.goto("/signup?next=%2Fapp%2Fbilling&intent=paid&plan=creator_pack");
+
+  const summary = page.getByRole("region", { name: "Continue with Creator Pack" });
+  await expect(summary).toContainText("$15 one-time · 10 hours");
+  await expect(summary).toContainText("Payment has not started");
+
+  await page.goto("/signin?next=%2Fapp%2Fbilling&intent=paid&plan=made_up_plan");
+  await expect(page.getByRole("region", { name: /^Continue with / })).toHaveCount(0);
+});
+
+test("ordinary auth entries remain free of product-selection copy", async ({ page }) => {
+  for (const route of ["/signup", "/signin"] as const) {
+    await page.goto(route);
+    await expect(page.getByRole("region", { name: /^Continue with / })).toHaveCount(0);
+    await expect(page.getByText("Payment has not started", { exact: false })).toHaveCount(0);
+  }
+});
+
+test("duplicate-signup recovery email is consumed without entering the URL or password", async ({ page }) => {
+  await page.goto("/signup");
+  await page.evaluate(
+    ({ key, email }) => window.sessionStorage.setItem(key, email),
+    { key: SIGN_IN_EMAIL_TRANSFER_KEY, email: "person@example.com" }
+  );
+
+  await page.goto("/signin?next=%2Fapp%2Fbilling&intent=paid&plan=creator_pack");
+  await expect(page.locator("input#email")).toHaveValue("person@example.com");
+  await expect(page.locator("input#password")).toHaveValue("");
+  await expect(page).not.toHaveURL(/person%40example\.com|person@example\.com/);
+
+  await page.reload();
+  await expect(page.locator("input#email")).toHaveValue("");
 });
 
 test("public routes return baseline browser security headers", async ({ request }) => {

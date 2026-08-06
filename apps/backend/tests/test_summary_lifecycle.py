@@ -28,10 +28,7 @@ class SummaryLifecycleOrchestrationTests(unittest.IsolatedAsyncioTestCase):
     ) -> None:
         settings = cast(
             Settings,
-            SimpleNamespace(
-                openrouter_api_key="test-key",
-                provider_summary_deadline_seconds=30,
-            ),
+            SimpleNamespace(openrouter_api_key="test-key"),
         )
         admin_client = cast(AsyncClient, object())
         segments = (
@@ -239,10 +236,7 @@ class SummaryLifecycleOrchestrationTests(unittest.IsolatedAsyncioTestCase):
     ) -> None:
         settings = cast(
             Settings,
-            SimpleNamespace(
-                openrouter_api_key="test-key",
-                provider_summary_deadline_seconds=30,
-            ),
+            SimpleNamespace(openrouter_api_key="test-key"),
         )
         admin_client = cast(AsyncClient, object())
         segments = (
@@ -329,10 +323,7 @@ class SummaryLifecycleOrchestrationTests(unittest.IsolatedAsyncioTestCase):
     async def test_failed_evidence_generation_is_marked_for_safe_takeover(self) -> None:
         settings = cast(
             Settings,
-            SimpleNamespace(
-                openrouter_api_key="test-key",
-                provider_summary_deadline_seconds=30,
-            ),
+            SimpleNamespace(openrouter_api_key="test-key"),
         )
         admin_client = cast(AsyncClient, object())
         segments = (TranscriptSegment(segment_index=0, start_seconds=0, end_seconds=10, text="Evidence."),)

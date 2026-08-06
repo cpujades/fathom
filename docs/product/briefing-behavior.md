@@ -136,8 +136,11 @@ without exposing malformed JSON, ungrounded partial text, or content that may
 later fail validation. Reduced-motion preferences show it immediately.
 
 If the event stream disconnects, the browser reconnects using `Last-Event-ID`,
-replays a bounded persisted history, and reconciles with an authoritative full
-snapshot. Replay truncation skips directly to that snapshot rather than
+replays a bounded persisted history, and performs one authoritative snapshot
+read as part of recovery. SSE bytes and 15-second keepalives prove transport
+health independently from meaningful progress events; 30 seconds without
+transport activity closes the stale stream before recovery and bounded-backoff
+reconnection. Replay truncation skips directly to the snapshot rather than
 pretending every intermediate event was delivered. Active streams use expiring
 database leases: the defaults allow three per user and twelve per client IP,
 renew while connected, and close after one hour so a client must reconnect.
@@ -175,5 +178,5 @@ the [deferred work register](../decisions/deferred-work.md).
   reject useful lectures, interviews, or technical videos. Validate a labeled
   set before adding a gate.
 - Podcast Q&A/chat: post-core-hardening and outside the first launch.
-- Shared SSE wake-ups and event retention: active stream leases bound clients,
-  but measure early-use query load before changing the one-second polling design.
+- Job-event retention: shared Postgres wake-ups remove per-viewer polling, but
+  durable event growth still needs measured retention and replay-volume evidence.

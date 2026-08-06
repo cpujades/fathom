@@ -1,9 +1,17 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+
+class ErrorDetails(BaseModel):
+    required_seconds: int | None = Field(default=None, ge=0)
+    available_seconds: int | None = Field(default=None, ge=0)
+    debt_seconds: int | None = Field(default=None, ge=0)
+    maximum_seconds: int | None = Field(default=None, ge=0)
 
 
 class ErrorDetail(BaseModel):
     code: str
     message: str
+    details: ErrorDetails | None = None
 
 
 class ErrorResponse(BaseModel):

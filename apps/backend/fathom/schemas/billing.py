@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, HttpUrl
@@ -12,6 +13,7 @@ class CheckoutSessionRequest(BaseModel):
 
 class CheckoutSessionResponse(BaseModel):
     checkout_url: HttpUrl
+    operation_id: UUID
 
 
 class CustomerPortalSessionResponse(BaseModel):
@@ -19,11 +21,19 @@ class CustomerPortalSessionResponse(BaseModel):
 
 
 class PackRefundResponse(BaseModel):
+    operation_id: UUID
     polar_order_id: str
     refund_id: str | None
     requested_amount_cents: int
     remaining_seconds_before_refund: int
     status: str
+
+
+class BillingSyncOperationResponse(BaseModel):
+    operation_id: UUID
+    operation_type: Literal["checkout", "refund"]
+    status: Literal["pending", "succeeded", "failed"]
+    failure_code: str | None
 
 
 class PlanResponse(BaseModel):
@@ -44,6 +54,7 @@ class PlanResponse(BaseModel):
 
 class UsageOverviewResponse(BaseModel):
     subscription_plan_name: str | None
+    has_active_paid_subscription: bool
     subscription_remaining_seconds: int
     pack_remaining_seconds: int
     total_remaining_seconds: int

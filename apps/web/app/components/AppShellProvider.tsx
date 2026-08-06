@@ -18,14 +18,25 @@ import {
 } from "../lib/appDataCache";
 import { getSupabaseClient } from "../lib/supabaseClient";
 import { buildSignInPath, getCurrentAppPath } from "../lib/url";
+import { isUsageSnapshotStale } from "../lib/usage";
 
 type AppShellContextValue = {
   accessToken: string | null;
   authenticated: boolean;
+  debtSeconds: number | null;
+  hasActivePaidSubscription: boolean | null;
+  isBlocked: boolean | null;
   loading: boolean;
   remainingSeconds: number | null;
   refreshUsage: () => Promise<void>;
-  setRemainingSeconds: (userId: string, value: number | null) => void;
+  usageRefreshFailed: boolean;
+  setRemainingSeconds: (
+    userId: string,
+    value: number | null,
+    hasActivePaidSubscription?: boolean | null,
+    debtSeconds?: number | null,
+    isBlocked?: boolean | null
+  ) => void;
   signOut: () => Promise<void>;
   user: User | null;
 };
@@ -38,7 +49,6 @@ type ActiveSessionIdentity = {
 const AppShellContext = createContext<AppShellContextValue | null>(null);
 
 const PREFETCH_ROUTES = ["/app", "/app/briefings", "/app/billing", "/app/account", "/app/briefings/new"];
-const USAGE_CACHE_TTL_MS = 30_000;
 const DEFAULT_APP_PATH = "/app";
 
 type UsageRefreshResult = "ok" | "unauthorized" | "error" | "stale";
@@ -77,7 +87,11 @@ function parseUsageSnapshot(value: unknown): UsageSnapshot | null {
   }
 
   return {
+    debtSeconds: typeof snapshot.debtSeconds === "number" ? snapshot.debtSeconds : null,
     fetchedAt: snapshot.fetchedAt,
+    hasActivePaidSubscription:
+      typeof snapshot.hasActivePaidSubscription === "boolean" ? snapshot.hasActivePaidSubscription : null,
+    isBlocked: typeof snapshot.isBlocked === "boolean" ? snapshot.isBlocked : null,
     remainingSeconds: snapshot.remainingSeconds ?? null
   };
 }
@@ -102,22 +116,44 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [authenticated, setAuthenticated] = useState(false);
+  const [debtSeconds, setDebtSeconds] = useState<number | null>(null);
+  const [hasActivePaidSubscription, setHasActivePaidSubscription] = useState<boolean | null>(null);
+  const [isBlocked, setIsBlocked] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
   const [remainingSeconds, setRemainingSecondsState] = useState<number | null>(null);
+  const [usageRefreshFailed, setUsageRefreshFailed] = useState(false);
 
   const commitUsageSnapshot = useCallback((userId: string, snapshot: UsageSnapshot): boolean => {
     if (!cacheUsageSnapshot(userId, snapshot)) {
       return false;
     }
     setRemainingSecondsState(snapshot.remainingSeconds);
+    setDebtSeconds(snapshot.debtSeconds);
+    setHasActivePaidSubscription(snapshot.hasActivePaidSubscription);
+    setIsBlocked(snapshot.isBlocked);
+    setUsageRefreshFailed(false);
     publishUsageSnapshot(userId, snapshot);
     return true;
   }, []);
 
   const setRemainingSeconds = useCallback(
-    (userId: string, value: number | null) => {
+    (
+      userId: string,
+      value: number | null,
+      paidSubscription?: boolean | null,
+      nextDebtSeconds?: number | null,
+      nextIsBlocked?: boolean | null
+    ) => {
+      const currentSnapshot = getCachedUsageSnapshot(userId);
       commitUsageSnapshot(userId, {
+        debtSeconds:
+          nextDebtSeconds === undefined ? currentSnapshot?.debtSeconds ?? null : nextDebtSeconds,
         fetchedAt: Date.now(),
+        hasActivePaidSubscription:
+          paidSubscription === undefined
+            ? currentSnapshot?.hasActivePaidSubscription ?? null
+            : paidSubscription,
+        isBlocked: nextIsBlocked === undefined ? currentSnapshot?.isBlocked ?? null : nextIsBlocked,
         remainingSeconds: value
       });
     },
@@ -133,7 +169,11 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
     setAuthenticated(Boolean(session));
     setUser(session?.user ?? null);
     setAccessToken(session?.access_token ?? null);
+    setDebtSeconds(null);
+    setHasActivePaidSubscription(null);
+    setIsBlocked(null);
     setRemainingSecondsState(null);
+    setUsageRefreshFailed(false);
     setSessionGeneration((generation) => generation + 1);
   }, []);
 
@@ -157,7 +197,10 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
         }
 
         commitUsageSnapshot(userId, {
+          debtSeconds: data?.debt_seconds ?? null,
           fetchedAt: Date.now(),
+          hasActivePaidSubscription: data?.has_active_paid_subscription ?? null,
+          isBlocked: data?.is_blocked ?? null,
           remainingSeconds: data?.total_remaining_seconds ?? null
         });
         return "ok";
@@ -181,9 +224,9 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
       setLoading(false);
       redirectToSignIn();
     } else if (refreshResult === "error") {
-      setRemainingSeconds(identity.userId, null);
+      setUsageRefreshFailed(true);
     }
-  }, [applyAuthSession, redirectToSignIn, refreshUsageForSession, setRemainingSeconds]);
+  }, [applyAuthSession, redirectToSignIn, refreshUsageForSession]);
 
   useEffect(() => {
     for (const route of PREFETCH_ROUTES) {
@@ -207,6 +250,10 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
       }
       if (cacheUsageSnapshot(userId, snapshot)) {
         setRemainingSecondsState(snapshot.remainingSeconds);
+        setDebtSeconds(snapshot.debtSeconds);
+        setHasActivePaidSubscription(snapshot.hasActivePaidSubscription);
+        setIsBlocked(snapshot.isBlocked);
+        setUsageRefreshFailed(false);
       }
     };
 
@@ -261,7 +308,13 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
 
       const userId = session.user.id;
       const storedSnapshot = readStoredUsageSnapshot(userId);
-      if (storedSnapshot && Date.now() - storedSnapshot.fetchedAt < USAGE_CACHE_TTL_MS) {
+      if (
+        storedSnapshot &&
+        storedSnapshot.debtSeconds !== null &&
+        storedSnapshot.hasActivePaidSubscription !== null &&
+        storedSnapshot.isBlocked !== null &&
+        !isUsageSnapshotStale(storedSnapshot, Date.now())
+      ) {
         commitUsageSnapshot(userId, storedSnapshot);
         setLoading(false);
         return;
@@ -279,7 +332,7 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
         return;
       }
       if (refreshResult === "error") {
-        setRemainingSeconds(userId, null);
+        setUsageRefreshFailed(true);
       }
       setLoading(false);
     };
@@ -313,6 +366,31 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
     };
   }, [applyAuthSession, commitUsageSnapshot, redirectToSignIn, refreshUsageForSession, setRemainingSeconds]);
 
+  useEffect(() => {
+    if (!accessToken || !user?.id) {
+      return;
+    }
+
+    const refreshStaleUsage = () => {
+      const snapshot = getCachedUsageSnapshot(user.id);
+      if (isUsageSnapshotStale(snapshot, Date.now())) {
+        void refreshUsage();
+      }
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshStaleUsage();
+      }
+    };
+
+    window.addEventListener("focus", refreshStaleUsage);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener("focus", refreshStaleUsage);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [accessToken, refreshUsage, user?.id]);
+
   const signOut = useCallback(async () => {
     const transitionId = ++authTransitionRef.current;
     applyAuthSession(null);
@@ -333,14 +411,31 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
     () => ({
       accessToken,
       authenticated,
+      debtSeconds,
+      hasActivePaidSubscription,
+      isBlocked,
       loading,
       remainingSeconds,
       refreshUsage,
       setRemainingSeconds,
       signOut,
+      usageRefreshFailed,
       user
     }),
-    [accessToken, authenticated, loading, refreshUsage, remainingSeconds, setRemainingSeconds, signOut, user]
+    [
+      accessToken,
+      authenticated,
+      debtSeconds,
+      hasActivePaidSubscription,
+      isBlocked,
+      loading,
+      refreshUsage,
+      remainingSeconds,
+      setRemainingSeconds,
+      signOut,
+      usageRefreshFailed,
+      user
+    ]
   );
 
   return (

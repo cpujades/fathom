@@ -10,11 +10,10 @@ from unittest.mock import AsyncMock, patch
 
 from pydantic import ValidationError
 
-from fathom.core.config import (
-    DEFAULT_WORKER_SHUTDOWN_GRACE_SECONDS,
-    Settings,
-)
+from fathom.core.config import Settings
 from fathom.orchestration.runner import (
+    WORKER_BILLING_MAINTENANCE_INTERVAL_SECONDS,
+    WORKER_SHUTDOWN_GRACE_SECONDS,
     _run_job_listener,
     _run_job_with_heartbeat,
     _run_loop,
@@ -196,7 +195,6 @@ class WorkerShutdownTests(unittest.IsolatedAsyncioTestCase):
             Settings,
             SimpleNamespace(
                 worker_max_concurrent_jobs=1,
-                worker_shutdown_grace_seconds=0,
             ),
         )
         shutdown_event = asyncio.Event()
@@ -228,19 +226,19 @@ class WorkerShutdownTests(unittest.IsolatedAsyncioTestCase):
         settings = cast(Settings, SimpleNamespace())
         admin_client = cast(AsyncClient, object())
         with (
-            patch("fathom.orchestration.runner.time.monotonic", return_value=100.0),
+            patch("fathom.orchestration.runner.time.monotonic", return_value=400.0),
             patch("fathom.orchestration.runner.run_billing_maintenance", side_effect=run_maintenance),
         ):
             _, last_billing_at, task, work_requeued = await _run_scheduled_maintenance(
                 admin_client,
                 settings=settings,
-                last_sweep_at=100.0,
+                last_sweep_at=400.0,
                 last_billing_maintenance_at=0.0,
                 billing_maintenance_task=None,
             )
 
         await started.wait()
-        self.assertEqual(last_billing_at, 100.0)
+        self.assertEqual(last_billing_at, 400.0)
         self.assertFalse(work_requeued)
         self.assertIsNotNone(task)
         assert task is not None
@@ -310,23 +308,11 @@ class WorkerShutdownSettingsTests(unittest.TestCase):
             "CORS_ALLOW_ORIGINS": "",
         }
 
-    def test_shutdown_grace_has_bounded_default(self) -> None:
-        settings = Settings.model_validate(self._settings_values())
+    def test_shutdown_grace_is_a_code_constant(self) -> None:
+        self.assertEqual(WORKER_SHUTDOWN_GRACE_SECONDS, 30.0)
 
-        self.assertEqual(
-            settings.worker_shutdown_grace_seconds,
-            DEFAULT_WORKER_SHUTDOWN_GRACE_SECONDS,
-        )
-
-    def test_shutdown_grace_accepts_immediate_stop_and_rejects_excessive_values(self) -> None:
-        values = self._settings_values()
-        values["WORKER_SHUTDOWN_GRACE_SECONDS"] = "0"
-        settings = Settings.model_validate(values)
-        self.assertEqual(settings.worker_shutdown_grace_seconds, 0)
-
-        values["WORKER_SHUTDOWN_GRACE_SECONDS"] = "301"
-        with self.assertRaises(ValidationError):
-            Settings.model_validate(values)
+    def test_billing_maintenance_interval_is_a_code_constant(self) -> None:
+        self.assertEqual(WORKER_BILLING_MAINTENANCE_INTERVAL_SECONDS, 300.0)
 
     def test_worker_concurrency_is_bounded(self) -> None:
         values = self._settings_values()
@@ -335,16 +321,6 @@ class WorkerShutdownSettingsTests(unittest.TestCase):
 
         for invalid_value in ("0", "65"):
             values["WORKER_MAX_CONCURRENT_JOBS"] = invalid_value
-            with self.subTest(invalid_value=invalid_value), self.assertRaises(ValidationError):
-                Settings.model_validate(values)
-
-    def test_billing_debt_window_is_bounded(self) -> None:
-        values = self._settings_values()
-        values["BILLING_DEBT_CAP_SECONDS"] = "0"
-        self.assertEqual(Settings.model_validate(values).billing_debt_cap_seconds, 0)
-
-        for invalid_value in ("-1", "86401"):
-            values["BILLING_DEBT_CAP_SECONDS"] = invalid_value
             with self.subTest(invalid_value=invalid_value), self.assertRaises(ValidationError):
                 Settings.model_validate(values)
 

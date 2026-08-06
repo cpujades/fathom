@@ -18,6 +18,7 @@ export type {
   StatusResponse,
   CheckoutSessionRequest,
   CheckoutSessionResponse,
+  BillingSyncOperationResponse,
   CustomerPortalSessionResponse,
   PackRefundResponse,
   PlanResponse,

@@ -5,7 +5,7 @@ The Python code uses Supabase PostgREST for ordinary reads/writes and protected
 Postgres RPCs for operations that must be atomic, fenced, or multi-row. There
 is no ORM model layer to update separately from the migrations.
 
-## The 16 application tables
+## The 17 application tables
 
 These are the current public application tables. Supabase Auth and Storage
 tables are platform-owned and are not included.
@@ -14,7 +14,7 @@ tables are platform-owned and are not included.
 | --- | --- | --- |
 | User work | `jobs`, `job_events` | Private session/library state, queue progress, and replayable state changes |
 | Reusable processing | `transcripts`, `transcript_segments`, `summaries` | Source metadata, immutable timestamp evidence, and versioned briefing output |
-| Catalog and billing | `plans`, `polar_customers`, `billing_orders`, `billing_webhook_events`, `credit_lots`, `entitlements`, `usage_ledger`, `usage_settlements` | Product catalog, provider identity, commerce facts, webhook audit, credit lots, balance snapshot, usage history, and one charge per job |
+| Catalog and billing | `plans`, `polar_customers`, `billing_orders`, `billing_webhook_events`, `billing_sync_operations`, `credit_lots`, `entitlements`, `usage_ledger`, `usage_settlements` | Product catalog, provider identity, commerce facts, webhook audit, user-scoped checkout/refund synchronization, credit lots, balance snapshot, usage history, and one charge per job |
 | Coordination | `billing_maintenance_leases`, `briefing_stream_leases`, `api_rate_limit_buckets` | Short-lived distributed locks, stream caps, and shared request counters |
 
 The key ownership decision is that most tables carry a `user_id` without a
@@ -34,6 +34,7 @@ as permission by itself.
 | `jobs` | legacy `usage_ledger` rows | `job_id`, set null |
 | `usage_settlements` | new `usage_ledger` rows | `settlement_id`, restrict deletion |
 | `plans` | `entitlements`, `billing_orders`, `credit_lots` | `plan_id`, set null |
+| Auth users and `plans` | `billing_sync_operations` | User deletion cascades; plan deletion preserves the operation and clears its optional plan link |
 
 Relationships such as `user_id`, Polar order IDs, provider event IDs, and
 `credit_lots.source_key` are intentionally logical rather than Auth foreign
@@ -42,7 +43,7 @@ state.
 
 ## Browser RLS and server privileges
 
-All 16 application tables have RLS enabled. The final client boundary grants
+All 17 application tables have RLS enabled. The final client boundary grants
 the authenticated role `SELECT` on only:
 
 | Table | Final read rule |
@@ -52,8 +53,8 @@ the authenticated role `SELECT` on only:
 
 Authenticated clients have no direct insert, update, or delete privilege on
 application tables, no direct Storage access, and no direct reads of
-summaries, transcripts, plans, billing, usage, settlement, stream-lease, maintenance, or
-rate-limit data. The API reads those records with a service client only after
+summaries, transcripts, plans, billing, billing-sync, usage, settlement,
+stream-lease, maintenance, or rate-limit data. The API reads those records with a service client only after
 authenticating the user and applying the corresponding ownership filter.
 For a summary, that filter is a caller-owned `succeeded` or `deleted` job whose
 `summary_id` matches the requested briefing. This keeps global cache rows
@@ -99,8 +100,14 @@ implementation is split by database responsibility:
 | `billing_credits.py` | Fetch/upsert/consume/expire/summarize credit lots |
 | `billing_entitlements.py` | Fetch/upsert balance snapshot and adjust debt |
 | `billing_orders.py` | List user orders, refund-pending orders, reconciliation candidates |
+| `billing_operations.py` | Create, owner-scope, and idempotently resolve checkout/refund sync operations |
 | `billing_usage.py` | Fetch usage history and call atomic settlement |
 | `billing_webhooks.py` | Upsert provider customer, reclaim stale events, apply webhook transaction |
+
+Committed `job_events` also publish a transaction-safe `job_event_available`
+wake hint containing only the job ID. Each API process uses one direct Postgres
+listener and a replica-local coordinator; event content still comes from the
+durable table and remains tenant-scoped at stream authorization and replay.
 | `billing_recovery.py` | Begin/reopen refunds, maintenance leases, webhook diagnostics |
 
 Application code should call a use case, not a CRUD function, when the action

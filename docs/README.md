@@ -27,7 +27,7 @@ sections explain the contracts, data, operations, and deliberate trade-offs.
    means for a user and for billing.
 8. [Database, RLS, and persistence](./architecture/database-and-persistence.md)
    and [Supabase environments and migrations](./runbooks/supabase-environments-and-migrations.md):
-   the 16 application tables, foreign keys, row-level security, server RPCs,
+   the 17 application tables, foreign keys, row-level security, server RPCs,
    and how the schema moves through local development, PR CI, staging, and
    production.
 9. [Billing and Polar webhooks](./architecture/billing-and-webhooks.md):
@@ -43,13 +43,21 @@ sections explain the contracts, data, operations, and deliberate trade-offs.
     [quality evaluation](./quality/briefing-evaluation.md), and the
     [decisions](./decisions/deferred-work.md): current limits, quality rules,
     and what is intentionally not built yet.
-13. Finish with the [runbooks](#runbooks) when you are ready to operate or
+13. [Unit economics](./product/unit-economics.md),
+    [provider economics and limits](./decisions/provider-economics-and-limits.md),
+    and the [growth feature roadmap](./product/growth-feature-roadmap.md): the
+    current commercial assumptions, provider boundaries, and staged product
+    options that remain proposals rather than implemented behavior.
+14. Finish with the [runbooks](#runbooks) when you are ready to operate or
     release the system.
 
 ## Reference pages
 
 - [Product and user workflows](./product/user-workflows.md): the user-facing
   walkthrough linked above.
+- [User workflow improvement register](./product/user-workflow-improvement-register.md):
+  known experience gaps, why they matter, and the implementation and evidence
+  needed to close them.
 - [Cache and versioning](./architecture/cache-and-versioning.md): server,
   browser, and PDF cache behavior.
 - [Database, RLS, and persistence](./architecture/database-and-persistence.md):
@@ -66,9 +74,19 @@ sections explain the contracts, data, operations, and deliberate trade-offs.
 - [Briefing product behavior](./product/briefing-behavior.md): what a user sees,
   duplicate submissions, caching, charging, archive/restore, output quality,
   limits, and deliberately deferred features.
+- [Unit economics and owner cash model](./product/unit-economics.md): Polar
+  Early Member fees, tax-exclusive price arithmetic, provider costs, explicit
+  user scenarios, first-year autónomo treatment, and IRPF reserve boundaries.
+- [Growth and product feature roadmap](./product/growth-feature-roadmap.md):
+  proposed Markdown/clipboard export, public sharing, referrals, cited episode
+  chat, discovery, follows, digests, and advanced research layers.
 - [Long-audio and transcription decision](./decisions/long-audio-and-transcription.md):
   the current YouTube-to-Groq pipeline, the reason for the initial two-hour limit,
   provider options, and the safe path to longer videos.
+- [Provider economics, limits, and scaling boundaries](./decisions/provider-economics-and-limits.md):
+  end-to-end file-size limits, synchronous versus batch transcription, Groq,
+  Cloudflare and open-source options, Supabase/Railway billing, egress,
+  retention, email, and the required cost dashboard.
 - [Deferred work register](./decisions/deferred-work.md): accepted product and
   technical deferrals, why they are not current blockers, and their revisit
   triggers.

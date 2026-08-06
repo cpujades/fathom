@@ -1,4 +1,5 @@
 import type { BriefingSessionResponse } from "@fathom/api-client";
+import { getBillingOffersAction } from "../../lib/usage.ts";
 
 type SessionFailureSource = Pick<BriefingSessionResponse, "error_code" | "error_message"> | null;
 
@@ -16,20 +17,23 @@ export type LifecyclePresentation = {
   status: string;
 };
 
-export function isCreditOrPaymentError(message: string): boolean {
-  const normalized = message.toLowerCase();
-  return (
-    normalized.includes("insufficient credits") ||
-    normalized.includes("no remaining credits") ||
-    normalized.includes("negative balance") ||
-    normalized.includes("top up credits")
-  );
+export function isBillingAdmissionErrorCode(code: string | null | undefined): boolean {
+  return code === "insufficient_video_time" || code === "no_video_time" || code === "balance_blocked";
+}
+
+export function buildSameSourceRetryHref(sourceUrl: string | null | undefined): string {
+  if (!sourceUrl) {
+    return "/app";
+  }
+  return `/app/briefings/new?url=${encodeURIComponent(sourceUrl)}&confirm=retry`;
 }
 
 export function getFailurePresentation(
   session: SessionFailureSource,
   sessionLoadError: string | null,
-  sessionLoadErrorCode: string | null = null
+  sessionLoadErrorCode: string | null = null,
+  retrySourceUrl: string | null = null,
+  hasActivePaidSubscription: boolean | null = null
 ): FailurePresentation {
   const code = session?.error_code ?? sessionLoadErrorCode ?? "";
   const rawMessage = session?.error_message ?? sessionLoadError ?? "";
@@ -45,13 +49,39 @@ export function getFailurePresentation(
     };
   }
 
-  if (isCreditOrPaymentError(rawMessage)) {
+  if (isBillingAdmissionErrorCode(code)) {
+    const billingAction = getBillingOffersAction(hasActivePaidSubscription);
     return {
-      actionHref: "/app/billing#billing-offers",
-      actionLabel: "Get more video time",
-      title: "More video time needed",
-      description: "This source needs more minutes than are currently available.",
+      actionHref: billingAction.href,
+      actionLabel: billingAction.label,
+      title: code === "balance_blocked" ? "Briefing creation paused" : "More video time needed",
+      description:
+        code === "no_video_time"
+          ? "No video time remains on this account."
+          : code === "balance_blocked"
+            ? "Outstanding video time must be repaid before another briefing can start."
+            : "This source needs more video time than is currently available.",
       detail: "Add more video time, then start the briefing again."
+    };
+  }
+
+  if (code === "provider_capacity_reached") {
+    return {
+      actionHref: buildSameSourceRetryHref(retrySourceUrl),
+      actionLabel: "Try again",
+      title: "Talven is handling high demand",
+      description: "Your source is fine.",
+      detail: "Please try again in a few minutes. Talven will wait for your confirmation before starting a new briefing."
+    };
+  }
+
+  if (code === "provider_temporarily_unavailable") {
+    return {
+      actionHref: buildSameSourceRetryHref(retrySourceUrl),
+      actionLabel: "Try again",
+      title: "A service is temporarily unavailable",
+      description: "Your source is fine.",
+      detail: "Please try again in a few minutes. Talven will ask before starting a new briefing.",
     };
   }
 
@@ -67,6 +97,7 @@ export function getFailurePresentation(
 
   if (
     code === "invalid_request" ||
+    code === "source_duration_unknown" ||
     code === "invalid_job_payload" ||
     code === "source_download_failed" ||
     normalizedMessage.includes("unsupported") ||
@@ -110,17 +141,14 @@ export function getFailurePresentation(
       actionLabel: "Start another briefing",
       title: "Briefing failed",
       description: "The transcript was available, but the written briefing could not be completed.",
-      detail: "The writing service did not return a usable briefing. Try again in a moment; if it repeats, use a shorter or cleaner source."
+      detail: "The writing service did not return a usable briefing. Try again in a moment; if it repeats, contact support."
     };
   }
 
   if (
     code === "external_service_error" ||
     code === "rate_limit_exceeded" ||
-    code === "not_ready" ||
-    normalizedMessage.includes("rate limit") ||
-    normalizedMessage.includes("timed out") ||
-    normalizedMessage.includes("temporarily unavailable")
+    code === "not_ready"
   ) {
     return {
       actionHref: "/app",

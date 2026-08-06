@@ -49,6 +49,11 @@ invent a new IP for every request.
 - Deploy the three processes from one exact commit.
 - Use staging/sandbox Supabase, Polar, Groq, and OpenRouter credentials.
 - Apply migrations before routing product traffic.
+- Verify the hosted migration history matches that exact release; do not treat
+  passing local/CI migration tests as proof that the hosted database received
+  them. After the migrations are applied, inspect the project's Supabase
+  Security Advisor and resolve or explicitly record every RLS, table-privilege,
+  exposed-schema, and function warning before enabling external traffic.
 - Keep production data and secrets out of staging.
 - Record build commands, start commands, CPU/memory limits, and rollback steps.
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import time
 from contextlib import asynccontextmanager
+from typing import Literal
 
 from fathom import __version__
 from fathom.core.config import Settings
@@ -26,6 +27,7 @@ _REQUIRED_DATABASE_OBJECTS = (
     "transcript_segments_table",
     "usage_settlements_table",
     "billing_webhook_events_table",
+    "billing_sync_operations_table",
     "billing_maintenance_leases_table",
     "briefing_stream_leases_table",
     "create_or_reuse_settled_job_function",
@@ -40,6 +42,7 @@ _REQUIRED_DATABASE_OBJECTS = (
     "fail_summary_pdf_function",
     "settle_job_usage_function",
     "apply_polar_webhook_event_function",
+    "resolve_billing_sync_operation_function",
     "begin_pack_refund_function",
     "reopen_pack_refund_function",
     "claim_billing_maintenance_lease_function",
@@ -48,6 +51,8 @@ _REQUIRED_DATABASE_OBJECTS = (
     "claim_briefing_stream_lease_function",
     "renew_briefing_stream_lease_function",
     "release_briefing_stream_lease_function",
+    "notify_job_event_available_function",
+    "job_event_available_trigger",
 )
 
 _SCHEMA_CHECK_SQL = """
@@ -58,6 +63,7 @@ select
   to_regclass('public.transcript_segments') is not null as transcript_segments_table,
   to_regclass('public.usage_settlements') is not null as usage_settlements_table,
   to_regclass('public.billing_webhook_events') is not null as billing_webhook_events_table,
+  to_regclass('public.billing_sync_operations') is not null as billing_sync_operations_table,
   to_regclass('public.billing_maintenance_leases') is not null as billing_maintenance_leases_table,
   to_regclass('public.briefing_stream_leases') is not null as briefing_stream_leases_table,
   exists (
@@ -110,6 +116,10 @@ select
   ) as apply_polar_webhook_event_function,
   exists (
     select 1 from pg_proc join pg_namespace on pg_namespace.oid = pg_proc.pronamespace
+    where pg_namespace.nspname = 'public' and pg_proc.proname = 'resolve_billing_sync_operation'
+  ) as resolve_billing_sync_operation_function,
+  exists (
+    select 1 from pg_proc join pg_namespace on pg_namespace.oid = pg_proc.pronamespace
     where pg_namespace.nspname = 'public' and pg_proc.proname = 'begin_pack_refund'
   ) as begin_pack_refund_function,
   exists (
@@ -139,7 +149,21 @@ select
   exists (
     select 1 from pg_proc join pg_namespace on pg_namespace.oid = pg_proc.pronamespace
     where pg_namespace.nspname = 'public' and pg_proc.proname = 'release_briefing_stream_lease'
-  ) as release_briefing_stream_lease_function
+  ) as release_briefing_stream_lease_function,
+  exists (
+    select 1 from pg_proc join pg_namespace on pg_namespace.oid = pg_proc.pronamespace
+    where pg_namespace.nspname = 'public' and pg_proc.proname = 'notify_job_event_available'
+  ) as notify_job_event_available_function,
+  exists (
+    select 1
+    from pg_trigger
+    join pg_class on pg_class.oid = pg_trigger.tgrelid
+    join pg_namespace on pg_namespace.oid = pg_class.relnamespace
+    where pg_namespace.nspname = 'public'
+      and pg_class.relname = 'job_events'
+      and pg_trigger.tgname = 'job_event_available_trigger'
+      and not pg_trigger.tgisinternal
+  ) as job_event_available_trigger
 """
 
 
@@ -231,7 +255,7 @@ def _log_readiness_check(check: str, result: str) -> None:
     logger.info("api.ready.check", extra={"check": check, "result": result})
 
 
-async def readiness_status(settings: Settings) -> ReadyResponse:
+async def readiness_status(settings: Settings, event_coordinator: object | None = None) -> ReadyResponse:
     _require_supabase_config(settings)
 
     await _check_postgrest(settings)
@@ -242,15 +266,46 @@ async def readiness_status(settings: Settings) -> ReadyResponse:
     else:
         _log_readiness_check("billing_config", "skipped")
 
-    logger.info("api.ready.ok", extra={"provider_reachability": "not_checked"})
-    return ReadyResponse(status="ok")
+    event_delivery_metrics = _event_delivery_snapshot(event_coordinator)
+    delivery_state = _event_delivery_state(event_delivery_metrics)
+    log_label = "api.ready.ok" if delivery_state == "healthy" else "api.ready.degraded"
+    logger.info(
+        log_label,
+        extra={"provider_reachability": "not_checked", "event_delivery": delivery_state},
+    )
+    # Durable replay and snapshot reconciliation preserve correctness while the
+    # listener reconnects, so listener failure is degraded rather than unready.
+    return ReadyResponse(status="ok", event_delivery=delivery_state)
 
 
-async def status_snapshot() -> StatusResponse:
+async def status_snapshot(event_coordinator: object | None = None) -> StatusResponse:
     uptime_seconds = time.monotonic() - _START_TIME
-    logger.info("api.status.snapshot", extra={"uptime_seconds": round(uptime_seconds, 2), "version": __version__})
+    event_delivery_metrics = _event_delivery_snapshot(event_coordinator)
+    delivery_state = _event_delivery_state(event_delivery_metrics)
+    logger.info(
+        "api.status.snapshot",
+        extra={
+            "uptime_seconds": round(uptime_seconds, 2),
+            "version": __version__,
+            "event_delivery": delivery_state,
+            "event_delivery_metrics": event_delivery_metrics,
+        },
+    )
     return StatusResponse(
         status="ok",
         version=__version__,
         uptime_seconds=uptime_seconds,
+        event_delivery=delivery_state,
     )
+
+
+def _event_delivery_snapshot(event_coordinator: object | None) -> dict[str, int | bool] | None:
+    snapshot = getattr(event_coordinator, "status_snapshot", None)
+    if not callable(snapshot):
+        return None
+    value = snapshot()
+    return value if isinstance(value, dict) else None
+
+
+def _event_delivery_state(metrics: dict[str, int | bool] | None) -> Literal["healthy", "degraded"]:
+    return "healthy" if metrics and metrics.get("listener_healthy") is True else "degraded"

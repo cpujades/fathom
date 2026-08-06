@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import unittest
 from contextlib import asynccontextmanager
 from typing import Any
@@ -7,8 +8,10 @@ from unittest.mock import AsyncMock, patch
 
 from fathom.core.config import Settings
 from fathom.services.supabase.postgres import (
+    _enqueue_job_event_signal,
     create_postgres_connection,
     create_postgres_pool,
+    listen_for_job_event_notifications,
     listen_for_notifications,
 )
 
@@ -39,6 +42,16 @@ def _settings(*, app_env: str) -> Settings:
 
 
 class PostgresTlsTests(unittest.IsolatedAsyncioTestCase):
+    async def test_job_event_queue_overflow_emits_reconciliation_signal(self) -> None:
+        signal: asyncio.Queue[str] = asyncio.Queue(maxsize=1)
+        first_job = "11111111-1111-4111-8111-111111111111"
+        second_job = "22222222-2222-4222-8222-222222222222"
+
+        _enqueue_job_event_signal(AsyncMock(), 1, "job_event_available", f'{{"job_id":"{first_job}"}}', signal=signal)
+        _enqueue_job_event_signal(AsyncMock(), 1, "job_event_available", f'{{"job_id":"{second_job}"}}', signal=signal)
+
+        self.assertEqual(await signal.get(), "overflow")
+
     async def test_strict_runtime_uses_certificate_verified_tls(self) -> None:
         connection = AsyncMock()
         with patch("fathom.services.supabase.postgres.asyncpg.connect", AsyncMock(return_value=connection)) as connect:
@@ -94,6 +107,48 @@ class PostgresTlsTests(unittest.IsolatedAsyncioTestCase):
                 notification_callback(connection, 1, "job_available", '{"id":"job-2"}')
                 termination_callback(connection)
                 self.assertEqual(await signal.get(), "disconnected")
+
+    async def test_job_event_listener_extracts_only_valid_job_ids(self) -> None:
+        notification_callback: Any = None
+
+        class FakeConnection:
+            async def add_listener(self, _channel: str, callback: Any) -> None:
+                nonlocal notification_callback
+                notification_callback = callback
+
+            async def remove_listener(self, _channel: str, _callback: Any) -> None:
+                return None
+
+            def add_termination_listener(self, _callback: Any) -> None:
+                return None
+
+            def remove_termination_listener(self, _callback: Any) -> None:
+                return None
+
+            def is_closed(self) -> bool:
+                return False
+
+        connection = FakeConnection()
+
+        @asynccontextmanager
+        async def connected(_settings: Settings):
+            yield connection
+
+        job_id = "11111111-1111-4111-8111-111111111111"
+        with patch("fathom.services.supabase.postgres.create_postgres_connection", connected):
+            async with listen_for_job_event_notifications(
+                _settings(app_env="local"),
+                "job_event_available",
+            ) as signal:
+                notification_callback(connection, 1, "job_event_available", '{"job_id":"invalid"}')
+                self.assertTrue(signal.empty())
+                notification_callback(
+                    connection,
+                    1,
+                    "job_event_available",
+                    f'{{"job_id":"{job_id}"}}',
+                )
+                self.assertEqual(await signal.get(), job_id)
 
 
 if __name__ == "__main__":

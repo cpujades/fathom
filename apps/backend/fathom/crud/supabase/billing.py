@@ -21,6 +21,12 @@ from fathom.crud.supabase.billing_entitlements import (
     update_entitlement_snapshot,
     upsert_subscription_entitlement_state,
 )
+from fathom.crud.supabase.billing_operations import (
+    create_billing_sync_operation,
+    fetch_billing_sync_operation,
+    resolve_billing_sync_operation,
+    resolve_refund_sync_operations,
+)
 from fathom.crud.supabase.billing_orders import (
     fetch_polar_order_ids_refund_pending,
     list_billing_orders_for_user,
@@ -49,10 +55,12 @@ __all__ = [
     "begin_pack_refund",
     "claim_billing_maintenance_lease",
     "consume_credit_lot_by_id",
+    "create_billing_sync_operation",
     "expire_active_subscription_lots",
     "fetch_active_plans",
     "fetch_credit_lot_by_source",
     "fetch_entitlement",
+    "fetch_billing_sync_operation",
     "fetch_pack_lots_by_order_ids",
     "fetch_plan_by_id",
     "fetch_plan_by_product_id",
@@ -68,6 +76,8 @@ __all__ = [
     "remaining_seconds_from_lot",
     "renew_billing_maintenance_lease",
     "reopen_pack_refund",
+    "resolve_billing_sync_operation",
+    "resolve_refund_sync_operations",
     "schedule_subscription_reconciliation",
     "settle_job_usage",
     "summarize_credit_lots",

@@ -88,6 +88,23 @@ test("unknown intent and unsafe plan values are discarded", () => {
   );
 });
 
+test("authenticated auth entries resolve only to safe app destinations", () => {
+  assert.equal(
+    buildAuthDestinationPath(
+      getSafeNextPath("/app/billing"),
+      getSafeAuthIntentContext({ intent: "paid", plan: "CREATOR_PACK" })
+    ),
+    "/app/billing?intent=paid&plan=creator_pack"
+  );
+  assert.equal(
+    buildAuthDestinationPath(
+      getSafeNextPath("https://attacker.example/steal"),
+      getSafeAuthIntentContext({ intent: "paid", plan: "../../agency" })
+    ),
+    "/app?intent=paid"
+  );
+});
+
 test("the canonical site URL is an exact HTTPS origin in hosted production", () => {
   const originalNodeEnv = process.env.NODE_ENV;
   const originalSiteUrl = process.env.NEXT_PUBLIC_SITE_URL;

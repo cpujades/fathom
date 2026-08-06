@@ -290,7 +290,6 @@ async def _create_evidence_summary(
         contract = await summarize_transcript_with_evidence(
             transcript_segments,
             settings.openrouter_api_key,
-            deadline_seconds=settings.provider_summary_deadline_seconds,
         )
         markdown = render_briefing(
             contract,

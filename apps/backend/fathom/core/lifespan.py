@@ -6,15 +6,20 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from fathom.core.config import get_settings
-from fathom.services.supabase import create_postgres_pool
+from fathom.application.briefings.sessions.event_coordinator import JobEventCoordinator
+from fathom.core.config import Settings
+from fathom.services.supabase import (
+    create_postgres_pool,
+    create_supabase_admin_client,
+    managed_supabase_client,
+)
 
 logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    settings = get_settings()
+    settings: Settings = app.state.settings
     logger.info(
         "api.started",
         extra={
@@ -30,8 +35,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.info("api.postgres_pool.initialized", extra={"purpose": "rate_limiting"})
 
     try:
-        logger.info("api.ready")
-        yield
+        async with managed_supabase_client(await create_supabase_admin_client(settings)) as event_client:
+            event_coordinator = JobEventCoordinator(settings, event_client)
+            app.state.job_event_coordinator = event_coordinator
+            await event_coordinator.start()
+            try:
+                logger.info("api.ready")
+                yield
+            finally:
+                await event_coordinator.close()
     finally:
         if postgres_pool is not None:
             await postgres_pool.close()

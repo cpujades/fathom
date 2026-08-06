@@ -86,7 +86,7 @@ class ProviderBriefingEvaluationTests(unittest.IsolatedAsyncioTestCase):
         summarizer.assert_awaited_once_with(
             cases[0].segments,
             "test-key",
-            deadline_seconds=45,
+            timeout_seconds=45,
             max_attempts=1,
             max_output_tokens=1_234,
         )

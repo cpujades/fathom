@@ -99,7 +99,7 @@ The test creates an isolated local Auth user and session, exercises authenticate
 session creation, a fake worker success, persisted SSE replay after reconnect,
 Markdown and PDF retrieval, archive and restore, billing reads and settlement,
 a transient retry, and a permanent provider failure. It also prints
-`GATE_C_POLL_METRIC` for the one-second per-viewer event polling loop.
+`GATE_C_EVENT_METRIC` for the Postgres notification-to-SSE delivery path.
 
 Pass only when:
 
@@ -109,8 +109,8 @@ Pass only when:
 - PDF, archive, restore, and billing fixtures converge through the public API;
 - retry succeeds on its second claim and settles exactly once;
 - permanent failure is visible and creates no settlement;
-- the polling metric reports one query for one viewer after approximately one
-  configured interval;
+- the event metric reports notification-driven delivery within the bounded
+  local latency threshold, without a one-second per-viewer poll;
 - the fixture removes its Auth user, database rows, and stored PDF; and
 - stopping the disposable project does not stop or reset another local project.
 
