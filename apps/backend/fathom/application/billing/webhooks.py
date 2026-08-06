@@ -78,10 +78,7 @@ async def handle_polar_webhook(payload: bytes, headers: Mapping[str, str], setti
                             status="succeeded",
                         )
                         if operation_resolution not in {"resolved", "already_resolved"}:
-                            logger.warning(
-                                "billing.webhook.operation_correlation_mismatch",
-                                extra={"operation_resolution": operation_resolution},
-                            )
+                            logger.warning("billing.webhook.operation_correlation_mismatch")
                     else:
                         logger.warning(
                             "billing.webhook.operation_correlation_missing",
