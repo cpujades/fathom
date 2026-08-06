@@ -95,13 +95,12 @@ async def _create_checkout_session(
             logger.warning(
                 "billing.checkout.operation_resolution_failed",
                 exc_info=True,
-                extra={"operation_id": operation_id},
             )
         raise
 
     logger.info(
         "billing.checkout.created",
-        extra={"user_id": auth.user_id, "plan_id": plan_id, "plan_type": plan_type, "operation_id": operation_id},
+        extra={"plan_type": plan_type},
     )
     return CheckoutSessionResponse(
         checkout_url=HTTP_URL_ADAPTER.validate_python(checkout_url),

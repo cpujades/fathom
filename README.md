@@ -240,7 +240,6 @@ For a durable product and architecture map, start with the
 pnpm --filter @fathom/web lint
 pnpm --filter @fathom/web typecheck
 pnpm --filter @fathom/web test
-pnpm --filter @fathom/web test:browser
 pnpm --filter @fathom/web build
 ```
 

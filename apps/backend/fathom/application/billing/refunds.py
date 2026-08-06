@@ -172,5 +172,5 @@ async def _fail_operation(
         logger.warning(
             "billing.refund.operation_resolution_failed",
             exc_info=True,
-            extra={"operation_id": operation_id},
+            extra={"failure_code": failure_code},
         )

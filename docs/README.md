@@ -149,14 +149,14 @@ The complete command and workflow inventory is in
   Ruff, formatting, and strict backend type checking.
 - Pull-request CI is the mandatory shared gate: it runs the direct backend
   checks and every CI-suitable pre-commit hook again, then backend tests,
-  frontend lint/type checks, unit/browser accessibility tests, and the
+  frontend lint/type checks, unit tests, and the
   production build. Only the local `no-commit-to-branch` hook is skipped in CI.
 - A PR that changes `supabase/**` also starts a clean local database, applies
   every migration, runs the database suites, and lints the resulting schema.
 - Gate C remains an explicit local/staging rehearsal because it needs an
   authenticated disposable user and several running services.
 
-Do not put the full database or browser rehearsal in pre-commit. Slow hooks are
-often bypassed and require Docker or a browser on every contributor machine.
+Do not put the full database rehearsal in pre-commit. Slow hooks are often
+bypassed and require Docker on every contributor machine.
 The local hook gives quick feedback; protected CI is what prevents an
 unverified change from being merged.

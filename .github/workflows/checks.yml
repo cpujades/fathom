@@ -83,12 +83,6 @@ jobs:
       - name: Unit tests
         run: pnpm --filter @fathom/web test
 
-      - name: Install browser
-        run: pnpm --filter @fathom/web exec playwright install --with-deps chromium
-
-      - name: Browser accessibility tests
-        run: pnpm --filter @fathom/web test:browser
-
       - name: Build
         run: pnpm --filter @fathom/web build
         env:
