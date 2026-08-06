@@ -316,6 +316,10 @@ reasonable query/index, connection-pool, replica, and notification-coalescing
 tuning. Record the measured before/after result, cost, migration plan, and
 rollback path when activating that decision.
 
+Use [Operational metrics and provider review](../runbooks/operational-metrics-and-provider-review.md)
+for the concrete dashboard layout, provider-specific checks, review cadence,
+initial guardrails, and evidence record.
+
 ## Not deferred
 
 The following are current correctness boundaries, not future ideas: tenant RLS,

@@ -25,6 +25,24 @@ external public-beta boundary below.
 - **Public-launch decision:** may be deferred while the app is local only, but
   must be resolved before the public URL is announced.
 
+### How to sort a decision
+
+Use the label and evidence requirement, not how interesting the work sounds:
+
+| Kind of item | What to do |
+| --- | --- |
+| Public-launch prerequisite | Resolve and prove it before unattended external signup. Origins, SMTP/Auth, logs/alerts, privacy/retention, support, and backup/restore belong here. |
+| External or candidate proof | The code may already be correct; prove the real provider, staging, capacity, or human experience on the exact candidate. |
+| Paid-launch decision | It may wait during local work or a private pilot, but explicitly accept or change it before public payment. |
+| Trigger-based deferral | Leave it alone until its measurable trigger occurs. R2, Redis, shared source production, and cache-retention redesign are examples. |
+| Optional product experiment | Build it only to test a clear acquisition, activation, or retention hypothesis. |
+
+The [deferred work register](./deferred-work.md) owns the trigger and future-safe
+shape of deferred technical/product work. The
+[growth roadmap](../product/growth-feature-roadmap.md) owns optional feature
+experiments. An item may remain deferred after review; the goal is to make that
+choice deliberate, not to empty every list before launch.
+
 ## Owner review queue
 
 These are explicit follow-up reviews requested by the product owner. They are

@@ -483,3 +483,7 @@ Use application events as the durable source, then expose an owner dashboard
 with plan, user, provider, and cache-hit breakdowns. Polar's Cost Insights can
 receive summarized cost events later, but it should not replace Talven's own
 auditable provider telemetry.
+
+The authoritative source for each metric, Grafana layout, native-provider
+checks, daily/weekly/monthly review cadence, and migration guardrails are in
+[Operational metrics and provider review](../runbooks/operational-metrics-and-provider-review.md).

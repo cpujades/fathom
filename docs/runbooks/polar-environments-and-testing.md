@@ -26,6 +26,19 @@ secrets. A sandbox product UUID or secret must never be copied into production.
 Polar calls a purchasable offer a **product**. Talven calls its versioned local
 catalog entry a **plan**.
 
+### Plan files at a glance
+
+JSON entries have **fields**; the Supabase `plans` table has **columns**. These
+files have different jobs and must not become competing price definitions:
+
+| File | What it owns | What you do with it |
+| --- | --- | --- |
+| `scripts/polar/plan_contract.json` | Tracked, non-secret plan names, prices, allowances, and versions | Edit deliberately when the public product promise changes. |
+| `scripts/polar/plans.json` | Ignored mapping from `(plan_code, version)` to an environment-specific Polar product UUID | Use only to reuse or recover known sandbox/production products. Never commit it. |
+| `scripts/polar/plan_seed.json` | Ignored diagnostic output from the generator | Inspect after a run; never maintain it by hand. |
+| `scripts/polar/generate_polar_plans.py` | Validation, Polar product create/reuse, and Supabase plan upsert | Run after a contract change. |
+| `apps/web/app/content/pricing.ts` | Marketing-page wording and presentation | Keep its public promises aligned with the contract; tests compare the two. |
+
 Example:
 
 | Field | Local/staging example | Production example |
@@ -69,6 +82,30 @@ Each entry is a business version. For example:
 hours of source duration. Subscriptions currently require a monthly interval;
 packs require `billing_interval = null`. The zero-price free subscription maps
 to the internal ID `internal_free` and is not created as a Polar product.
+
+The fields mean:
+
+| Field | Plain-language meaning |
+| --- | --- |
+| `plan_code` | Stable product family, such as `starter` or `creator_pack`. |
+| `version` | Immutable version of that product promise. |
+| `name` | Customer-facing plan name. |
+| `plan_type` | Monthly `subscription` or one-time `pack`. |
+| `currency` | Lowercase price currency, currently `usd`. |
+| `amount_cents` | Base price in the smallest currency unit; `900` means `$9.00`. |
+| `billing_interval` | `month` for subscriptions and `null` for packs. |
+| `quota_seconds` | Source-audio time granted by the plan. |
+| `rollover_cap_seconds` | Most subscription time that may accumulate; `null` for packs. |
+| `pack_expiry_days` | Pack lifetime; `null` for subscriptions. |
+
+There is no `tax_behavior` field in the tracked contract today, and the
+generator does not send one in its Polar price payload. Product creation
+therefore uses the applicable Polar organization/price behavior. The
+organization default has been set to tax-exclusive, but a taxable sandbox order
+must still prove the intended base-price-plus-tax checkout and the provider's
+`net_amount`, `tax_amount`, `total_amount`, and `tax_behavior` values before
+paid launch. Adding an explicit per-price setting later is a code and provider
+contract change, not an undocumented extra JSON field.
 
 Changing a public price, allowance, interval, or expiry rule changes the
 product promise. Preserve the earlier entry for existing purchases and add a
@@ -141,6 +178,10 @@ expectations cannot drift silently, while the ordinary Python checks cover the
 generator's syntax and lint. PR CI deliberately does not execute a live catalog
 sync because that would mutate Polar and Supabase. Run `--dry-run` when the
 contract changes, then prove the non-dry behavior in sandbox before production.
+
+Changing plan values regenerates and synchronizes catalog data. It does not
+require regenerating the OpenAPI client unless an HTTP request or response
+schema also changed.
 
 `--deactivate-missing` changes Supabase visibility only. It does not delete
 billing history or archive a Polar product, so use it only after deliberately

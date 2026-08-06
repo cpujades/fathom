@@ -36,6 +36,71 @@ operation type, plan, Polar order, and terminal transition agree. Missing or
 mismatched metadata is logged as a correlation failure but does not roll back a
 valid billing update. Duplicate matching resolution is idempotent.
 
+## What a webhook is
+
+A webhook is an HTTP request that one service sends to another when something
+happens. Talven does not continuously ask Polar whether somebody paid. Polar
+sends a signed event to:
+
+```text
+POST https://<talven-api>/webhooks/polar
+```
+
+A simplified paid-order event looks like this:
+
+```json
+{
+  "id": "evt_order_paid_001",
+  "timestamp": "2026-07-29T10:00:00Z",
+  "type": "order.paid",
+  "data": {
+    "id": "ord_replay_001",
+    "customer_external_id": "<supabase-user-uuid>",
+    "customer_id": "cus_replay_001",
+    "product_id": "<polar-product-uuid>",
+    "currency": "usd",
+    "total_amount": 3000
+  }
+}
+```
+
+This is the replay-test shape, shortened to explain the identifiers. It is not
+evidence for a live taxable checkout. The real request also carries signature,
+event-ID, and timestamp headers.
+
+Conceptually, the handler does this:
+
+```python
+@router.post("/webhooks/polar")
+async def polar_webhook(request: Request) -> dict[str, str]:
+    raw_body = await request.body()
+    event = verify_signature_and_parse(raw_body, request.headers)
+    result = await apply_event_idempotently_in_one_transaction(event)
+    if result == "failed":
+        raise RetryableProviderError()
+    return {"status": "ok"}
+```
+
+That is teaching pseudocode. The real route is
+`apps/backend/fathom/api/routers/webhooks.py`; the application handler is
+`apps/backend/fathom/application/billing/webhooks.py`; signature verification
+lives in `apps/backend/fathom/services/polar.py`; and
+`apps/backend/fathom/crud/supabase/billing_webhooks.py` invokes the
+`apply_polar_webhook_event` Postgres RPC.
+
+The important ideas are:
+
+- verify the signature against the exact raw body before trusting the JSON;
+- use the event ID to make duplicate delivery safe;
+- use provider timestamps so an old event cannot overwrite newer state;
+- apply related billing changes in one database transaction; and
+- treat the browser's checkout redirect as navigation, not proof of payment.
+
+The replay fixture is in
+`apps/backend/tests/fixtures/polar_webhook_replay.json`. Application examples
+are in `apps/backend/tests/test_billing_webhooks.py`; database ordering and
+transaction examples are in `supabase/tests/database/polar_webhooks.test.sql`.
+
 ## Inbound webhook path
 
 ```mermaid

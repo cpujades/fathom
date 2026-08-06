@@ -1,162 +1,186 @@
 # Talven documentation
 
-These pages describe the product as it behaves now. Read them in the order
-below when taking ownership of the project. The first section builds the user
-mental model; the second follows the request through the system; the remaining
-sections explain the contracts, data, operations, and deliberate trade-offs.
+This file is the index for Talven's documentation. It points you to the right
+chapter; the detailed explanations live in the linked files.
 
-## Recommended reading order
+Use the owner path when you want to learn or make a decision. Use the topic
+index when you already know what you are looking for.
 
-1. [Product and user workflows](./product/user-workflows.md): what a person
-   sees from landing page through sign-up, first briefing, library, billing,
-   refund, recovery, and failure states.
-2. [Local development from a fresh clone](./getting-started/local-development.md):
-   how to run the complete authenticated journey locally.
-3. [Environment configuration](./reference/environment.md): what each process
-   can reach, every application variable, and the local/staging/production
-   boundary.
-4. [Repository and code map](./architecture/repository-and-code-map.md): where
-   each responsibility lives and where new code belongs.
-5. [Frontend, authentication, and user flows](./architecture/frontend-auth-and-user-flows.md):
-   the browser route map, auth boundaries, navigation, SSE client, and browser
-   cache ownership.
-6. [System and job lifecycle](./architecture/system-and-job-lifecycle.md):
-   the API, queue, worker, transcript, summary, settlement, and event path.
-7. [Cache and versioning](./architecture/cache-and-versioning.md): exactly
-   what is reusable, which keys protect compatibility, and what “cache hit”
-   means for a user and for billing.
-8. [Database, RLS, and persistence](./architecture/database-and-persistence.md)
-   and [Supabase environments and migrations](./runbooks/supabase-environments-and-migrations.md):
-   the 17 application tables, foreign keys, row-level security, server RPCs,
-   and how the schema moves through local development, PR CI, staging, and
-   production.
-9. [Billing and Polar webhooks](./architecture/billing-and-webhooks.md):
-   signature verification, normalized events, idempotency, ordering, refund
-   behavior, and reconciliation.
-10. [API contract and client generation](./architecture/api-contract.md) and
-    the [HTTP API reference](./reference/http-api.md): request/response
-    contracts, SSE frames, auth, errors, and practical examples.
-11. [Security and data access](./architecture/security-and-data-access.md)
-    and [Runtime safety, in plain language](./architecture/runtime-safety-explained.md):
-    why the boundaries exist and what they do under failure or concurrency.
-12. [Briefing product behavior](./product/briefing-behavior.md), the
-    [quality evaluation](./quality/briefing-evaluation.md), and the
-    [decisions](./decisions/deferred-work.md): current limits, quality rules,
-    and what is intentionally not built yet.
-13. [Unit economics](./product/unit-economics.md),
-    [provider economics and limits](./decisions/provider-economics-and-limits.md),
-    [audio acquisition and delivery](./decisions/audio-acquisition-and-delivery.md),
-    and the [growth feature roadmap](./product/growth-feature-roadmap.md): the
-    current commercial assumptions, provider/source boundaries, and staged
-    product options that remain proposals rather than implemented behavior.
-14. Finish with the [runbooks](#runbooks) when you are ready to operate or
-    release the system.
+## Start here
 
-## Reference pages
+If this is your first pass through the project, read:
 
-- [Product and user workflows](./product/user-workflows.md): the user-facing
-  walkthrough linked above.
-- [User workflow improvement register](./product/user-workflow-improvement-register.md):
-  known experience gaps, why they matter, and the implementation and evidence
-  needed to close them.
-- [Cache and versioning](./architecture/cache-and-versioning.md): server,
-  browser, and PDF cache behavior.
-- [Database, RLS, and persistence](./architecture/database-and-persistence.md):
-  tables, relationships, grants, RPCs, and CRUD modules.
-- [Billing and Polar webhooks](./architecture/billing-and-webhooks.md): the
-  provider-event lifecycle and repair path.
-- [Security and data access](./architecture/security-and-data-access.md):
-  browser permissions, backend privileges, RLS, server commands, storage,
-  billing, and export boundaries.
-- [Runtime safety, in plain language](./architecture/runtime-safety-explained.md):
-  account-scoped browser caching, shared-cache privacy, password recovery,
-  worker and stream admission, downloader cleanup, hosted configuration,
-  billing recovery, PDF/download UX, launch evidence, debt, and retention.
-- [Briefing product behavior](./product/briefing-behavior.md): what a user sees,
-  duplicate submissions, caching, charging, archive/restore, output quality,
-  limits, and deliberately deferred features.
-- [Unit economics and owner cash model](./product/unit-economics.md): Polar
-  Early Member fees, tax-exclusive price arithmetic, provider costs, explicit
-  user scenarios, first-year autónomo treatment, and IRPF reserve boundaries.
-- [Growth and product feature roadmap](./product/growth-feature-roadmap.md):
-  proposed Markdown/clipboard export, public sharing, referrals, cited episode
-  chat, discovery, follows, digests, and advanced research layers.
-- [Long-audio and transcription decision](./decisions/long-audio-and-transcription.md):
-  the current YouTube-to-Groq pipeline, the reason for the initial two-hour limit,
-  provider options, and the safe path to longer videos.
-- [Audio acquisition and temporary delivery](./decisions/audio-acquisition-and-delivery.md):
-  the current bounded YouTube path, `pytubefix` versus `yt-dlp`, podcast RSS and
-  upload alternatives, Supabase versus R2 delivery, cleanup, and the source
-  policy boundary.
-- [Provider economics, limits, and scaling boundaries](./decisions/provider-economics-and-limits.md):
-  end-to-end file-size limits, synchronous versus batch transcription, Groq,
-  Cloudflare and open-source options, Supabase/Railway billing, egress,
-  retention, email, and the required cost dashboard.
-- [Deferred work register](./decisions/deferred-work.md): accepted product and
-  technical deferrals, why they are not current blockers, and their revisit
-  triggers.
-- [Pre-production review register](./decisions/pre-production-review-register.md):
-  product decisions and operational evidence still required before an
-  external public beta or paid public launch.
-- [Briefing quality evaluation](./quality/briefing-evaluation.md): deterministic
-  and opt-in paid evaluation.
-- [Worker and billing incidents](./runbooks/worker-and-billing-incidents.md):
-  operator diagnosis and reconciliation.
-- [Polar environments and testing](./runbooks/polar-environments-and-testing.md):
-  sandbox versus production identities, plan/product mapping, local webhook
-  setup, provider proof boundaries, and official references.
-- [Hosted Auth and service probes](./runbooks/hosted-auth-and-service-probes.md):
-  Supabase Dashboard configuration, real recovery-email proof, liveness,
-  readiness, rate limits, and proxy behavior.
-- [Supabase environments and migrations](./runbooks/supabase-environments-and-migrations.md):
-  the separate local, CI, staging, and production databases; safe migration
-  commands; worker connection modes; and official provider references.
-- [First deployment checklist](./runbooks/first-deployment-checklist.md): the
-  future web/API/worker topology, HTTPS/origins, public signup, ingress/WAF,
-  webhook, observability, retention, backups, and R2 decision in plain terms.
-- [Release automation](./runbooks/release-automation.md): token ownership,
-  protected-main behavior, rotation, failure diagnosis, and security tradeoffs.
-- [Local recovery rehearsal](./runbooks/local-recovery-rehearsal.md): the
-  project-specific Gate A, Gate B, and Gate C checks.
-- [Quality gates and GitHub Actions](./runbooks/quality-gates-and-github-actions.md):
-  exact local checks, pre-commit behavior, every PR workflow, post-merge
-  release/staging/promotion automation, and what remains manual.
-- [Storage access boundary](./security/storage-access.md): intended Supabase
-  Storage access patterns.
+1. [Product and user workflows](./product/user-workflows.md) to see what a user
+   experiences.
+2. [Repository and code map](./architecture/repository-and-code-map.md) to learn
+   where each responsibility lives.
+3. [System and job lifecycle](./architecture/system-and-job-lifecycle.md) to
+   follow one briefing through API, worker, providers, storage, and settlement.
+4. [Briefing product behavior](./product/briefing-behavior.md) for the visible
+   rules, limits, reuse, charging, recovery, and exports.
 
-## Runbooks
+After those four chapters, use the owner path below instead of reading every
+file in alphabetical order.
 
-The operational pages are intentionally last in the learning path. They assume
-you already understand the user workflow and the state model.
+## Remaining owner reading path
 
-The names Gate A, Gate B, and Gate C are Talven project conventions, not
-industry standards:
+### Chapter 1: Polar, plans, payments, and webhooks
 
-- Gate A is deterministic, provider-free application testing.
-- Gate B is a fully migrated disposable database and concurrency test.
-- Gate C is an authenticated product journey using test-only fake providers.
+Read in this order:
 
-All three prove code behavior. They do not replace human UX review, real
-provider validation, privacy decisions, backups, or an exact-candidate staging
-rehearsal.
+1. [Polar environments and testing](./runbooks/polar-environments-and-testing.md#talven-plans-and-polar-products):
+   plan fields, tracked versus private/generated files, sandbox/production
+   separation, catalog generation, create/reuse behavior, partial-failure
+   recovery, checkout, refunds, and live proof.
+2. [Billing and Polar webhooks](./architecture/billing-and-webhooks.md#what-a-webhook-is): what a
+   webhook is, example payload and handler, signatures, event ordering,
+   idempotency, entitlements, refunds, and reconciliation.
+3. [Worker and billing incidents](./runbooks/worker-and-billing-incidents.md):
+   diagnosis and safe recovery when billing or settlement fails.
+4. [Unit economics](./product/unit-economics.md): base price, customer tax,
+   Polar fees, processing cost, business contribution, autónomo cost, and IRPF
+   planning.
 
-## Where checks run
+Finish this chapter able to explain which plan file to edit, when to run the
+generator, which commands mutate providers, why checkout return is not payment
+proof, and why duplicate webhooks are safe.
 
-The complete command and workflow inventory is in
-[Quality gates and GitHub Actions](./runbooks/quality-gates-and-github-actions.md).
+### Chapter 2: Supabase schema and security
 
-- The pre-commit hook stays fast: syntax, accidental-secret/large-file checks,
-  Ruff, formatting, and strict backend type checking.
-- Pull-request CI is the mandatory shared gate: it runs the direct backend
-  checks and every CI-suitable pre-commit hook again, then backend tests,
-  frontend lint/type checks, unit tests, and the
-  production build. Only the local `no-commit-to-branch` hook is skipped in CI.
-- A PR that changes `supabase/**` also starts a clean local database, applies
-  every migration, runs the database suites, and lints the resulting schema.
-- Gate C remains an explicit local/staging rehearsal because it needs an
-  authenticated disposable user and several running services.
+Read in this order:
 
-Do not put the full database rehearsal in pre-commit. Slow hooks are often
-bypassed and require Docker on every contributor machine.
-The local hook gives quick feedback; protected CI is what prevents an
-unverified change from being merged.
+1. [Database, RLS, and persistence](./architecture/database-and-persistence.md):
+   the 17-table map, primary/foreign keys, deletion behavior, RLS, grants,
+   functions/RPCs, CRUD modules, and read-only queries for exact columns.
+2. [Security and data access](./architecture/security-and-data-access.md): what
+   the browser, API, service role, worker, and Storage layer may access.
+3. [Supabase environments and migrations](./runbooks/supabase-environments-and-migrations.md):
+   local, CI, staging, and production databases; migration deployment;
+   connection modes; and backup boundaries.
+4. [Storage access boundary](./security/storage-access.md): private buckets,
+   signed access, and server-mediated object operations.
+
+For exact implementation detail, continue into `supabase/migrations/`,
+`supabase/tests/database/`, and `apps/backend/fathom/crud/supabase/` as directed
+by the database chapter.
+
+Finish this chapter able to explain how RLS and grants work together, which
+tables the browser can read, why most mutations are server-only, how an RPC
+protects a multi-row rule, and why database backups do not restore Storage
+objects.
+
+### Chapter 3: what blocks launch and what can wait
+
+Read in this order:
+
+1. [Pre-production review register](./decisions/pre-production-review-register.md#how-to-sort-a-decision):
+   the short launch checklist and the meaning of accepted, code-verified,
+   external-proof, paid-launch, deferred, and optional work.
+2. [Deferred work register](./decisions/deferred-work.md): why larger changes
+   are postponed, what evidence would reactivate them, and what a safe future
+   version needs.
+3. [First deployment checklist](./runbooks/first-deployment-checklist.md):
+   hosting topology, HTTPS/origins, public signup, SMTP, Polar webhook,
+   retention, backups, support, and release proof.
+4. [Operational metrics and provider review](./runbooks/operational-metrics-and-provider-review.md):
+   Grafana versus provider dashboards, alerts, review cadence, capacity
+   thresholds, and provider-change evidence.
+
+Use the pre-production register as the checklist. Use deferred work for the
+reasoning behind “not now.” An item may remain deferred after review; launch
+does not require building every possible improvement.
+
+### Chapter 4: launch feature scope
+
+Read [Growth and product feature roadmap](./product/growth-feature-roadmap.md#current-launch-scope-decision).
+It owns the detailed proposals and acceptance evidence for:
+
+- Markdown/clipboard export;
+- private-by-default unlisted/public sharing;
+- referrals and promotional credits;
+- the cited “Ask this episode” MVP;
+- curated Explore and saving to a library;
+- later identity, follows, digests, and advanced research.
+
+Start with its **Current launch-scope decision** section, then read the detailed
+phase for any feature you are seriously considering. It explains why sharing is
+the common foundation for referrals and Explore, and why episode chat is the
+largest optional stretch. Do not treat roadmap text as implemented behavior.
+
+### Chapter 5: operate and release
+
+Once hosting and feature scope are chosen, read:
+
+1. [First deployment checklist](./runbooks/first-deployment-checklist.md).
+2. [Hosted Auth and service probes](./runbooks/hosted-auth-and-service-probes.md).
+3. [Quality gates and GitHub Actions](./runbooks/quality-gates-and-github-actions.md).
+4. [Local recovery rehearsal](./runbooks/local-recovery-rehearsal.md).
+5. [Release automation](./runbooks/release-automation.md).
+6. [Operational metrics and provider review](./runbooks/operational-metrics-and-provider-review.md).
+
+Passing code checks is not the complete launch proof. The pre-production and
+deployment chapters identify the real-provider, staging, human UX, privacy,
+backup, alerting, capacity, and support evidence that remains external.
+
+## Full topic index
+
+### Product and business
+
+- [Product and user workflows](./product/user-workflows.md): complete
+  user-facing journey.
+- [Briefing product behavior](./product/briefing-behavior.md): current product
+  rules and limits.
+- [Unit economics](./product/unit-economics.md): revenue, cost, margin, and
+  Spanish owner-cash model.
+- [Growth feature roadmap](./product/growth-feature-roadmap.md): staged export,
+  sharing, referral, episode Q&A, Explore, and later social/research work.
+
+### Architecture and security
+
+- [Repository and code map](./architecture/repository-and-code-map.md).
+- [Frontend, authentication, and user flows](./architecture/frontend-auth-and-user-flows.md).
+- [System and job lifecycle](./architecture/system-and-job-lifecycle.md).
+- [Cache and versioning](./architecture/cache-and-versioning.md).
+- [Database, RLS, and persistence](./architecture/database-and-persistence.md).
+- [Billing and Polar webhooks](./architecture/billing-and-webhooks.md).
+- [API contract and client generation](./architecture/api-contract.md).
+- [Security and data access](./architecture/security-and-data-access.md).
+- [Runtime safety, in plain language](./architecture/runtime-safety-explained.md).
+- [Storage access boundary](./security/storage-access.md).
+
+### Providers, sources, and scale decisions
+
+- [Polar environments and testing](./runbooks/polar-environments-and-testing.md).
+- [Supabase environments and migrations](./runbooks/supabase-environments-and-migrations.md).
+- [Provider economics and limits](./decisions/provider-economics-and-limits.md).
+- [Audio acquisition and temporary delivery](./decisions/audio-acquisition-and-delivery.md).
+- [Long-audio and transcription decision](./decisions/long-audio-and-transcription.md).
+- [Operational metrics and provider review](./runbooks/operational-metrics-and-provider-review.md).
+
+### Launch decisions and operations
+
+- [Pre-production review register](./decisions/pre-production-review-register.md).
+- [Deferred work register](./decisions/deferred-work.md).
+- [First deployment checklist](./runbooks/first-deployment-checklist.md).
+- [Hosted Auth and service probes](./runbooks/hosted-auth-and-service-probes.md).
+- [Worker and billing incidents](./runbooks/worker-and-billing-incidents.md).
+- [Quality gates and GitHub Actions](./runbooks/quality-gates-and-github-actions.md).
+- [Local recovery rehearsal](./runbooks/local-recovery-rehearsal.md).
+- [Release automation](./runbooks/release-automation.md).
+
+### Setup, API, and quality reference
+
+- [Local development](./getting-started/local-development.md).
+- [Environment variables](./reference/environment.md).
+- [HTTP API reference](./reference/http-api.md).
+- [Briefing quality evaluation](./quality/briefing-evaluation.md).
+
+## How to interpret the documentation
+
+- Architecture and product pages describe current intended behavior.
+- Runbooks explain actions, environments, proof, and incident recovery.
+- Decision pages record accepted trade-offs, triggers, and launch gates.
+- Product roadmap pages are proposals unless current workflow documentation
+  explicitly says the feature exists.
+- Migrations, tests, runtime code, and deployed provider settings remain the
+  executable or external sources of truth.

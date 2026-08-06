@@ -40,6 +40,36 @@ Direct Notion OAuth is intentionally absent from the near-term sequence.
 Copy/paste and Markdown import cover the initial need without token storage,
 OAuth, block conversion, retries, and revocation handling.
 
+## Current launch-scope decision
+
+The current candidates are connected, but they are not equal in effort:
+
+| Candidate | Smallest honest version | Main dependency or risk | Launch view |
+| --- | --- | --- | --- |
+| Referrals | 30-day attribution; first-paid-purchase reward; fixed bonus seconds; email verification, CAPTCHA, no self-referral, and monthly cap | Durable attribution, idempotent credit grant, refund/revocation rules, abuse controls, and clear terms | Reasonable before launch if acquisition is part of the experiment. Prove the reward path against Polar sandbox. |
+| Curated Explore | Curated or explicitly opted-in public briefings; simple filters; open instantly or save; no comments, follows, or ranking algorithm | Safe publishing, reporting/takedown, cache reuse, and enough initial content. Public identity is optional and must be explicit | Reasonable for launch after the sharing/privacy boundary exists. Start curated and postpone the social graph. |
+| Ask this episode | One private episode; transcript in model context; bounded history and plan limits; timestamp citations and abstention | Chat UI/state, LLM cost/latency, prompt-injection defense, citation evaluation, and retention/privacy | Largest stretch. Keep post-launch unless cited Q&A is the central value hypothesis that launch must test. |
+
+A small episode chat does not need an agent, vector database, Redis, WebSockets,
+or Supabase Realtime. One authenticated request can send the bounded transcript
+and conversation to the LLM and return one answer. Larger systems matter later
+for multi-episode retrieval, tools, or live shared collaboration.
+
+Sharing is the common foundation for the other launch loops. One private-by-
+default public/unlisted briefing page can carry a referral parameter and later
+be listed in Explore:
+
+```text
+public/unlisted briefing primitive
+-> referral attribution and first-paid-purchase reward
+-> curated Explore using opted-in or curated briefings
+-> cited Ask this episode only when deliberately chosen
+```
+
+Before implementing a slice, write one sentence for its hypothesis and one
+success metric. This roadmap does not replace the safety and operational proof
+in the pre-production register.
+
 ## Phase 0: owner telemetry and cleanup
 
 This is internal product infrastructure, not visible marketing, but it protects
@@ -68,6 +98,8 @@ Use Supabase's Usage dashboard/invoice as the authority for billable egress.
 Export or reproduce the operational trend in Grafana so Talven can alert and
 forecast before the quota is reached. Sentry may complement that view for
 exceptions and traces, but it is not the billing or capacity source of truth.
+The complete metric ownership and operating cadence are in
+[Operational metrics and provider review](../runbooks/operational-metrics-and-provider-review.md).
 
 ### Audio lifecycle
 

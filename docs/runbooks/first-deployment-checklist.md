@@ -151,6 +151,10 @@ host is known. Before unattended users, create alerts for:
 For every alert, write who receives it and the first runbook link. An alert
 with no owner is only stored noise.
 
+The complete dashboard ownership, metric inventory, review cadence, and
+provisional capacity thresholds are in
+[Operational metrics and provider review](./operational-metrics-and-provider-review.md).
+
 ### 6. Approve retention, backups, and support
 
 Before an external user creates data, record:
