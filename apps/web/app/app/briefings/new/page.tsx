@@ -9,7 +9,12 @@ import { createApiClient } from "@fathom/api-client";
 import { AppShellHeader } from "../../../components/AppShellHeader";
 import { useAppShell } from "../../../components/AppShellProvider";
 import chrome from "../../../components/app-chrome";
-import { getApiErrorMessage } from "../../../lib/apiErrors";
+import {
+  getApiErrorCode,
+  getApiErrorDetails,
+  getApiErrorMessage,
+  type ApiErrorDetails
+} from "../../../lib/apiErrors";
 import { getAccountLabel } from "../../../lib/accountLabel";
 import {
   assertAuthenticatedRequestScopeCurrent,
@@ -18,10 +23,16 @@ import {
   invalidateBriefingsCache
 } from "../../../lib/appDataCache";
 import { buildSignInPath } from "../../../lib/url";
-import { isCreditOrPaymentError } from "../sessionPresentation";
+import { getAdmissionFailurePresentation } from "../admissionPresentation";
 import styles from "../session-create.module.css";
 
 type CreatePhase = "idle" | "checking" | "creating" | "opening" | "error";
+
+type CreateError = {
+  code: string | null;
+  details: ApiErrorDetails | null;
+  message: string;
+};
 
 const PHASE_COPY: Record<CreatePhase, { description: string; status: string; title: string }> = {
   idle: {
@@ -57,12 +68,22 @@ function BriefingCreatePageContent() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { accessToken, loading, remainingSeconds, signOut, user } = useAppShell();
+  const {
+    accessToken,
+    hasActivePaidSubscription,
+    loading,
+    remainingSeconds,
+    signOut,
+    user
+  } = useAppShell();
   const userId = user?.id ?? null;
   const initialUrl = useMemo(() => searchParams.get("url")?.trim() ?? "", [searchParams]);
+  const confirmSameSourceRetry = searchParams.get("confirm") === "retry";
   const [draftUrl, setDraftUrl] = useState(initialUrl);
-  const [error, setError] = useState<string | null>(null);
-  const [phase, setPhase] = useState<CreatePhase>(initialUrl ? "checking" : "idle");
+  const [createError, setCreateError] = useState<CreateError | null>(null);
+  const [phase, setPhase] = useState<CreatePhase>(
+    initialUrl && !confirmSameSourceRetry ? "checking" : "idle"
+  );
   const [submitting, setSubmitting] = useState(false);
   const startedRef = useRef(false);
   const signInPath = buildSignInPath(
@@ -72,9 +93,9 @@ function BriefingCreatePageContent() {
   useEffect(() => {
     setDraftUrl(initialUrl);
     if (!startedRef.current) {
-      setPhase(initialUrl ? "checking" : "idle");
+      setPhase(initialUrl && !confirmSameSourceRetry ? "checking" : "idle");
     }
-  }, [initialUrl]);
+  }, [confirmSameSourceRetry, initialUrl]);
 
   const startSession = useCallback(
     async (rawUrl: string) => {
@@ -85,12 +106,16 @@ function BriefingCreatePageContent() {
       const normalizedUrl = normalizeSourceUrl(rawUrl);
       if (!normalizedUrl) {
         setPhase("error");
-        setError("Paste a full public YouTube URL beginning with http:// or https://.");
+        setCreateError({
+          code: "invalid_request",
+          details: null,
+          message: "Paste a full public YouTube URL beginning with http:// or https://."
+        });
         return;
       }
 
       setSubmitting(true);
-      setError(null);
+      setCreateError(null);
       setPhase("creating");
 
       try {
@@ -105,7 +130,11 @@ function BriefingCreatePageContent() {
 
         if (apiError) {
           setPhase("error");
-          setError(getApiErrorMessage(apiError, "Unable to start the briefing."));
+          setCreateError({
+            code: getApiErrorCode(apiError),
+            details: getApiErrorDetails(apiError),
+            message: getApiErrorMessage(apiError, "Unable to start the briefing.")
+          });
           return;
         }
 
@@ -118,10 +147,14 @@ function BriefingCreatePageContent() {
         }
 
         setPhase("error");
-        setError("Unexpected response from the server.");
+        setCreateError({ code: null, details: null, message: "Unexpected response from the server." });
       } catch (err) {
         setPhase("error");
-        setError(err instanceof Error ? err.message : "Something went wrong.");
+        setCreateError({
+          code: null,
+          details: null,
+          message: err instanceof Error ? err.message : "Something went wrong."
+        });
       } finally {
         setSubmitting(false);
       }
@@ -140,30 +173,66 @@ function BriefingCreatePageContent() {
 
     startedRef.current = true;
 
+    if (confirmSameSourceRetry && initialUrl) {
+      setPhase("idle");
+      setCreateError(null);
+      return;
+    }
+
     if (!initialUrl) {
       setPhase("idle");
-      setError("No source link reached this step. Paste one below to continue.");
+      setCreateError({
+        code: "invalid_request",
+        details: null,
+        message: "No source link reached this step. Paste one below to continue."
+      });
+      setPhase("error");
       return;
     }
 
     void startSession(initialUrl);
-  }, [accessToken, initialUrl, loading, router, signInPath, startSession]);
+  }, [accessToken, confirmSameSourceRetry, initialUrl, loading, router, signInPath, startSession]);
 
   const handleRetry = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const nextUrl = draftUrl.trim();
     if (!nextUrl) {
       setPhase("error");
-      setError("Paste a valid public YouTube URL to start a briefing.");
+      setCreateError({
+        code: "invalid_request",
+        details: null,
+        message: "Paste a valid public YouTube URL to start a briefing."
+      });
       return;
     }
 
     await startSession(nextUrl);
   };
 
-  const phaseCopy = PHASE_COPY[phase];
+  const admissionFailure = createError
+    ? getAdmissionFailurePresentation(
+        createError.code,
+        createError.message,
+        createError.details,
+        hasActivePaidSubscription
+      )
+    : null;
+  const phaseCopy = admissionFailure
+    ? {
+        title: admissionFailure.title,
+        description: admissionFailure.description,
+        status: "Review"
+      }
+    : confirmSameSourceRetry && phase === "idle"
+      ? {
+          title: "Try this source again",
+          description: "Your source is ready. Confirm below when you want Talven to start a new briefing.",
+          status: "Ready"
+        }
+      : PHASE_COPY[phase];
   const sourceHost = getSourceHost(draftUrl);
   const activeStepIndex = getActiveCreateStepIndex(phase);
+  const showSourceForm = Boolean(createError) || (confirmSameSourceRetry && phase === "idle");
 
   return (
     <div className={chrome.pageFrame}>
@@ -209,15 +278,21 @@ function BriefingCreatePageContent() {
               ))}
             </div>
 
-            {error ? (
+            {showSourceForm ? (
               <form
-                className={styles.errorCard}
+                className={createError ? styles.errorCard : styles.sourceFormCard}
                 onSubmit={(event) => void handleRetry(event)}
-                aria-describedby="create-error"
+                aria-describedby={createError ? "create-error" : "create-retry-help"}
               >
-                <p id="create-error" role="alert">
-                  {error}
-                </p>
+                {admissionFailure ? (
+                  <p id="create-error" role="alert">
+                    {admissionFailure.detail}
+                  </p>
+                ) : (
+                  <p id="create-retry-help">
+                    Review the source, then choose Try again to start a new briefing explicitly.
+                  </p>
+                )}
                 <label className={chrome.fieldStack}>
                   <span className={chrome.fieldLabel}>Public YouTube URL</span>
                   <input
@@ -231,16 +306,16 @@ function BriefingCreatePageContent() {
                 </label>
                 <div className={chrome.actionRow}>
                   <button className={chrome.primaryButton} type="submit" disabled={submitting}>
-                    {submitting ? "Starting..." : "Try again"}
+                    {submitting ? "Starting..." : admissionFailure?.retryLabel ?? "Try again"}
                   </button>
                   <Link className={chrome.secondaryButton} href="/app">
                     Back to workspace
                   </Link>
                 </div>
-                {isCreditOrPaymentError(error) ? (
+                {admissionFailure?.billingAction ? (
                   <div className={chrome.actionRow}>
-                    <Link className={chrome.primaryButton} href="/app/billing#billing-offers">
-                      Get more video time
+                    <Link className={chrome.primaryButton} href={admissionFailure.billingAction.href}>
+                      {admissionFailure.billingAction.label}
                     </Link>
                   </div>
                 ) : null}

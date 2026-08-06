@@ -11,16 +11,11 @@ from types import SimpleNamespace
 from typing import cast
 from unittest.mock import AsyncMock, Mock, patch
 
-from pydantic import ValidationError
-
-from fathom.core.config import (
-    DEFAULT_SOURCE_DOWNLOAD_DEADLINE_SECONDS,
-    DEFAULT_SOURCE_METADATA_DEADLINE_SECONDS,
-    Settings,
-)
 from fathom.core.errors import ExternalServiceError, ForbiddenError, NotFoundError, RateLimitError
 from fathom.crud.supabase.storage_objects import delete_object_with_retry, upload_object
 from fathom.services.downloader import (
+    SOURCE_DOWNLOAD_TIMEOUT_SECONDS,
+    SOURCE_METADATA_TIMEOUT_SECONDS,
     DownloadError,
     download_audio,
     fetch_video_metadata_with_deadline,
@@ -206,40 +201,10 @@ class DownloadLimitTests(unittest.TestCase):
             self.assertEqual(result.path.read_bytes(), b"content")
 
 
-class DownloadDeadlineSettingsTests(unittest.TestCase):
-    def _settings_values(self) -> dict[str, str]:
-        return {
-            "OPENROUTER_API_KEY": "openrouter",
-            "GROQ_API_KEY": "groq",
-            "SUPABASE_URL": "https://example.supabase.co",
-            "SUPABASE_PUBLISHABLE_KEY": "publishable",
-            "SUPABASE_SECRET_KEY": "secret",
-            "APP_ENV": "local",
-            "RATE_LIMIT": "0",
-            "CORS_ALLOW_ORIGINS": "",
-        }
-
-    def test_download_deadline_has_safe_default(self) -> None:
-        settings = Settings.model_validate(self._settings_values())
-
-        self.assertEqual(
-            settings.source_download_deadline_seconds,
-            DEFAULT_SOURCE_DOWNLOAD_DEADLINE_SECONDS,
-        )
-        self.assertEqual(
-            settings.source_metadata_deadline_seconds,
-            DEFAULT_SOURCE_METADATA_DEADLINE_SECONDS,
-        )
-
-    def test_download_deadline_must_be_positive_and_bounded(self) -> None:
-        values = self._settings_values()
-        values["SOURCE_DOWNLOAD_DEADLINE_SECONDS"] = "0"
-        with self.assertRaises(ValidationError):
-            Settings.model_validate(values)
-
-        values["SOURCE_DOWNLOAD_DEADLINE_SECONDS"] = "3601"
-        with self.assertRaises(ValidationError):
-            Settings.model_validate(values)
+class DownloadTimeoutConstantTests(unittest.TestCase):
+    def test_source_timeout_constants(self) -> None:
+        self.assertEqual(SOURCE_DOWNLOAD_TIMEOUT_SECONDS, 300.0)
+        self.assertEqual(SOURCE_METADATA_TIMEOUT_SECONDS, 30.0)
 
 
 class YouTubeWorkerDeadlineTests(unittest.IsolatedAsyncioTestCase):

@@ -13,7 +13,7 @@ The server normalizes a submitted source before looking for work:
 | --- | --- | --- | --- |
 | Source/job | `youtube:<video_id>` for YouTube; `url:<sha256(canonical_url)>` for the generic source model | Same normalized source and user/job rules | `jobs.source_key` |
 | Transcript | Video ID or canonical URL hash plus `groq:whisper-large-v3-turbo:segments-v1` | Same source and transcript provider contract, with non-empty timestamp segments | `transcripts` + `transcript_segments` |
-| Summary | Transcript ID + `briefing-v6-evidence-links` + `x-ai/grok-4.3` | Summary is `ready` and contains non-empty Markdown | `summaries` |
+| Summary | Transcript ID + `briefing-v6-evidence-links` + `deepseek/deepseek-v4-flash-0731` | Summary is `ready` and contains non-empty Markdown | `summaries` |
 | PDF | Summary ID plus `PDF_CACHE_VERSION = 3` | Object key and stored version are current | `summaries` + private `fathom` bucket |
 
 The prompt key and model names are part of the cache contract. If the prompt,
@@ -70,7 +70,7 @@ boundary is explicit:
 | `id` | `22222222-2222-4222-8222-222222222222` | Returned as `briefing_id` |
 | `transcript_id` | `11111111-1111-4111-8111-111111111111` | No |
 | `prompt_key` | `briefing-v6-evidence-links` | No |
-| `summary_model` | `x-ai/grok-4.3` | No |
+| `summary_model` | `deepseek/deepseek-v4-flash-0731` | No |
 | `summary_markdown` | `# Key ideas\n...` | Returned as `markdown` |
 | `pdf_object_key` | `briefings/22222222-2222-4222-8222-222222222222/v3/33333333-3333-4333-8333-333333333333.pdf` | No; API returns a short-lived signed URL instead |
 | `created_at` | `2026-08-03T09:02:00Z` | No |

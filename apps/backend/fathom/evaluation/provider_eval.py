@@ -120,7 +120,7 @@ async def run_provider_evaluation(
         contract = await summarizer(
             case.segments,
             api_key,
-            deadline_seconds=limits.deadline_seconds_per_case,
+            timeout_seconds=limits.deadline_seconds_per_case,
             max_attempts=1,
             max_output_tokens=limits.max_output_tokens_per_case,
         )

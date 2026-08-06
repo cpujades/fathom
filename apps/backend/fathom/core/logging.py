@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 import sys
 import uuid
@@ -356,11 +355,8 @@ def _use_color() -> bool:
     return sys.stdout.isatty()
 
 
-def _resolve_log_format() -> str:
-    raw_format = os.getenv("LOG_FORMAT", "console").strip().lower()
-    if raw_format in {"json", "console"}:
-        return raw_format
-    return "console"
+def _resolve_log_format(app_env: str) -> str:
+    return "json" if app_env in {"staging", "production"} else "console"
 
 
 def _module_path(record: logging.LogRecord) -> str:
@@ -468,15 +464,16 @@ def _apply_logger_levels(
 
 def setup_logging(
     *,
+    app_env: str = "local",
     log_level: str | None = None,
     service: str | None = None,
     third_party_levels: Mapping[str, str] | None = None,
 ) -> None:
-    """Configure global logging; ``LOG_FORMAT`` selects console or JSON output."""
+    """Configure global logging; hosted app environments use JSON output."""
     root_level = _resolve_log_level(log_level or "INFO")
     include_source = True
     log_format = _build_log_format(include_source)
-    output_format = _resolve_log_format()
+    output_format = _resolve_log_format(app_env)
 
     root_logger = _reset_logging_state()
 

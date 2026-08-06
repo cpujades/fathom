@@ -5,7 +5,7 @@ The Python code uses Supabase PostgREST for ordinary reads/writes and protected
 Postgres RPCs for operations that must be atomic, fenced, or multi-row. There
 is no ORM model layer to update separately from the migrations.
 
-## The 16 application tables
+## The 17 application tables
 
 These are the current public application tables. Supabase Auth and Storage
 tables are platform-owned and are not included.
@@ -14,7 +14,7 @@ tables are platform-owned and are not included.
 | --- | --- | --- |
 | User work | `jobs`, `job_events` | Private session/library state, queue progress, and replayable state changes |
 | Reusable processing | `transcripts`, `transcript_segments`, `summaries` | Source metadata, immutable timestamp evidence, and versioned briefing output |
-| Catalog and billing | `plans`, `polar_customers`, `billing_orders`, `billing_webhook_events`, `credit_lots`, `entitlements`, `usage_ledger`, `usage_settlements` | Product catalog, provider identity, commerce facts, webhook audit, credit lots, balance snapshot, usage history, and one charge per job |
+| Catalog and billing | `plans`, `polar_customers`, `billing_orders`, `billing_webhook_events`, `billing_sync_operations`, `credit_lots`, `entitlements`, `usage_ledger`, `usage_settlements` | Product catalog, provider identity, commerce facts, webhook audit, user-scoped checkout/refund synchronization, credit lots, balance snapshot, usage history, and one charge per job |
 | Coordination | `billing_maintenance_leases`, `briefing_stream_leases`, `api_rate_limit_buckets` | Short-lived distributed locks, stream caps, and shared request counters |
 
 The key ownership decision is that most tables carry a `user_id` without a
@@ -34,6 +34,7 @@ as permission by itself.
 | `jobs` | legacy `usage_ledger` rows | `job_id`, set null |
 | `usage_settlements` | new `usage_ledger` rows | `settlement_id`, restrict deletion |
 | `plans` | `entitlements`, `billing_orders`, `credit_lots` | `plan_id`, set null |
+| Auth users and `plans` | `billing_sync_operations` | User deletion cascades; plan deletion preserves the operation and clears its optional plan link |
 
 Relationships such as `user_id`, Polar order IDs, provider event IDs, and
 `credit_lots.source_key` are intentionally logical rather than Auth foreign
@@ -42,7 +43,7 @@ state.
 
 ## Browser RLS and server privileges
 
-All 16 application tables have RLS enabled. The final client boundary grants
+All 17 application tables have RLS enabled. The final client boundary grants
 the authenticated role `SELECT` on only:
 
 | Table | Final read rule |
@@ -52,8 +53,8 @@ the authenticated role `SELECT` on only:
 
 Authenticated clients have no direct insert, update, or delete privilege on
 application tables, no direct Storage access, and no direct reads of
-summaries, transcripts, plans, billing, usage, settlement, stream-lease, maintenance, or
-rate-limit data. The API reads those records with a service client only after
+summaries, transcripts, plans, billing, billing-sync, usage, settlement,
+stream-lease, maintenance, or rate-limit data. The API reads those records with a service client only after
 authenticating the user and applying the corresponding ownership filter.
 For a summary, that filter is a caller-owned `succeeded` or `deleted` job whose
 `summary_id` matches the requested briefing. This keeps global cache rows
@@ -99,14 +100,87 @@ implementation is split by database responsibility:
 | `billing_credits.py` | Fetch/upsert/consume/expire/summarize credit lots |
 | `billing_entitlements.py` | Fetch/upsert balance snapshot and adjust debt |
 | `billing_orders.py` | List user orders, refund-pending orders, reconciliation candidates |
+| `billing_operations.py` | Create, owner-scope, and idempotently resolve checkout/refund sync operations |
 | `billing_usage.py` | Fetch usage history and call atomic settlement |
 | `billing_webhooks.py` | Upsert provider customer, reclaim stale events, apply webhook transaction |
 | `billing_recovery.py` | Begin/reopen refunds, maintenance leases, webhook diagnostics |
+
+Committed `job_events` also publish a transaction-safe `job_event_available`
+wake hint containing only the job ID. Each API process uses one direct Postgres
+listener and a replica-local coordinator; event content still comes from the
+durable table and remains tenant-scoped at stream authorization and replay.
 
 Application code should call a use case, not a CRUD function, when the action
 has user-facing policy. CRUD owns persistence shape and error translation; the
 application layer owns decisions such as “a known source must fit the current
 balance.”
+
+## Inspect the exact schema safely
+
+This page is the friendly map. The exact schema comes from every committed
+`supabase/migrations/*.sql` file applied in filename order. A later migration
+may replace a table policy or function created by an earlier one, so one old
+migration is never the final answer by itself.
+
+Use this source order:
+
+| Question | Best source |
+| --- | --- |
+| What should exist? | All committed migrations applied in order. |
+| What exists in one deployed environment? | That database's migration history and read-only system catalogs. |
+| What can a browser really do? | Table grants and RLS policies together. |
+| What does the backend call? | `apps/backend/fathom/crud/supabase/` and service-role RPC grants. |
+| What proves isolation and concurrency? | `supabase/tests/database/*.test.sql` on a clean migrated database. |
+
+The following read-only queries are safe for a local or staging SQL editor.
+Do not use a shared production project as a learning sandbox.
+
+```sql
+-- Tables.
+select table_name
+from information_schema.tables
+where table_schema = 'public' and table_type = 'BASE TABLE'
+order by table_name;
+
+-- Columns, types, nullability, and defaults.
+select table_name, ordinal_position, column_name, data_type,
+       is_nullable, column_default
+from information_schema.columns
+where table_schema = 'public'
+order by table_name, ordinal_position;
+
+-- Primary keys, foreign keys, unique constraints, and checks.
+select conrelid::regclass as table_name, conname as constraint_name,
+       contype as constraint_type, pg_get_constraintdef(oid) as definition
+from pg_constraint
+where connamespace = 'public'::regnamespace
+order by conrelid::regclass::text, conname;
+
+-- RLS policy definitions.
+select schemaname, tablename, policyname, roles, cmd, qual, with_check
+from pg_policies
+where schemaname = 'public'
+order by tablename, policyname;
+
+-- Table privileges. Read these together with RLS policies.
+select grantee, table_name, privilege_type
+from information_schema.role_table_grants
+where table_schema = 'public'
+order by table_name, grantee, privilege_type;
+
+-- Public functions with their exact argument and result types.
+select p.proname as function_name,
+       pg_get_function_identity_arguments(p.oid) as arguments,
+       pg_get_function_result(p.oid) as result
+from pg_proc p
+join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public'
+order by p.proname, arguments;
+```
+
+For a practical reading exercise, choose one complete path—create a job,
+settle usage, or apply a Polar webhook—and match each Python CRUD call to its
+table or RPC. This is easier to remember than learning 17 tables in isolation.
 
 ## How to change the data model safely
 

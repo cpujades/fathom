@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import unittest
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import AsyncMock, patch
 from uuid import UUID
 
+from fathom.application.briefings.sessions.event_coordinator import JobEventCoordinator, JobEventUpdate
 from fathom.application.briefings.sessions.streaming import (
     session_event_stream as _session_event_stream,
 )
@@ -16,6 +18,28 @@ from fathom.core.errors import NotFoundError, RateLimitError
 from fathom.schemas.briefing_sessions import BriefingSessionResponse
 
 SESSION_ID = UUID("11111111-1111-1111-1111-111111111111")
+
+
+class _FakeSubscription:
+    def __init__(self, updates: list[JobEventUpdate | None]) -> None:
+        self.updates = updates
+        self.cursor = 0
+
+    def advance(self, cursor: int) -> None:
+        self.cursor = max(self.cursor, cursor)
+
+    async def wait(self, _timeout_seconds: float) -> JobEventUpdate | None:
+        return self.updates.pop(0) if self.updates else None
+
+
+class _FakeCoordinator:
+    def __init__(self, updates: list[JobEventUpdate | None]) -> None:
+        self.subscription = _FakeSubscription(updates)
+
+    @asynccontextmanager
+    async def subscribe(self, _job_id: str, *, cursor: int):
+        self.subscription.advance(cursor)
+        yield self.subscription
 
 
 def _snapshot(*, state: str, markdown: str | None = None) -> BriefingSessionResponse:
@@ -42,25 +66,12 @@ def _snapshot(*, state: str, markdown: str | None = None) -> BriefingSessionResp
 class SessionEventStreamTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.auth = AuthenticatedUser(access_token="access-token", user_id="user-1")
-        self.settings = cast(
-            Settings,
-            SimpleNamespace(
-                sse_stream_lease_seconds=90,
-                sse_stream_max_lifetime_seconds=3600,
-            ),
-        )
+        self.settings = cast(Settings, SimpleNamespace())
         self.user_client = object()
         self.admin_client = object()
 
     async def test_stream_capacity_is_rejected_before_response_starts(self) -> None:
-        settings = cast(
-            Settings,
-            SimpleNamespace(
-                sse_max_streams_per_user=3,
-                sse_max_streams_per_ip=12,
-                sse_stream_lease_seconds=90,
-            ),
-        )
+        settings = cast(Settings, SimpleNamespace())
         with (
             patch(
                 "fathom.application.briefings.sessions.streaming.create_supabase_user_client",
@@ -105,14 +116,7 @@ class SessionEventStreamTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_missing_session_is_rejected_before_claiming_stream_capacity(self) -> None:
-        settings = cast(
-            Settings,
-            SimpleNamespace(
-                sse_max_streams_per_user=3,
-                sse_max_streams_per_ip=12,
-                sse_stream_lease_seconds=90,
-            ),
-        )
+        settings = cast(Settings, SimpleNamespace())
         with (
             patch(
                 "fathom.application.briefings.sessions.streaming.create_supabase_user_client",
@@ -253,6 +257,53 @@ class SessionEventStreamTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("id: 37\nevent: session.snapshot", chunks[1])
         list_after.assert_not_awaited()
 
+    async def test_idle_coordinated_stream_does_not_query_events_each_control_tick(self) -> None:
+        request = SimpleNamespace(is_disconnected=AsyncMock(side_effect=[False, True]))
+        job = {
+            "id": str(SESSION_ID),
+            "status": "running",
+            "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        }
+        coordinator = cast(JobEventCoordinator, _FakeCoordinator([None]))
+
+        with (
+            patch(
+                "fathom.application.briefings.sessions.streaming.create_supabase_user_client",
+                AsyncMock(return_value=self.user_client),
+            ),
+            patch(
+                "fathom.application.briefings.sessions.streaming.create_supabase_admin_client",
+                AsyncMock(return_value=self.admin_client),
+            ),
+            patch("fathom.application.briefings.sessions.streaming.fetch_job", AsyncMock(return_value=job)),
+            patch(
+                "fathom.application.briefings.sessions.streaming.fetch_latest_job_event_sequence",
+                AsyncMock(return_value=10),
+            ),
+            patch(
+                "fathom.application.briefings.sessions.streaming.list_job_events_after",
+                AsyncMock(),
+            ) as list_after,
+            patch(
+                "fathom.application.briefings.sessions.streaming.build_session_snapshot",
+                AsyncMock(return_value=_snapshot(state="transcribing")),
+            ),
+        ):
+            chunks = [
+                chunk
+                async for chunk in _session_event_stream(
+                    session_id=SESSION_ID,
+                    auth=self.auth,
+                    settings=self.settings,
+                    last_event_id=None,
+                    is_disconnected=request.is_disconnected,
+                    event_coordinator=coordinator,
+                )
+            ]
+
+        self.assertEqual(len(chunks), 2)
+        list_after.assert_not_awaited()
+
     async def test_terminal_transition_includes_complete_content(self) -> None:
         request = SimpleNamespace(headers={}, is_disconnected=AsyncMock(return_value=False))
         active_job = {
@@ -262,6 +313,25 @@ class SessionEventStreamTests(unittest.IsolatedAsyncioTestCase):
         }
         ready_job = {**active_job, "status": "succeeded"}
         final_markdown = "# Briefing\n\nFinal evidence-backed content."
+        coordinator = cast(
+            JobEventCoordinator,
+            _FakeCoordinator(
+                [
+                    JobEventUpdate(
+                        events=(
+                            {
+                                "sequence_id": 41,
+                                "event_type": "job_state_changed",
+                                "stage": "completed",
+                                "created_at": "2026-07-29T12:02:00Z",
+                            },
+                        ),
+                        latest_sequence=41,
+                        reconcile_snapshot=True,
+                    )
+                ]
+            ),
+        )
 
         with (
             patch(
@@ -278,20 +348,11 @@ class SessionEventStreamTests(unittest.IsolatedAsyncioTestCase):
             ),
             patch(
                 "fathom.application.briefings.sessions.streaming.fetch_latest_job_event_sequence",
-                AsyncMock(side_effect=[40, 41]),
+                AsyncMock(return_value=40),
             ),
             patch(
                 "fathom.application.briefings.sessions.streaming.list_job_events_after",
-                AsyncMock(
-                    return_value=[
-                        {
-                            "sequence_id": 41,
-                            "event_type": "job_state_changed",
-                            "stage": "completed",
-                            "created_at": "2026-07-29T12:02:00Z",
-                        }
-                    ]
-                ),
+                AsyncMock(),
             ),
             patch(
                 "fathom.application.briefings.sessions.streaming.build_session_snapshot",
@@ -302,7 +363,6 @@ class SessionEventStreamTests(unittest.IsolatedAsyncioTestCase):
                     ]
                 ),
             ),
-            patch("fathom.application.briefings.sessions.streaming.asyncio.sleep", AsyncMock()),
         ):
             chunks = [
                 chunk
@@ -312,6 +372,7 @@ class SessionEventStreamTests(unittest.IsolatedAsyncioTestCase):
                     settings=self.settings,
                     last_event_id=request.headers.get("last-event-id"),
                     is_disconnected=request.is_disconnected,
+                    event_coordinator=coordinator,
                 )
             ]
 

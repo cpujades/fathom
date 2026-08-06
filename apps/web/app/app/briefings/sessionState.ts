@@ -140,13 +140,11 @@ export function briefingSessionReducer(state: SessionUiState, action: SessionUiA
 
     return withDerivedPhase({
       ...state,
-      connectionNotice: null,
       deliveryError: markdown.trim() ? false : state.deliveryError,
       initialSnapshotLoaded: true,
       markdown,
       progress: session.progress,
-      session,
-      streamHealth: "live"
+      session
     });
   }
 

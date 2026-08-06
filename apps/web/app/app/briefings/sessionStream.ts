@@ -21,31 +21,75 @@ export class SessionStreamProtocolError extends Error {
   }
 }
 
+export class SessionStreamStaleError extends Error {
+  constructor() {
+    super("The live session stream stopped sending transport activity.");
+    this.name = "SessionStreamStaleError";
+  }
+}
+
+type SessionStreamReadOptions = {
+  onActivity?: (receivedBytes: number) => Promise<void> | void;
+  onStale?: () => Promise<void> | void;
+  staleAfterMs?: number;
+};
+
 export async function readSessionStream(
   stream: ReadableStream<Uint8Array>,
-  onEvent: (event: SessionStreamEvent) => Promise<void> | void
+  onEvent: (event: SessionStreamEvent) => Promise<void> | void,
+  options: SessionStreamReadOptions = {}
 ): Promise<void> {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
 
-  while (true) {
-    const { done, value } = await reader.read();
-    buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+  try {
+    while (true) {
+      const { done, value } = await readWithStaleTimeout(reader, options.staleAfterMs);
+      if (value?.byteLength) await options.onActivity?.(value.byteLength);
+      buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
 
-    let boundary = findEventBoundary(buffer);
-    while (boundary) {
-      const parsed = parseSessionStreamEvent(buffer.slice(0, boundary.index));
-      buffer = buffer.slice(boundary.index + boundary.length);
-      if (parsed) await onEvent(parsed);
-      boundary = findEventBoundary(buffer);
-    }
+      let boundary = findEventBoundary(buffer);
+      while (boundary) {
+        const parsed = parseSessionStreamEvent(buffer.slice(0, boundary.index));
+        buffer = buffer.slice(boundary.index + boundary.length);
+        if (parsed) await onEvent(parsed);
+        boundary = findEventBoundary(buffer);
+      }
 
-    if (done) {
-      const parsed = parseSessionStreamEvent(buffer);
-      if (parsed) await onEvent(parsed);
-      return;
+      if (done) {
+        const parsed = parseSessionStreamEvent(buffer);
+        if (parsed) await onEvent(parsed);
+        return;
+      }
     }
+  } catch (error) {
+    if (error instanceof SessionStreamStaleError) {
+      await options.onStale?.();
+      await reader.cancel(error).catch(() => undefined);
+    }
+    throw error;
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+async function readWithStaleTimeout(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  staleAfterMs: number | undefined
+): Promise<ReadableStreamReadResult<Uint8Array>> {
+  if (!staleAfterMs || staleAfterMs <= 0) return reader.read();
+
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      reader.read(),
+      new Promise<never>((_resolve, reject) => {
+        timeoutId = setTimeout(() => reject(new SessionStreamStaleError()), staleAfterMs);
+      })
+    ]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
   }
 }
 
@@ -85,6 +129,14 @@ export function parseSessionStreamEvent(rawEvent: string): SessionStreamEvent | 
   if (isSnapshotEvent(event) && isSessionSnapshot(data)) return { id, event, data };
 
   throw new SessionStreamProtocolError(`The ${event} event did not match the session stream contract.`);
+}
+
+export function isValidSessionEventCursor(value: string | null): value is string {
+  return value !== null && /^\d+$/.test(value);
+}
+
+export function nextSessionStreamReconnectDelay(currentMs: number, maximumMs: number): number {
+  return Math.min(currentMs * 2, maximumMs);
 }
 
 function findEventBoundary(buffer: string): { index: number; length: number } | null {

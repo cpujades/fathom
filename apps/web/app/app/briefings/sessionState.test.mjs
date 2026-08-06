@@ -163,6 +163,21 @@ test("stream loss and restore are explicit connection states", () => {
   assert.equal(restored.connectionNotice, null);
 });
 
+test("a recovery snapshot updates product state without claiming the transport recovered", () => {
+  const reconnecting = briefingSessionReducer(createInitialSessionUiState(baseSnapshot()), {
+    type: "stream_lost",
+    notice: "Reconnecting"
+  });
+  const reconciled = briefingSessionReducer(reconnecting, {
+    type: "snapshot",
+    snapshot: baseSnapshot({ progress: 72 })
+  });
+
+  assert.equal(reconciled.progress, 72);
+  assert.equal(reconciled.streamHealth, "reconnecting");
+  assert.equal(reconciled.connectionNotice, "Reconnecting");
+});
+
 test("an initial snapshot failure becomes a recoverable load failure", () => {
   const state = briefingSessionReducer(createInitialSessionUiState(), {
     type: "snapshot_load_failed"

@@ -209,6 +209,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/billing/operations/{operation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Operation */
+        get: operations["get_operation_billing_operations__operation_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/billing/plans": {
         parameters: {
             query?: never;
@@ -327,6 +344,26 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+        };
+        /** BillingSyncOperationResponse */
+        BillingSyncOperationResponse: {
+            /**
+             * Operation Id
+             * Format: uuid
+             */
+            operation_id: string;
+            /**
+             * Operation Type
+             * @enum {string}
+             */
+            operation_type: "checkout" | "refund";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "succeeded" | "failed";
+            /** Failure Code */
+            failure_code: string | null;
         };
         /** BriefingListItem */
         BriefingListItem: {
@@ -503,6 +540,11 @@ export interface components {
              * Format: uri
              */
             checkout_url: string;
+            /**
+             * Operation Id
+             * Format: uuid
+             */
+            operation_id: string;
         };
         /** CustomerPortalSessionResponse */
         CustomerPortalSessionResponse: {
@@ -518,6 +560,18 @@ export interface components {
             code: string;
             /** Message */
             message: string;
+            details?: components["schemas"]["ErrorDetails"] | null;
+        };
+        /** ErrorDetails */
+        ErrorDetails: {
+            /** Required Seconds */
+            required_seconds?: number | null;
+            /** Available Seconds */
+            available_seconds?: number | null;
+            /** Debt Seconds */
+            debt_seconds?: number | null;
+            /** Maximum Seconds */
+            maximum_seconds?: number | null;
         };
         /** ErrorResponse */
         ErrorResponse: {
@@ -567,6 +621,11 @@ export interface components {
         };
         /** PackRefundResponse */
         PackRefundResponse: {
+            /**
+             * Operation Id
+             * Format: uuid
+             */
+            operation_id: string;
             /** Polar Order Id */
             polar_order_id: string;
             /** Refund Id */
@@ -614,6 +673,11 @@ export interface components {
         ReadyResponse: {
             /** Status */
             status: string;
+            /**
+             * Event Delivery
+             * @enum {string}
+             */
+            event_delivery: "healthy" | "degraded";
         };
         /** StatusResponse */
         StatusResponse: {
@@ -623,6 +687,11 @@ export interface components {
             version?: string | null;
             /** Uptime Seconds */
             uptime_seconds?: number | null;
+            /**
+             * Event Delivery
+             * @enum {string}
+             */
+            event_delivery: "healthy" | "degraded";
         };
         /** SubscriptionBillingState */
         SubscriptionBillingState: {
@@ -657,6 +726,8 @@ export interface components {
         UsageOverviewResponse: {
             /** Subscription Plan Name */
             subscription_plan_name: string | null;
+            /** Has Active Paid Subscription */
+            has_active_paid_subscription: boolean;
             /** Subscription Remaining Seconds */
             subscription_remaining_seconds: number;
             /** Pack Remaining Seconds */
@@ -1417,6 +1488,64 @@ export interface operations {
             };
             /** @description Upstream provider failed. */
             502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_operation_billing_operations__operation_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingSyncOperationResponse"];
+                };
+            };
+            /** @description Missing or invalid auth token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Billing operation not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Unexpected server error. */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };

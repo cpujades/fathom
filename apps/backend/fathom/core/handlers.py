@@ -28,10 +28,10 @@ async def handle_app_error(request: Request, exc: AppError) -> JSONResponse:
                     "error_type": type(exc).__name__,
                 },
             )
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={"error": {"code": exc.code, "message": exc.detail}},
-    )
+    error: dict[str, object] = {"code": exc.code, "message": exc.detail}
+    if exc.details:
+        error["details"] = exc.details
+    return JSONResponse(status_code=exc.status_code, content={"error": error})
 
 
 async def handle_validation_error(request: Request, _exc: RequestValidationError) -> JSONResponse:

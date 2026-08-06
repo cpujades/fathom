@@ -5,7 +5,15 @@ import logging
 import sys
 import unittest
 
-from fathom.core.logging import JsonFormatter, normalize_correlation_id
+from fathom.core.logging import JsonFormatter, _resolve_log_format, normalize_correlation_id
+
+
+class LogFormatTests(unittest.TestCase):
+    def test_log_format_follows_app_environment(self) -> None:
+        self.assertEqual(_resolve_log_format("local"), "console")
+        self.assertEqual(_resolve_log_format("test"), "console")
+        self.assertEqual(_resolve_log_format("staging"), "json")
+        self.assertEqual(_resolve_log_format("production"), "json")
 
 
 class CorrelationIdTests(unittest.TestCase):

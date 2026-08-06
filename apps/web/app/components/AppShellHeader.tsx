@@ -105,11 +105,22 @@ export function AppShellHeader({ active = null, remainingSeconds, accountLabel, 
 
         {remainingSeconds !== null || accountLabel || onSignOut ? (
           <div className={styles.utilityCluster}>
-            {remainingSeconds !== null ? (
-              <div className={styles.balanceReadout}>
+            {accountLabel || onSignOut || remainingSeconds !== null ? (
+              <div
+                className={styles.balanceReadout}
+                aria-label={
+                  remainingSeconds === null
+                    ? "Checking available video time"
+                    : `${formatDuration(remainingSeconds)} video time available`
+                }
+              >
                 <span className={styles.balanceValue}>
-                  <span className={styles.balanceAmount}>{formatDuration(remainingSeconds)}</span>
-                  <span className={styles.balanceSuffix}> available</span>
+                  <span className={styles.balanceAmount}>
+                    {remainingSeconds === null ? "Checking" : formatDuration(remainingSeconds)}
+                  </span>
+                  <span className={styles.balanceSuffix}>
+                    {remainingSeconds === null ? " video time" : " available"}
+                  </span>
                 </span>
               </div>
             ) : null}

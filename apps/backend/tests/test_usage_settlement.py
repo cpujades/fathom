@@ -14,7 +14,7 @@ from supabase import AsyncClient
 
 class UsageSettlementApplicationTests(unittest.IsolatedAsyncioTestCase):
     async def test_record_usage_delegates_to_atomic_settlement(self) -> None:
-        settings = cast(Settings, SimpleNamespace(billing_debt_cap_seconds=600))
+        settings = cast(Settings, SimpleNamespace())
         admin_client = cast(AsyncClient, object())
         settlement = {
             "resolution_type": "settled",
@@ -47,7 +47,7 @@ class UsageSettlementApplicationTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_zero_duration_still_creates_idempotency_record(self) -> None:
-        settings = cast(Settings, SimpleNamespace(billing_debt_cap_seconds=600))
+        settings = cast(Settings, SimpleNamespace())
         admin_client = cast(AsyncClient, object())
         settlement = {
             "resolution_type": "settled",
@@ -75,7 +75,7 @@ class UsageSettlementApplicationTests(unittest.IsolatedAsyncioTestCase):
         settle.assert_awaited_once()
 
     async def test_settlement_failure_is_not_swallowed(self) -> None:
-        settings = cast(Settings, SimpleNamespace(billing_debt_cap_seconds=600))
+        settings = cast(Settings, SimpleNamespace())
         admin_client = cast(AsyncClient, object())
 
         with patch(

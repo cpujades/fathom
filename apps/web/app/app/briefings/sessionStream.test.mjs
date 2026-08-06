@@ -2,9 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  isValidSessionEventCursor,
+  nextSessionStreamReconnectDelay,
   parseSessionStreamEvent,
   readSessionStream,
-  SessionStreamProtocolError
+  SessionStreamProtocolError,
+  SessionStreamStaleError
 } from "./sessionStream.ts";
 
 const snapshot = {
@@ -81,4 +84,80 @@ test("reads events separated with LF or CRLF across stream chunks", async () => 
   assert.equal(events.length, 1);
   assert.equal(events[0].event, "session.updated");
   assert.equal(events[0].id, "44");
+});
+
+test("reports keepalive transport activity without inventing a state event", async () => {
+  const activity = [];
+  const events = [];
+  const stream = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(": keepalive\n\n"));
+      controller.close();
+    }
+  });
+
+  await readSessionStream(stream, (event) => events.push(event), {
+    onActivity: (receivedBytes) => activity.push(receivedBytes),
+    staleAfterMs: 50
+  });
+
+  assert.equal(activity.length, 1);
+  assert.ok(activity[0] > 0);
+  assert.deepEqual(events, []);
+});
+
+test("keepalive activity resets the transport stale deadline", async () => {
+  let controller;
+  const stream = new ReadableStream({
+    start(streamController) {
+      controller = streamController;
+    }
+  });
+  const reading = readSessionStream(stream, () => undefined, { staleAfterMs: 50 });
+
+  setTimeout(() => controller.enqueue(new TextEncoder().encode(": keepalive\n\n")), 30);
+  setTimeout(() => controller.close(), 60);
+
+  await reading;
+});
+
+test("fails a transport that sends no bytes within the stale window", async () => {
+  let cancelled = false;
+  let staleReported = false;
+  const stream = new ReadableStream({
+    cancel() {
+      cancelled = true;
+    }
+  });
+
+  await assert.rejects(
+    readSessionStream(stream, () => undefined, {
+      onStale: () => {
+        staleReported = true;
+      },
+      staleAfterMs: 5
+    }),
+    SessionStreamStaleError
+  );
+  assert.equal(staleReported, true);
+  assert.equal(cancelled, true);
+});
+
+test("only accepts non-negative numeric event cursors for reconnect replay", () => {
+  assert.equal(isValidSessionEventCursor("0"), true);
+  assert.equal(isValidSessionEventCursor("42"), true);
+  assert.equal(isValidSessionEventCursor(null), false);
+  assert.equal(isValidSessionEventCursor("-1"), false);
+  assert.equal(isValidSessionEventCursor("cursor"), false);
+});
+
+test("repeated reconnect failures back off to a fixed upper bound", () => {
+  let delay = 1_000;
+  delay = nextSessionStreamReconnectDelay(delay, 5_000);
+  assert.equal(delay, 2_000);
+  delay = nextSessionStreamReconnectDelay(delay, 5_000);
+  assert.equal(delay, 4_000);
+  delay = nextSessionStreamReconnectDelay(delay, 5_000);
+  assert.equal(delay, 5_000);
+  assert.equal(nextSessionStreamReconnectDelay(delay, 5_000), 5_000);
 });

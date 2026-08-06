@@ -93,17 +93,26 @@ These endpoints have different purposes:
 
 ### What `/meta/ready` checks
 
-Readiness returns HTTP `200` with `{"status":"ok"}` only when:
+Readiness returns HTTP `200` with `status: "ok"` when:
 
 - Supabase URL and keys are configured;
 - PostgREST can read the expected core columns;
 - direct TLS-verified Postgres is reachable;
-- the required tables and security-definer functions exist; and
+- the required tables, functions, and event-notification trigger exist; and
 - Polar token, webhook secret, success URL, and portal return URL are present
   in staging or production.
 
 It returns HTTP `503` when one of those conditions fails. Logs name the failed
 check without exposing credentials.
+
+The response also reports `event_delivery` as `healthy` or `degraded`. A
+transient Postgres listener failure is deliberately degraded rather than a
+`503`: persisted replay and listener-loss reconciliation keep requests correct
+while the supervised listener reconnects. Public `/meta/status` reports only
+that coarse state alongside version and uptime. Detailed listener, queue,
+overflow, refresh, and fallback counters remain in the structured
+`api.status.snapshot` log entry for operator diagnosis; they are not returned
+to unauthenticated callers.
 
 Readiness deliberately does **not** call YouTube, Groq, OpenRouter, or Polar's
 remote API. Calling paid or rate-limited providers from every infrastructure

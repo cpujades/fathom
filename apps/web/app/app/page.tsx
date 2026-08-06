@@ -4,18 +4,17 @@ import Link from "next/link";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
-import { createApiClient, type UsageOverviewResponse } from "@fathom/api-client";
 
 import { AppShellHeader } from "../components/AppShellHeader";
 import { useAppShell } from "../components/AppShellProvider";
 import chrome from "../components/app-chrome";
 import { getAccountLabel } from "../lib/accountLabel";
+import { formatDuration, formatExactDuration } from "../lib/format";
 import {
-  assertAuthenticatedRequestScopeCurrent,
-  captureAuthenticatedRequestScope,
-  isAuthenticatedDataScopeChangedError
-} from "../lib/appDataCache";
-import { formatDuration } from "../lib/format";
+  getBillingOffersAction,
+  getLowBalanceSeconds,
+  resolveCurrentUsageBalance
+} from "../lib/usage";
 import { getCreationAccessState } from "./usagePresentation";
 import styles from "./home.module.css";
 
@@ -37,55 +36,24 @@ function getFirstName(user: Pick<User, "user_metadata"> | null): string | null {
 
 export default function AppHome() {
   const router = useRouter();
-  const { accessToken, loading, remainingSeconds, signOut, user } = useAppShell();
+  const {
+    debtSeconds,
+    hasActivePaidSubscription,
+    isBlocked,
+    loading,
+    remainingSeconds,
+    signOut,
+    usageRefreshFailed,
+    user
+  } = useAppShell();
   const [url, setUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [usageResult, setUsageResult] = useState<{
-    data: UsageOverviewResponse | null;
-    failed: boolean;
-    userId: string;
-  } | null>(null);
-  const userId = user?.id ?? null;
 
   useEffect(() => {
     router.prefetch("/app/briefings/new");
     router.prefetch("/app/briefings");
   }, [router]);
-
-  useEffect(() => {
-    if (!accessToken || !userId) {
-      return;
-    }
-
-    let active = true;
-    const requestScope = captureAuthenticatedRequestScope(userId);
-
-    const loadUsage = async () => {
-      try {
-        const api = createApiClient(accessToken);
-        const { data, error: apiError } = await api.GET("/billing/usage");
-        assertAuthenticatedRequestScopeCurrent(requestScope);
-        if (!active) {
-          return;
-        }
-        if (apiError || !data) {
-          setUsageResult({ userId, data: null, failed: true });
-          return;
-        }
-        setUsageResult({ userId, data, failed: false });
-      } catch (caught) {
-        if (active && !isAuthenticatedDataScopeChangedError(caught)) {
-          setUsageResult({ userId, data: null, failed: true });
-        }
-      }
-    };
-
-    void loadUsage();
-    return () => {
-      active = false;
-    };
-  }, [accessToken, userId]);
 
   const handleSubmit = () => {
     if (submitting) {
@@ -113,9 +81,12 @@ export default function AppHome() {
     : firstName
       ? `What is worth understanding, ${firstName}?`
       : "What is worth understanding?";
-  const usage = usageResult?.userId === userId ? usageResult.data : null;
-  const usageRefreshFailed = usageResult?.userId === userId && usageResult.failed;
-  const availableSeconds = usage?.total_remaining_seconds ?? remainingSeconds;
+  const refreshedUsage = resolveCurrentUsageBalance(null, {
+    debtSeconds,
+    isBlocked,
+    remainingSeconds
+  });
+  const availableSeconds = refreshedUsage?.total_remaining_seconds ?? remainingSeconds;
   const quotaLabel = useMemo(() => {
     if (availableSeconds === null) {
       return "Checking";
@@ -125,14 +96,20 @@ export default function AppHome() {
     }
     return formatDuration(availableSeconds);
   }, [availableSeconds]);
-  const creationAccess = getCreationAccessState(usage);
-  const usageNotice = usage?.is_blocked
+  const creationAccess = getCreationAccessState(refreshedUsage);
+  const lowBalanceSeconds = getLowBalanceSeconds(refreshedUsage);
+  const billingAction = getBillingOffersAction(
+    hasActivePaidSubscription
+  );
+  const usageNotice = refreshedUsage?.is_blocked
     ? `Briefing creation is paused because the debt limit has been reached. Add video time to repay ${formatDuration(creationAccess.debtSeconds)} and continue.`
     : creationAccess.debtSeconds > 0
       ? `Outstanding video time: ${formatDuration(creationAccess.debtSeconds)}. New credits repay this first, and Talven checks each source length before starting.`
       : creationAccess.hasNoCredits
         ? "No video time remains. Add time to start another briefing."
-        : null;
+        : lowBalanceSeconds !== null
+          ? `Only ${formatExactDuration(lowBalanceSeconds)} of video time remain. Add time now so your next briefing is not interrupted.`
+          : null;
   const canSubmit = !loading && !submitting && creationAccess.canCreate;
   const inputDescriptionIds = [error ? "briefing-source-error" : null, usageNotice ? "briefing-usage-notice" : null]
     .filter(Boolean)
@@ -183,16 +160,18 @@ export default function AppHome() {
                   </div>
                 </div>
               </div>
-              <div className={styles.commandMetaRow}>
+              <div
+                className={`${styles.commandMetaRow} ${lowBalanceSeconds !== null ? styles.lowBalanceNotice : ""}`}
+              >
                 {usageNotice ? (
-                  <p id="briefing-usage-notice" role={usage?.is_blocked ? "alert" : "status"}>
+                  <p id="briefing-usage-notice" role={refreshedUsage?.is_blocked ? "alert" : "status"}>
                     {usageNotice}
                   </p>
                 ) : (
                   <span>Video time is charged only after a briefing is completed successfully.</span>
                 )}
-                {usage?.is_blocked || creationAccess.hasNoCredits ? (
-                  <Link href="/app/billing#billing-offers">Add time</Link>
+                {refreshedUsage?.is_blocked || creationAccess.hasNoCredits || lowBalanceSeconds !== null ? (
+                  <Link href={billingAction.href}>{billingAction.label}</Link>
                 ) : null}
               </div>
               {usageRefreshFailed ? (

@@ -13,7 +13,6 @@ from openai import (
 )
 from pydantic import ValidationError
 
-from fathom.core.config import DEFAULT_PROVIDER_SUMMARY_DEADLINE_SECONDS
 from fathom.core.constants import EVIDENCE_SYSTEM_PROMPT
 from fathom.schemas.briefing_contract import (
     BriefingContract,
@@ -22,7 +21,7 @@ from fathom.schemas.briefing_contract import (
 )
 from fathom.schemas.transcripts import TranscriptSegment
 from fathom.services.provider_resilience import (
-    DEFAULT_PROVIDER_MAX_ATTEMPTS,
+    PROVIDER_MAX_ATTEMPTS,
     CallableProviderAdapter,
     ProviderFailureKind,
     ProviderOperationError,
@@ -33,10 +32,11 @@ from fathom.services.provider_resilience import (
 )
 
 # Default OpenRouter model for summarization
-OPENROUTER_MODEL = "x-ai/grok-4.3"
+OPENROUTER_MODEL = "deepseek/deepseek-v4-flash-0731"
 
 # OpenRouter metadata headers (optional but recommended)
 OPENROUTER_APP_NAME = "Talven"
+OPENROUTER_SUMMARY_TIMEOUT_SECONDS = 300.0
 
 
 class SummarizationError(ProviderOperationError):
@@ -60,8 +60,8 @@ async def summarize_transcript_with_evidence(
     segments: tuple[TranscriptSegment, ...],
     api_key: str,
     *,
-    deadline_seconds: float = DEFAULT_PROVIDER_SUMMARY_DEADLINE_SECONDS,
-    max_attempts: int = DEFAULT_PROVIDER_MAX_ATTEMPTS,
+    timeout_seconds: float = OPENROUTER_SUMMARY_TIMEOUT_SECONDS,
+    max_attempts: int = PROVIDER_MAX_ATTEMPTS,
     max_output_tokens: int | None = None,
 ) -> BriefingContract:
     if not api_key:
@@ -75,7 +75,7 @@ async def summarize_transcript_with_evidence(
         api_key=api_key,
         base_url="https://openrouter.ai/api/v1",
         max_retries=0,
-        timeout=600,
+        timeout=timeout_seconds,
         default_headers={
             "X-Title": OPENROUTER_APP_NAME,
         },
@@ -122,7 +122,7 @@ async def summarize_transcript_with_evidence(
         if not isinstance(content, str) or not content.strip():
             raise SummarizationError(
                 "Empty structured summary response.",
-                kind=ProviderFailureKind.TRANSIENT,
+                kind=ProviderFailureKind.INVALID_RESPONSE,
             )
         try:
             contract = BriefingContract.model_validate_json(content)
@@ -130,7 +130,7 @@ async def summarize_transcript_with_evidence(
         except (ValidationError, BriefingContractError) as exc:
             raise SummarizationError(
                 "OpenRouter returned an invalid evidence contract.",
-                kind=ProviderFailureKind.TRANSIENT,
+                kind=ProviderFailureKind.INVALID_RESPONSE,
             ) from exc
         return contract
 
@@ -139,13 +139,13 @@ async def summarize_transcript_with_evidence(
         stage="summarizing",
         operation=operation,
         error_classifier=_classify_openrouter_error,
-        deadline_error_factory=_summary_deadline_error,
+        timeout_error_factory=_summary_timeout_error,
     )
     async with client:
         return await call_with_resilience(
             adapter,
             RetryPolicy(
-                deadline_seconds=deadline_seconds,
+                attempt_timeout_seconds=timeout_seconds,
                 max_attempts=max_attempts,
             ),
         )
@@ -176,13 +176,13 @@ def _classify_openrouter_error(exc: Exception) -> SummarizationError:
     if isinstance(exc, APIError):
         return SummarizationError(
             "OpenRouter returned an invalid response.",
-            kind=ProviderFailureKind.TRANSIENT,
+            kind=ProviderFailureKind.INVALID_RESPONSE,
         )
     return SummarizationError("OpenRouter summary request failed.")
 
 
-def _summary_deadline_error() -> SummarizationError:
+def _summary_timeout_error() -> SummarizationError:
     return SummarizationError(
-        "OpenRouter summary deadline exceeded.",
+        "OpenRouter summary request timed out.",
         kind=ProviderFailureKind.TRANSIENT,
     )

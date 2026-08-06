@@ -8,8 +8,6 @@
     "start": "next start",
     "lint": "eslint .",
     "test": "node --experimental-strip-types --test \"app/**/*.test.mjs\"",
-    "test:browser": "playwright test",
-    "test:session-state": "node --experimental-strip-types --test app/app/briefings/sessionState.test.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -40,8 +38,6 @@
     "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
-    "@axe-core/playwright": "4.12.1",
-    "@playwright/test": "1.62.0",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "24.13.3",
     "@types/react": "19.2.17",

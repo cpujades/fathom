@@ -3,25 +3,28 @@ import test from "node:test";
 
 import {
   buildMarkdownFilename,
+  buildSameSourceRetryHref,
   getDeliveryFailurePresentation,
   getFailurePresentation,
   getFinalizationPresentation,
-  isCreditOrPaymentError
+  isBillingAdmissionErrorCode
 } from "./sessionPresentation.ts";
 import { getApiErrorCode } from "../../lib/apiErrors.ts";
 
-test("quota and negative-balance admission failures lead to billing recovery", () => {
-  for (const message of [
-    "Insufficient credits for this video.",
-    "You have no remaining credits.",
-    "Your account is temporarily blocked due to negative balance. Please top up credits."
-  ]) {
-    assert.equal(isCreditOrPaymentError(message), true);
-    assert.equal(
-      getFailurePresentation({ error_code: "invalid_request", error_message: message }, null).actionHref,
-      "/app/billing#billing-offers"
+test("stable admission codes lead to plan-aware billing recovery", () => {
+  for (const code of ["insufficient_video_time", "no_video_time", "balance_blocked"]) {
+    assert.equal(isBillingAdmissionErrorCode(code), true);
+    const presentation = getFailurePresentation(
+      { error_code: code, error_message: "Copy may change without changing behavior." },
+      null,
+      null,
+      null,
+      true
     );
+    assert.equal(presentation.actionHref, "/app/billing?view=packs#billing-offers");
+    assert.doesNotMatch(presentation.description, /invalid source/i);
   }
+  assert.equal(isBillingAdmissionErrorCode("invalid_request"), false);
 });
 
 test("retryable billing finalization does not invite a duplicate run", () => {
@@ -53,16 +56,38 @@ test("provider-stage failures use non-technical recovery copy", () => {
     { error_code: "summary_failed", error_message: "OpenRouter returned an invalid response." },
     null
   );
-  const unavailable = getFailurePresentation(
-    { error_code: "rate_limit_exceeded", error_message: "Rate limit reached." },
-    null
+  const capacity = getFailurePresentation(
+    { error_code: "provider_capacity_reached", error_message: "Internal provider detail." },
+    null,
+    null,
+    "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
   );
 
   assert.equal(transcription.title, "Transcript failed");
   assert.doesNotMatch(transcription.detail, /Groq/);
   assert.equal(summary.title, "Briefing failed");
   assert.doesNotMatch(summary.detail, /OpenRouter/);
-  assert.equal(unavailable.title, "Service temporarily unavailable");
+  assert.equal(capacity.title, "Talven is handling high demand");
+  assert.equal(capacity.description, "Your source is fine.");
+  assert.doesNotMatch(`${capacity.description} ${capacity.detail}`, /Groq|OpenRouter|another source/i);
+  assert.equal(
+    capacity.actionHref,
+    "/app/briefings/new?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3DdQw4w9WgXcQ&confirm=retry"
+  );
+
+  const unavailable = getFailurePresentation(
+    { error_code: "provider_temporarily_unavailable", error_message: "Internal provider detail." },
+    null,
+    null,
+    "https://youtu.be/example"
+  );
+  assert.equal(unavailable.title, "A service is temporarily unavailable");
+  assert.doesNotMatch(`${unavailable.description} ${unavailable.detail}`, /high demand/i);
+});
+
+test("same-source retries require the explicit confirmation route", () => {
+  assert.equal(buildSameSourceRetryHref(null), "/app");
+  assert.match(buildSameSourceRetryHref("https://youtu.be/example"), /confirm=retry$/);
 });
 
 test("missing and unreadable sessions offer deliberate route recovery", () => {
