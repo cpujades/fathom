@@ -19,6 +19,14 @@ type PricingCopy = {
   benefits?: string[];
 };
 
+type AuthPlanSummary = {
+  includedTime: string;
+  paymentCadence: "monthly" | "one-time";
+  planCode: string;
+  price: string;
+  productName: string;
+};
+
 const packPlans: Plan[] = [
   {
     tag: "Trial pack",
@@ -103,6 +111,39 @@ const subscriptionPlans: Plan[] = [
   }
 ];
 
+const resolveAuthPlanSummary = (intent?: string | null, planCode?: string | null): AuthPlanSummary | null => {
+  if (intent !== "paid" || !planCode) {
+    return null;
+  }
+
+  const normalizedPlanCode = planCode.trim().toLowerCase();
+  const subscription = subscriptionPlans.find(
+    (plan) => plan.planCode !== "free" && plan.planCode === normalizedPlanCode
+  );
+  if (subscription) {
+    return {
+      includedTime: subscription.hours,
+      paymentCadence: "monthly",
+      planCode: subscription.planCode,
+      price: subscription.price,
+      productName: subscription.name
+    };
+  }
+
+  const pack = packPlans.find((plan) => plan.planCode === normalizedPlanCode);
+  if (!pack) {
+    return null;
+  }
+
+  return {
+    includedTime: pack.hours,
+    paymentCadence: "one-time",
+    planCode: pack.planCode,
+    price: pack.price,
+    productName: `${pack.name} Pack`
+  };
+};
+
 const pricingCopy: Record<"packs" | "subscriptions", PricingCopy> = {
   packs: {
     section_label: "One-time packs",
@@ -131,5 +172,5 @@ const pricingCopy: Record<"packs" | "subscriptions", PricingCopy> = {
   }
 };
 
-export type { Plan, PricingCopy };
-export { packPlans, subscriptionPlans, pricingCopy };
+export type { AuthPlanSummary, Plan, PricingCopy };
+export { packPlans, pricingCopy, resolveAuthPlanSummary, subscriptionPlans };

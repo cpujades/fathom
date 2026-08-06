@@ -49,6 +49,11 @@ invent a new IP for every request.
 - Deploy the three processes from one exact commit.
 - Use staging/sandbox Supabase, Polar, Groq, and OpenRouter credentials.
 - Apply migrations before routing product traffic.
+- Verify the hosted migration history matches that exact release; do not treat
+  passing local/CI migration tests as proof that the hosted database received
+  them. After the migrations are applied, inspect the project's Supabase
+  Security Advisor and resolve or explicitly record every RLS, table-privilege,
+  exposed-schema, and function warning before enabling external traffic.
 - Keep production data and secrets out of staging.
 - Record build commands, start commands, CPU/memory limits, and rollback steps.
 
@@ -146,6 +151,10 @@ host is known. Before unattended users, create alerts for:
 For every alert, write who receives it and the first runbook link. An alert
 with no owner is only stored noise.
 
+The complete dashboard ownership, metric inventory, review cadence, and
+provisional capacity thresholds are in
+[Operational metrics and provider review](./operational-metrics-and-provider-review.md).
+
 ### 6. Approve retention, backups, and support
 
 Before an external user creates data, record:
@@ -180,12 +189,13 @@ Keep Supabase Storage for the first deployment unless measurements show a real
 cost or limit problem. It already shares the current service identity and all
 downloads are private signed URLs.
 
-R2 may later reduce PDF download egress cost, but it is not a drop-in rename.
-A safe change needs a storage adapter, least-privilege R2 credentials, private
-buckets, short-lived signed URLs, CORS, cleanup/retention behavior, migration
-of existing objects, failure tests, and rollback. Temporary audio and PDFs may
-also have different retention/security needs, so do not move both merely for
-architectural symmetry.
+R2 may later remove temporary-audio egress to the transcription provider or
+reduce PDF download egress cost, but it is not a drop-in rename. A safe change
+needs a storage adapter, least-privilege R2 credentials, private buckets,
+short-lived signed URLs, CORS, cleanup/retention behavior, migration of
+existing objects, failure tests, and rollback. Temporary audio and PDFs have
+different retention/security needs, so evaluate them separately and do not
+move both merely for architectural symmetry.
 
 Compare measured total cost and operational complexity after real usage. The
 cheapest price per stored gigabyte is not automatically the cheapest system to

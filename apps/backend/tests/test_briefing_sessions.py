@@ -25,13 +25,75 @@ from fathom.application.briefings.sessions.queries import (
 )
 from fathom.application.identity import AuthenticatedUser
 from fathom.core.config import Settings
-from fathom.core.errors import NotFoundError, UsageSettlementError
+from fathom.core.errors import InsufficientVideoTimeError, NotFoundError, UsageSettlementError
 from fathom.crud.supabase.jobs import JobCreateResolution
 from fathom.schemas.briefing_sessions import BriefingSessionCreateRequest
 from fathom.schemas.transcripts import TranscriptSegment
 
 
 class CreateBriefingSessionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_admission_rejection_happens_before_cache_or_job_creation(self) -> None:
+        auth = AuthenticatedUser(access_token="access-token", user_id="user-123")
+        settings = cast(Settings, SimpleNamespace())
+        request = BriefingSessionCreateRequest(url="https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+        user_client = object()
+        admin_client = object()
+
+        with (
+            patch(
+                "fathom.application.briefings.sessions.commands.create_supabase_user_client",
+                AsyncMock(return_value=user_client),
+            ),
+            patch(
+                "fathom.application.briefings.sessions.commands.create_supabase_admin_client",
+                AsyncMock(return_value=admin_client),
+            ),
+            patch(
+                "fathom.application.briefings.sessions.commands.fetch_active_job_for_source",
+                AsyncMock(return_value=None),
+            ),
+            patch(
+                "fathom.application.briefings.sessions.commands.fetch_reusable_job_for_source",
+                AsyncMock(return_value=None),
+            ),
+            patch(
+                "fathom.application.briefings.sessions.commands.fetch_video_metadata_with_deadline",
+                AsyncMock(
+                    return_value=SimpleNamespace(
+                        video_id="dQw4w9WgXcQ",
+                        duration_seconds=2_520,
+                        title="Example",
+                    )
+                ),
+            ),
+            patch(
+                "fathom.application.briefings.sessions.commands.ensure_usage_allowed",
+                AsyncMock(
+                    side_effect=InsufficientVideoTimeError(
+                        "This video needs more time than is currently available.",
+                        details={"required_seconds": 2_520, "available_seconds": 1_080},
+                    )
+                ),
+            ),
+            patch(
+                "fathom.application.briefings.sessions.commands.find_ready_cached_summary",
+                AsyncMock(),
+            ) as find_cached_summary,
+            patch(
+                "fathom.application.briefings.sessions.commands.create_or_reuse_job",
+                AsyncMock(),
+            ) as create_job,
+        ):
+            with self.assertRaises(InsufficientVideoTimeError) as raised:
+                await create_briefing_session(request, auth, settings)
+
+        self.assertEqual(
+            raised.exception.details,
+            {"required_seconds": 2_520, "available_seconds": 1_080},
+        )
+        find_cached_summary.assert_not_awaited()
+        create_job.assert_not_awaited()
+
     async def test_does_not_expose_summary_before_job_settlement_succeeds(self) -> None:
         with (
             patch(
@@ -130,7 +192,7 @@ class CreateBriefingSessionTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_creates_job_with_atomic_server_command_after_user_scoped_lookup(self) -> None:
         auth = AuthenticatedUser(access_token="access-token", user_id="user-123")
-        settings = cast(Settings, SimpleNamespace(source_metadata_deadline_seconds=30))
+        settings = cast(Settings, SimpleNamespace())
         request = BriefingSessionCreateRequest(url="https://www.youtube.com/watch?v=dQw4w9WgXcQ")
         user_client = object()
         admin_client = object()

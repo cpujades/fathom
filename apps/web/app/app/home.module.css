@@ -98,6 +98,18 @@
   margin: 0;
 }
 
+.lowBalanceNotice {
+  border: 1px solid rgba(170, 117, 28, 0.2);
+  border-radius: 14px;
+  padding: 0.72rem 0.78rem;
+  background: rgba(219, 174, 72, 0.1);
+  color: #6b4c15;
+}
+
+.lowBalanceNotice a {
+  color: #5c4216;
+}
+
 .usageRefreshNote {
   color: #667267;
   font-size: 0.78rem;

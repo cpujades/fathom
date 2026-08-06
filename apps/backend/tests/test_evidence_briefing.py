@@ -233,12 +233,12 @@ class StructuredSummaryProviderTests(unittest.IsolatedAsyncioTestCase):
             result = await summarize_transcript_with_evidence(
                 injected_segments,
                 "test-key",
-                deadline_seconds=5,
+                timeout_seconds=5,
             )
 
         self.assertEqual(result.title, "Evidence-first product review")
         request = create.await_args.kwargs
-        self.assertEqual(request["model"], "x-ai/grok-4.3")
+        self.assertEqual(request["model"], "deepseek/deepseek-v4-flash-0731")
         self.assertEqual(request["temperature"], 0)
         self.assertNotIn("max_tokens", request)
         self.assertEqual(request["response_format"]["type"], "json_schema")
@@ -258,7 +258,7 @@ class StructuredSummaryProviderTests(unittest.IsolatedAsyncioTestCase):
             request["messages"][0]["content"],
         )
 
-    async def test_invalid_citation_is_transient_and_retried(self) -> None:
+    async def test_invalid_citation_is_classified_as_invalid_response_and_retried(self) -> None:
         invalid_payload = _contract_payload()
         invalid_payload["brief"] = {
             "text": "Unsupported point.",
@@ -294,11 +294,11 @@ class StructuredSummaryProviderTests(unittest.IsolatedAsyncioTestCase):
             result = await summarize_transcript_with_evidence(
                 _segments(),
                 "test-key",
-                deadline_seconds=5,
+                timeout_seconds=5,
             )
 
         self.assertEqual(result.title, "Evidence-first product review")
-        self.assertEqual(observed_kinds, [ProviderFailureKind.TRANSIENT])
+        self.assertEqual(observed_kinds, [ProviderFailureKind.INVALID_RESPONSE])
         self.assertEqual(create.await_count, 2)
 
     async def test_provider_applies_opt_in_attempt_and_output_caps(self) -> None:
@@ -326,7 +326,7 @@ class StructuredSummaryProviderTests(unittest.IsolatedAsyncioTestCase):
             await summarize_transcript_with_evidence(
                 _segments(),
                 "test-key",
-                deadline_seconds=5,
+                timeout_seconds=5,
                 max_attempts=1,
                 max_output_tokens=1_234,
             )

@@ -10,14 +10,17 @@ export type PlanGroup = {
 };
 
 export type PurchaseSyncState = {
-  status: "syncing" | "synced" | "delayed";
+  status: "syncing" | "synced" | "failed" | "delayed";
+  snapshotStatus: "idle" | "refreshing" | "current" | "unavailable";
   orderLabel: string | null;
+  failureCode: string | null;
 };
 
 export type RefundSyncState = {
-  orderId: string;
   orderLabel: string | null;
-  status: "syncing" | "synced" | "delayed";
+  status: "syncing" | "synced" | "failed" | "delayed";
+  snapshotStatus: "idle" | "refreshing" | "current" | "unavailable";
+  failureCode: string | null;
 };
 
 export function formatPrice(amountCents: number, currency: string, billingInterval: string | null): string {
@@ -32,15 +35,15 @@ export function formatPrice(amountCents: number, currency: string, billingInterv
 export function describeSubscriptionStatus(status: string | null): string {
   if (!status) return "No active subscription";
   if (status === "active") return "Active";
-  if (status === "canceled") return "Cancels at period end";
+  if (status === "canceled") return "Canceled";
   if (status === "revoked") return "Revoked";
   return status.replaceAll("_", " ");
 }
 
 export function getStatusTone(status: string | null): string {
   if (status === "active" || status === "paid" || status === "refunded") return chrome.statusPillSuccess;
-  if (status === "refund_pending" || status === "canceled") return chrome.statusPillWarning;
-  if (status === "revoked") return chrome.statusPillDanger;
+  if (status === "refund_pending") return chrome.statusPillWarning;
+  if (status === "canceled" || status === "revoked") return chrome.statusPillDanger;
   return chrome.statusPillMuted;
 }
 
@@ -67,17 +70,4 @@ export function getPlanBadge(plan: PlanResponse, groupKey: PlanGroup["key"]): st
   if (normalizedName.includes("creator")) return "Flexible";
   if (normalizedName.includes("studio")) return "Best value";
   return null;
-}
-
-export function findRecentOrder(
-  orders: BillingOrderHistoryEntry[],
-  checkoutStartedAt: number | null
-): BillingOrderHistoryEntry | null {
-  if (!checkoutStartedAt) return null;
-  const threshold = checkoutStartedAt - 120_000;
-  return (
-    [...orders]
-      .sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime())
-      .find((entry) => new Date(entry.created_at).getTime() >= threshold) ?? null
-  );
 }

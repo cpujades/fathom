@@ -3,7 +3,7 @@
   "info": {
     "title": "Talven",
     "description": "Talven briefing service",
-    "version": "0.20.5"
+    "version": "0.20.6"
   },
   "paths": {
     "/meta/health": {
@@ -981,6 +981,84 @@
         }
       }
     },
+    "/billing/operations/{operation_id}": {
+      "get": {
+        "tags": [
+          "billing"
+        ],
+        "summary": "Get Operation",
+        "operationId": "get_operation_billing_operations__operation_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "operation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Operation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingSyncOperationResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid auth token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Billing operation not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/billing/plans": {
       "get": {
         "tags": [
@@ -1314,6 +1392,51 @@
           "created_at"
         ],
         "title": "BillingOrderHistoryEntry"
+      },
+      "BillingSyncOperationResponse": {
+        "properties": {
+          "operation_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Operation Id"
+          },
+          "operation_type": {
+            "type": "string",
+            "enum": [
+              "checkout",
+              "refund"
+            ],
+            "title": "Operation Type"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "succeeded",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "failure_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "operation_id",
+          "operation_type",
+          "status",
+          "failure_code"
+        ],
+        "title": "BillingSyncOperationResponse"
       },
       "BriefingListItem": {
         "properties": {
@@ -1765,11 +1888,17 @@
             "minLength": 1,
             "format": "uri",
             "title": "Checkout Url"
+          },
+          "operation_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Operation Id"
           }
         },
         "type": "object",
         "required": [
-          "checkout_url"
+          "checkout_url",
+          "operation_id"
         ],
         "title": "CheckoutSessionResponse"
       },
@@ -1798,6 +1927,16 @@
           "message": {
             "type": "string",
             "title": "Message"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorDetails"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -1806,6 +1945,60 @@
           "message"
         ],
         "title": "ErrorDetail"
+      },
+      "ErrorDetails": {
+        "properties": {
+          "required_seconds": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required Seconds"
+          },
+          "available_seconds": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Available Seconds"
+          },
+          "debt_seconds": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Debt Seconds"
+          },
+          "maximum_seconds": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maximum Seconds"
+          }
+        },
+        "type": "object",
+        "title": "ErrorDetails"
       },
       "ErrorResponse": {
         "properties": {
@@ -1936,6 +2129,11 @@
       },
       "PackRefundResponse": {
         "properties": {
+          "operation_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Operation Id"
+          },
           "polar_order_id": {
             "type": "string",
             "title": "Polar Order Id"
@@ -1966,6 +2164,7 @@
         },
         "type": "object",
         "required": [
+          "operation_id",
           "polar_order_id",
           "refund_id",
           "requested_amount_cents",
@@ -2088,11 +2287,20 @@
           "status": {
             "type": "string",
             "title": "Status"
+          },
+          "event_delivery": {
+            "type": "string",
+            "enum": [
+              "healthy",
+              "degraded"
+            ],
+            "title": "Event Delivery"
           }
         },
         "type": "object",
         "required": [
-          "status"
+          "status",
+          "event_delivery"
         ],
         "title": "ReadyResponse"
       },
@@ -2123,11 +2331,20 @@
               }
             ],
             "title": "Uptime Seconds"
+          },
+          "event_delivery": {
+            "type": "string",
+            "enum": [
+              "healthy",
+              "degraded"
+            ],
+            "title": "Event Delivery"
           }
         },
         "type": "object",
         "required": [
-          "status"
+          "status",
+          "event_delivery"
         ],
         "title": "StatusResponse"
       },
@@ -2261,6 +2478,10 @@
             ],
             "title": "Subscription Plan Name"
           },
+          "has_active_paid_subscription": {
+            "type": "boolean",
+            "title": "Has Active Paid Subscription"
+          },
           "subscription_remaining_seconds": {
             "type": "integer",
             "title": "Subscription Remaining Seconds"
@@ -2297,6 +2518,7 @@
         "type": "object",
         "required": [
           "subscription_plan_name",
+          "has_active_paid_subscription",
           "subscription_remaining_seconds",
           "pack_remaining_seconds",
           "total_remaining_seconds",

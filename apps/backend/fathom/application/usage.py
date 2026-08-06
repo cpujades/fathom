@@ -6,7 +6,15 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fathom.core.config import Settings
-from fathom.core.errors import ExternalServiceError, InvalidRequestError, UsageSettlementError
+from fathom.core.constants import BILLING_DEBT_CAP_SECONDS
+from fathom.core.errors import (
+    BalanceBlockedError,
+    ExternalServiceError,
+    InsufficientVideoTimeError,
+    NoVideoTimeError,
+    SourceDurationUnknownError,
+    UsageSettlementError,
+)
 from fathom.core.logging import log_context
 from fathom.crud.supabase.billing import (
     adjust_entitlement_debt,
@@ -60,6 +68,7 @@ class UsageSnapshot:
 @dataclass(frozen=True)
 class UsageOverview:
     subscription_plan_name: str | None
+    has_active_paid_subscription: bool
     subscription_remaining: int
     pack_remaining: int
     total_remaining: int
@@ -87,7 +96,7 @@ async def _sync_entitlement_snapshot(
         now=now,
         exclude_pack_source_keys=exclude_pack_source_keys,
     )
-    blocked = debt_seconds >= settings.billing_debt_cap_seconds
+    blocked = debt_seconds >= BILLING_DEBT_CAP_SECONDS
 
     await update_entitlement_snapshot(
         admin_client,
@@ -143,7 +152,7 @@ async def _apply_debt_paydown_for_lot(
         admin_client,
         user_id=user_id,
         delta_seconds=-consumed_for_paydown,
-        debt_cap_seconds=settings.billing_debt_cap_seconds,
+        debt_cap_seconds=BILLING_DEBT_CAP_SECONDS,
     )
 
 
@@ -329,17 +338,29 @@ async def _get_usage_overview(user_id: str, settings: Settings, admin_client: An
         entitlement = await _ensure_free_entitlement(admin_client, user_id, settings)
 
     plan_name: str | None = None
+    has_active_paid_subscription = False
     plan_id = entitlement.get("subscription_plan_id")
     if isinstance(plan_id, str):
         try:
             plan = await fetch_plan_by_id(admin_client, plan_id)
-            plan_name = str(plan.get("name") or "")
         except Exception:
-            plan_name = None
+            logger.warning(
+                "billing.usage.plan_lookup_failed",
+                extra={"user_id": user_id, "plan_id": plan_id},
+                exc_info=True,
+            )
+            raise
+        plan_name = str(plan.get("name") or "")
+        has_active_paid_subscription = (
+            entitlement.get("subscription_status") == "active"
+            and plan.get("polar_product_id") != FREE_TIER_PRODUCT_ID
+            and int(plan.get("amount_cents") or 0) > 0
+        )
 
     snapshot = await get_usage_snapshot(user_id, settings, admin_client=admin_client)
     return UsageOverview(
         subscription_plan_name=plan_name,
+        has_active_paid_subscription=has_active_paid_subscription,
         subscription_remaining=snapshot.subscription_remaining,
         pack_remaining=snapshot.pack_remaining,
         total_remaining=snapshot.total_remaining,
@@ -442,7 +463,7 @@ async def record_usage_for_job(
                 admin_client,
                 job_id=job_id,
                 lease_token=lease_token,
-                debt_cap_seconds=settings.billing_debt_cap_seconds,
+                debt_cap_seconds=BILLING_DEBT_CAP_SECONDS,
             )
         except Exception as exc:
             if isinstance(exc, UsageSettlementError):
@@ -470,16 +491,30 @@ async def ensure_usage_allowed(
     settings: Settings,
 ) -> None:
     if duration_seconds is None or duration_seconds <= 0:
-        raise InvalidRequestError("We couldn't determine this video's length. Try another public YouTube video.")
+        raise SourceDurationUnknownError(
+            "Talven couldn't verify this video's length safely. Try another public YouTube video."
+        )
 
     snapshot = await get_usage_snapshot(user_id, settings)
     if snapshot.is_blocked:
-        raise InvalidRequestError("Your account is temporarily blocked due to negative balance. Please top up credits.")
+        raise BalanceBlockedError(
+            "Briefing creation is paused while outstanding video time is repaid.",
+            details={"debt_seconds": max(snapshot.debt_seconds, 0)},
+        )
 
     available_now = snapshot.subscription_remaining + snapshot.pack_remaining
 
     if available_now <= 0:
-        raise InvalidRequestError("You have no remaining video time. Please upgrade or buy a pack to continue.")
+        raise NoVideoTimeError(
+            "No video time remains on this account.",
+            details={"available_seconds": 0},
+        )
 
     if duration_seconds > available_now:
-        raise InvalidRequestError("Insufficient credits for this video. Please upgrade or buy a pack.")
+        raise InsufficientVideoTimeError(
+            "This video needs more time than is currently available.",
+            details={
+                "required_seconds": duration_seconds,
+                "available_seconds": available_now,
+            },
+        )

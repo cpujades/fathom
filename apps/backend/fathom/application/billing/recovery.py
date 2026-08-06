@@ -9,6 +9,7 @@ from typing import Any
 from fathom.application.billing.parsing import as_int, as_str
 from fathom.application.billing.webhooks import extract_provider_event_time, normalize_event_payload
 from fathom.core.config import Settings
+from fathom.core.constants import BILLING_DEBT_CAP_SECONDS
 from fathom.core.errors import ExternalServiceError
 from fathom.crud.supabase.billing import (
     apply_polar_webhook_transaction,
@@ -20,6 +21,7 @@ from fathom.crud.supabase.billing import (
     release_billing_maintenance_lease,
     renew_billing_maintenance_lease,
     reopen_pack_refund,
+    resolve_refund_sync_operations,
     schedule_subscription_reconciliation,
 )
 from fathom.crud.supabase.jobs import requeue_unsettled_jobs
@@ -200,9 +202,14 @@ async def reconcile_pending_pack_refunds(
                 resource_type=resource_type,
                 resource_id=resource_id,
                 payload=payload,
-                debt_cap_seconds=settings.billing_debt_cap_seconds,
+                debt_cap_seconds=BILLING_DEBT_CAP_SECONDS,
             )
             if str(result.get("resolution_type") or "") in {"processed", "already_processed"}:
+                await resolve_refund_sync_operations(
+                    admin_client,
+                    polar_order_id=polar_order_id,
+                    status="succeeded",
+                )
                 reconciled += 1
             else:
                 logger.warning(
@@ -223,9 +230,15 @@ async def reconcile_pending_pack_refunds(
                 admin_client,
                 user_id=user_id,
                 polar_order_id=polar_order_id,
-                debt_cap_seconds=settings.billing_debt_cap_seconds,
+                debt_cap_seconds=BILLING_DEBT_CAP_SECONDS,
             )
             if str(reopen_result.get("resolution_type") or "") in {"reopened", "already_paid"}:
+                await resolve_refund_sync_operations(
+                    admin_client,
+                    polar_order_id=polar_order_id,
+                    status="failed",
+                    failure_code="refund_not_completed",
+                )
                 reconciled += 1
 
     return reconciled
@@ -291,7 +304,7 @@ async def reconcile_subscription_entitlements(
             resource_type=resource_type,
             resource_id=resource_id,
             payload=payload,
-            debt_cap_seconds=settings.billing_debt_cap_seconds,
+            debt_cap_seconds=BILLING_DEBT_CAP_SECONDS,
         )
         if str(result.get("resolution_type") or "") in {"processed", "already_processed"}:
             provider_status = as_str(payload.get("status")) or "unknown"

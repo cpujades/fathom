@@ -29,8 +29,8 @@ from fathom.orchestration.observability import (
     extract_job_error,
 )
 from fathom.services.provider_resilience import (
+    BackoffPolicy,
     ProviderOperationError,
-    RetryPolicy,
     compute_retry_delay,
 )
 from fathom.services.supabase import (
@@ -47,17 +47,16 @@ logger = logging.getLogger(__name__)
 # Worker configuration
 # ---------------------------------------------------------------------------
 WORKER_MAX_ATTEMPTS = 3
+WORKER_SHUTDOWN_GRACE_SECONDS = 30.0
 WORKER_BACKOFF_BASE_SECONDS = 5
 WORKER_STALE_AFTER_SECONDS = 300  # 5 minutes
 WORKER_LEASE_SECONDS = 120
 WORKER_HEARTBEAT_INTERVAL_SECONDS = 30.0
 WORKER_SWEEP_INTERVAL_SECONDS = 30.0
-WORKER_BILLING_MAINTENANCE_INTERVAL_SECONDS = 60.0
+WORKER_BILLING_MAINTENANCE_INTERVAL_SECONDS = 300.0
 WORKER_LISTENER_RECONNECT_BASE_SECONDS = 1.0
 WORKER_LISTENER_RECONNECT_MAX_SECONDS = 30.0
-WORKER_RETRY_POLICY = RetryPolicy(
-    deadline_seconds=3600,
-    max_attempts=WORKER_MAX_ATTEMPTS,
+WORKER_RETRY_BACKOFF = BackoffPolicy(
     backoff_base_seconds=WORKER_BACKOFF_BASE_SECONDS,
     backoff_max_seconds=60,
 )
@@ -69,7 +68,7 @@ def _compute_backoff_seconds(
     retry_after_seconds: float | None = None,
 ) -> float:
     return compute_retry_delay(
-        WORKER_RETRY_POLICY,
+        WORKER_RETRY_BACKOFF,
         attempt=attempt,
         retry_after_seconds=retry_after_seconds,
     )
@@ -78,7 +77,7 @@ def _compute_backoff_seconds(
 def _should_retry_failure(exc: Exception, *, attempt_count: int) -> bool:
     if attempt_count >= WORKER_MAX_ATTEMPTS:
         return False
-    return not isinstance(exc, ProviderOperationError) or exc.retryable
+    return not isinstance(exc, ProviderOperationError)
 
 
 async def _handle_claimed_job(
@@ -605,7 +604,7 @@ async def _run_loop_with_client(
         await _shutdown_billing_maintenance_task(billing_maintenance_task)
         await _shutdown_running_tasks(
             running_tasks,
-            grace_seconds=settings.worker_shutdown_grace_seconds,
+            grace_seconds=WORKER_SHUTDOWN_GRACE_SECONDS,
         )
 
 
@@ -720,8 +719,8 @@ async def _run_worker(settings: Settings) -> None:
 
 
 def main() -> None:
-    setup_logging(service="worker")
     settings = get_settings()
+    setup_logging(service="worker", app_env=settings.app_env)
     logger.info(
         "worker.started",
         extra={"max_concurrent_jobs": settings.worker_max_concurrent_jobs},

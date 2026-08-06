@@ -3,6 +3,12 @@ import type { PlanResponse } from "@fathom/api-client";
 const PLAN_CODE_PATTERN = /^[a-z0-9]+(?:[_-][a-z0-9]+)*$/;
 const MAX_PLAN_CODE_LENGTH = 64;
 
+export type BillingOfferMode = "subscription" | "pack";
+
+export const resolveBillingOfferMode = (value: string | null): BillingOfferMode => {
+  return value === "packs" ? "pack" : "subscription";
+};
+
 const normalizePlanCode = (value: string): string => {
   return value.trim().toLowerCase();
 };

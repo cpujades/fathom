@@ -12,7 +12,6 @@ from groq import (
     RateLimitError,
 )
 
-from fathom.core.config import DEFAULT_PROVIDER_TRANSCRIPTION_DEADLINE_SECONDS
 from fathom.schemas.transcripts import TranscriptionResult, TranscriptSegment
 from fathom.services.provider_resilience import (
     CallableProviderAdapter,
@@ -23,6 +22,8 @@ from fathom.services.provider_resilience import (
     extract_retry_after_seconds,
     retryable_status,
 )
+
+GROQ_TRANSCRIPTION_TIMEOUT_SECONDS = 120.0
 
 
 class TranscriptionError(ProviderOperationError):
@@ -47,24 +48,24 @@ def _extract_groq_transcription(response: Any) -> TranscriptionResult:
     if not isinstance(text, str):
         raise TranscriptionError(
             "Groq response missing text.",
-            kind=ProviderFailureKind.TRANSIENT,
+            kind=ProviderFailureKind.INVALID_RESPONSE,
         )
     if not text.strip():
         raise TranscriptionError(
             "Empty transcript.",
-            kind=ProviderFailureKind.TRANSIENT,
+            kind=ProviderFailureKind.INVALID_RESPONSE,
         )
 
     raw_segments = getattr(response, "segments", None)
     if raw_segments is None:
         raise TranscriptionError(
             "Groq response missing timestamp segments.",
-            kind=ProviderFailureKind.TRANSIENT,
+            kind=ProviderFailureKind.INVALID_RESPONSE,
         )
     if not isinstance(raw_segments, list):
         raise TranscriptionError(
             "Groq response contained invalid timestamp segments.",
-            kind=ProviderFailureKind.TRANSIENT,
+            kind=ProviderFailureKind.INVALID_RESPONSE,
         )
 
     segments: list[TranscriptSegment] = []
@@ -82,7 +83,7 @@ def _extract_groq_transcription(response: Any) -> TranscriptionResult:
         ):
             raise TranscriptionError(
                 "Groq response contained invalid timestamp segments.",
-                kind=ProviderFailureKind.TRANSIENT,
+                kind=ProviderFailureKind.INVALID_RESPONSE,
             )
 
         segment_text = raw_text.strip()
@@ -98,12 +99,12 @@ def _extract_groq_transcription(response: Any) -> TranscriptionResult:
         except ValueError as exc:
             raise TranscriptionError(
                 "Groq response contained invalid timestamp segments.",
-                kind=ProviderFailureKind.TRANSIENT,
+                kind=ProviderFailureKind.INVALID_RESPONSE,
             ) from exc
         if segments and segment.start_seconds < previous_start:
             raise TranscriptionError(
                 "Groq response timestamp segments were out of order.",
-                kind=ProviderFailureKind.TRANSIENT,
+                kind=ProviderFailureKind.INVALID_RESPONSE,
             )
         segments.append(segment)
         previous_start = segment.start_seconds
@@ -111,7 +112,7 @@ def _extract_groq_transcription(response: Any) -> TranscriptionResult:
     if not segments:
         raise TranscriptionError(
             "Groq response contained no timestamp segments.",
-            kind=ProviderFailureKind.TRANSIENT,
+            kind=ProviderFailureKind.INVALID_RESPONSE,
         )
     return TranscriptionResult(text=text, segments=tuple(segments))
 
@@ -127,7 +128,7 @@ async def transcribe_url(
     api_key: str,
     model: str,
     *,
-    timeout_seconds: float = 60.0,
+    timeout_seconds: float = GROQ_TRANSCRIPTION_TIMEOUT_SECONDS,
 ) -> TranscriptionResult:
     if not api_key:
         raise TranscriptionError("Missing GROQ_API_KEY.")
@@ -153,16 +154,14 @@ async def transcribe_url_with_resilience(
     api_key: str,
     model: str,
     *,
-    deadline_seconds: float = DEFAULT_PROVIDER_TRANSCRIPTION_DEADLINE_SECONDS,
+    timeout_seconds: float = GROQ_TRANSCRIPTION_TIMEOUT_SECONDS,
 ) -> TranscriptionResult:
-    request_timeout_seconds = min(deadline_seconds, 60.0)
-
     async def operation() -> TranscriptionResult:
         return await transcribe_url(
             media_url,
             api_key,
             model,
-            timeout_seconds=request_timeout_seconds,
+            timeout_seconds=timeout_seconds,
         )
 
     adapter = CallableProviderAdapter(
@@ -170,11 +169,11 @@ async def transcribe_url_with_resilience(
         stage="transcribing",
         operation=operation,
         error_classifier=_classify_groq_error,
-        deadline_error_factory=_transcription_deadline_error,
+        timeout_error_factory=_transcription_timeout_error,
     )
     return await call_with_resilience(
         adapter,
-        RetryPolicy(deadline_seconds=deadline_seconds),
+        RetryPolicy(attempt_timeout_seconds=timeout_seconds),
     )
 
 
@@ -203,13 +202,13 @@ def _classify_groq_error(exc: Exception) -> TranscriptionError:
     if isinstance(exc, APIError):
         return TranscriptionError(
             "Groq returned an invalid response.",
-            kind=ProviderFailureKind.TRANSIENT,
+            kind=ProviderFailureKind.INVALID_RESPONSE,
         )
     return TranscriptionError("Groq transcription request failed.")
 
 
-def _transcription_deadline_error() -> TranscriptionError:
+def _transcription_timeout_error() -> TranscriptionError:
     return TranscriptionError(
-        "Groq transcription deadline exceeded.",
+        "Groq transcription request timed out.",
         kind=ProviderFailureKind.TRANSIENT,
     )

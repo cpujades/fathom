@@ -3,7 +3,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
-import type { BillingAccountResponse, PackBillingState, PlanResponse, UsageOverviewResponse } from "@fathom/api-client";
+import type {
+  BillingAccountResponse,
+  BillingSyncOperationResponse,
+  PackBillingState,
+  PlanResponse,
+  UsageOverviewResponse
+} from "@fathom/api-client";
 import { createApiClient } from "@fathom/api-client";
 
 import { useAppShell } from "../../components/AppShellProvider";
@@ -18,23 +24,37 @@ import {
 import { formatDate } from "../../lib/format";
 import {
   describeSubscriptionStatus,
-  findRecentOrder,
   getOrderLabel,
   type PlanGroup,
   type PurchaseSyncState,
   type RefundSyncState
 } from "./billingFormatters";
-import { resolveRequestedPlan } from "./billingIntent";
+import { resolveBillingOfferMode, resolveRequestedPlan } from "./billingIntent";
+import {
+  BillingOperationReadError,
+  type CompletedBillingOperationPoll,
+  handleBillingSyncRefresh,
+  manuallyRefreshBillingOperation,
+  pollBillingOperationAndRefreshSnapshot,
+  setBillingOperationInUrl
+} from "./billingOperationSync";
 import { applyPendingRefundHold, getDisplayedPacks } from "./billingPresentation";
+
+type BillingSyncTarget = {
+  operationId: string;
+  expectedType: "checkout" | "refund" | null;
+  orderLabel: string | null;
+};
 
 export function useBillingController() {
   const searchParams = useSearchParams();
   const { accessToken, loading: shellLoading, remainingSeconds, setRemainingSeconds, signOut, user } = useAppShell();
   const userId = user?.id ?? null;
   const checkoutStatus = searchParams.get("checkout");
-  const customerSessionToken = searchParams.get("customer_session_token");
+  const billingOperationId = searchParams.get("billing_operation");
   const requestedIntent = searchParams.get("intent");
   const requestedPlanCode = searchParams.get("plan");
+  const requestedView = searchParams.get("view");
   const cachedSnapshot = userId ? getCachedBillingSnapshot(userId) : null;
 
   const [plans, setPlans] = useState<PlanResponse[]>(cachedSnapshot?.plansData ?? []);
@@ -45,25 +65,33 @@ export function useBillingController() {
   const [portalLoading, setPortalLoading] = useState(false);
   const [refundLoading, setRefundLoading] = useState<string | null>(null);
   const [refundTarget, setRefundTarget] = useState<PackBillingState | null>(null);
-  const [offerMode, setOfferMode] = useState<"subscription" | "pack">("subscription");
+  const [offerMode, setOfferMode] = useState<"subscription" | "pack">(
+    () => resolveBillingOfferMode(requestedView)
+  );
   const [purchaseSync, setPurchaseSync] = useState<PurchaseSyncState | null>(null);
   const [refundSync, setRefundSync] = useState<RefundSyncState | null>(null);
   const [syncRefreshLoading, setSyncRefreshLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const checkoutStartRef = useRef<number | null>(null);
+  const activeSyncRef = useRef<BillingSyncTarget | null>(null);
+  const operationAbortRef = useRef<AbortController | null>(null);
   const focusedPlanRef = useRef<string | null>(null);
-  const refundPollRef = useRef<number | null>(null);
 
-  const loadBilling = useCallback(async (showLoading: boolean) => {
+  const loadBilling = useCallback(async (showLoading: boolean, refreshAfterInFlight = false) => {
     if (!accessToken || !userId) return null;
     if (showLoading) setLoading(true);
     try {
-      const snapshot = await loadBillingSnapshot(userId, accessToken);
+      const snapshot = await loadBillingSnapshot(userId, accessToken, { refreshAfterInFlight });
       setPlans(snapshot.plansData);
       setUsage(snapshot.usageData);
       setAccount(snapshot.accountData);
-      setRemainingSeconds(userId, snapshot.usageData?.total_remaining_seconds ?? null);
+      setRemainingSeconds(
+        userId,
+        snapshot.usageData?.total_remaining_seconds ?? null,
+        snapshot.usageData?.has_active_paid_subscription ?? null,
+        snapshot.usageData?.debt_seconds ?? null,
+        snapshot.usageData?.is_blocked ?? null
+      );
       setError(null);
       return snapshot;
     } catch (loadError) {
@@ -73,6 +101,153 @@ export function useBillingController() {
       if (showLoading) setLoading(false);
     }
   }, [accessToken, setRemainingSeconds, userId]);
+
+  const loadBillingOperation = useCallback(async (operationId: string, signal: AbortSignal) => {
+    if (!accessToken || !userId) return null;
+    const scope = captureAuthenticatedRequestScope(userId);
+    let result;
+    try {
+      result = await createApiClient(accessToken).GET(
+        "/billing/operations/{operation_id}",
+        { params: { path: { operation_id: operationId } }, signal }
+      );
+    } catch (readError) {
+      if (signal.aborted) throw readError;
+      throw new BillingOperationReadError(
+        getApiErrorMessage(readError, "Unable to reach billing confirmation."),
+        true
+      );
+    }
+    const { data, error: apiError, response } = result;
+    assertAuthenticatedRequestScopeCurrent(scope);
+    if (apiError) {
+      const status = response.status;
+      const retryable = status === 408 || status === 425 || status === 429 || status >= 500;
+      throw new BillingOperationReadError(
+        getApiErrorMessage(apiError, "Unable to check billing confirmation."),
+        retryable
+      );
+    }
+    return data ?? null;
+  }, [accessToken, userId]);
+
+  const showOperationState = useCallback((
+    operationType: BillingSyncOperationResponse["operation_type"],
+    status: "syncing" | "synced" | "failed" | "delayed",
+    orderLabel: string | null,
+    failureCode: string | null = null,
+    snapshotStatus: PurchaseSyncState["snapshotStatus"] = "idle"
+  ) => {
+    const nextState = { status, orderLabel, failureCode, snapshotStatus };
+    if (operationType === "checkout") {
+      setPurchaseSync((current) => (
+        current?.status === status && current.orderLabel === orderLabel && current.failureCode === failureCode
+          && current.snapshotStatus === snapshotStatus
+          ? current
+          : nextState
+      ));
+    } else {
+      setRefundSync((current) => (
+        current?.status === status && current.orderLabel === orderLabel && current.failureCode === failureCode
+          && current.snapshotStatus === snapshotStatus
+          ? current
+          : nextState
+      ));
+    }
+  }, []);
+
+  const startBillingOperationSync = useCallback(async (
+    target: BillingSyncTarget,
+    mode: "automatic" | "manual" = "automatic"
+  ) => {
+    operationAbortRef.current?.abort();
+    const abortController = new AbortController();
+    operationAbortRef.current = abortController;
+    activeSyncRef.current = target;
+
+    if (target.expectedType) {
+      showOperationState(target.expectedType, "syncing", target.orderLabel);
+    }
+
+    const refreshOptions = {
+      signal: abortController.signal,
+      onOperation: (operation: BillingSyncOperationResponse) => {
+        showOperationState(operation.operation_type, "syncing", target.orderLabel);
+      },
+      shouldRefreshSnapshot: () => activeSyncRef.current?.operationId === target.operationId,
+      onBeforeSnapshotRefresh: (result: CompletedBillingOperationPoll) => {
+        const operationType = result.operation?.operation_type ?? target.expectedType;
+        if (operationType) {
+          showOperationState(
+            operationType,
+            result.outcome === "terminal"
+              ? (result.operation.status === "succeeded" ? "synced" : "failed")
+              : "delayed",
+            target.orderLabel,
+            result.outcome === "terminal" ? result.operation.failure_code : null,
+            "refreshing"
+          );
+        }
+      }
+    };
+    const refreshedResult = mode === "manual"
+      ? await manuallyRefreshBillingOperation(
+          (signal) => loadBillingOperation(target.operationId, signal),
+          () => loadBilling(false, true),
+          refreshOptions
+        )
+      : await pollBillingOperationAndRefreshSnapshot(
+          (signal) => loadBillingOperation(target.operationId, signal),
+          () => loadBilling(false, true),
+          refreshOptions
+        );
+    if (refreshedResult.outcome === "aborted"
+      || activeSyncRef.current?.operationId !== target.operationId) return;
+
+    const operationType = refreshedResult.operation?.operation_type ?? target.expectedType;
+
+    if (refreshedResult.outcome === "timeout") {
+      if (operationType) {
+        showOperationState(
+          operationType,
+          "delayed",
+          target.orderLabel,
+          null,
+          refreshedResult.snapshotStatus
+        );
+      }
+      return;
+    }
+    if (refreshedResult.outcome === "read_failed") {
+      if (operationType) {
+        showOperationState(
+          operationType,
+          "delayed",
+          target.orderLabel,
+          null,
+          refreshedResult.snapshotStatus
+        );
+      }
+      if (!operationType) {
+        setError(getApiErrorMessage(
+          refreshedResult.error,
+          "Unable to check billing confirmation. The billing details below were refreshed separately."
+        ));
+      }
+      return;
+    }
+
+    const { operation, snapshotStatus } = refreshedResult;
+    showOperationState(
+      operation.operation_type,
+      operation.status === "succeeded" ? "synced" : "failed",
+      target.orderLabel,
+      operation.failure_code,
+      snapshotStatus
+    );
+    activeSyncRef.current = null;
+    setBillingOperationInUrl(null);
+  }, [loadBilling, loadBillingOperation, showOperationState]);
 
   useEffect(() => {
     if (!accessToken || !userId) return;
@@ -89,29 +264,28 @@ export function useBillingController() {
   }, [accessToken, cachedSnapshot, loadBilling, userId]);
 
   useEffect(() => {
-    if (checkoutStatus !== "success") return;
-    checkoutStartRef.current ??= Date.now();
-    setPurchaseSync({ status: "syncing", orderLabel: null });
-
-    let attempts = 0;
-    const timer = window.setInterval(async () => {
-      attempts += 1;
-      const result = await loadBilling(false);
-      const recentOrder = findRecentOrder(result?.accountData?.orders ?? [], checkoutStartRef.current);
-      if (recentOrder) {
-        setPurchaseSync({ status: "synced", orderLabel: getOrderLabel(recentOrder) });
-        window.clearInterval(timer);
-      } else if (attempts >= 20) {
-        setPurchaseSync((current) => ({ status: "delayed", orderLabel: current?.orderLabel ?? null }));
-        window.clearInterval(timer);
+    if (!billingOperationId) {
+      if (checkoutStatus === "success") {
+        setPurchaseSync({ status: "delayed", orderLabel: null, failureCode: null, snapshotStatus: "idle" });
       }
-    }, 2500);
-    return () => window.clearInterval(timer);
-  }, [checkoutStatus, customerSessionToken, loadBilling]);
+      return;
+    }
+    if (activeSyncRef.current?.operationId === billingOperationId) return;
 
-  useEffect(() => () => {
-    if (refundPollRef.current !== null) window.clearInterval(refundPollRef.current);
-  }, []);
+    const target: BillingSyncTarget = {
+      operationId: billingOperationId,
+      expectedType: checkoutStatus === "success" ? "checkout" : null,
+      orderLabel: null
+    };
+    void startBillingOperationSync(target);
+    return () => {
+      if (activeSyncRef.current?.operationId === billingOperationId) {
+        operationAbortRef.current?.abort();
+      }
+    };
+  }, [billingOperationId, checkoutStatus, startBillingOperationSync]);
+
+  useEffect(() => () => operationAbortRef.current?.abort(), []);
 
   const planGroups = useMemo<PlanGroup[]>(() => [
     {
@@ -136,6 +310,12 @@ export function useBillingController() {
   useEffect(() => {
     if (requestedPlan) setOfferMode(requestedPlan.plan_type === "pack" ? "pack" : "subscription");
   }, [requestedPlan]);
+
+  useEffect(() => {
+    if (!requestedPlan) {
+      setOfferMode(resolveBillingOfferMode(requestedView));
+    }
+  }, [requestedPlan, requestedView]);
 
   useEffect(() => {
     if (!requestedPlan || focusedPlanRef.current === requestedPlan.plan_id) return;
@@ -248,11 +428,21 @@ export function useBillingController() {
         setError(getApiErrorMessage(apiError, "Unable to request pack refund."));
         return false;
       }
+      if (!data?.operation_id) {
+        setError("The refund was requested, but Talven could not track its confirmation yet.");
+        return false;
+      }
 
       if (usage && data?.remaining_seconds_before_refund) {
         const nextUsage = applyPendingRefundHold(usage, data.remaining_seconds_before_refund);
         setUsage(nextUsage);
-        setRemainingSeconds(userId, nextUsage.total_remaining_seconds);
+        setRemainingSeconds(
+          userId,
+          nextUsage.total_remaining_seconds,
+          nextUsage.has_active_paid_subscription,
+          nextUsage.debt_seconds,
+          nextUsage.is_blocked
+        );
       }
       setAccount((previous) => previous ? {
         ...previous,
@@ -267,20 +457,13 @@ export function useBillingController() {
       const order = account?.orders.find((item) => item.polar_order_id === polarOrderId)
         ?? account?.packs.find((item) => item.polar_order_id === polarOrderId)
         ?? null;
-      setRefundSync({ orderId: polarOrderId, orderLabel: getOrderLabel(order), status: "syncing" });
-      if (refundPollRef.current !== null) window.clearInterval(refundPollRef.current);
-
-      let attempts = 0;
-      refundPollRef.current = window.setInterval(async () => {
-        attempts += 1;
-        const result = await loadBilling(false);
-        const status = result?.accountData?.orders.find((item) => item.polar_order_id === polarOrderId)?.status;
-        if (status === "refunded" || attempts >= 24) {
-          if (refundPollRef.current !== null) window.clearInterval(refundPollRef.current);
-          refundPollRef.current = null;
-          setRefundSync((current) => current ? { ...current, status: status === "refunded" ? "synced" : "delayed" } : null);
-        }
-      }, 2500);
+      const syncTarget: BillingSyncTarget = {
+        operationId: data.operation_id,
+        expectedType: "refund",
+        orderLabel: getOrderLabel(order)
+      };
+      setBillingOperationInUrl(data.operation_id);
+      void startBillingOperationSync(syncTarget);
       return true;
     } catch (refundError) {
       setError(getApiErrorMessage(refundError, "Unable to request pack refund."));
@@ -298,21 +481,19 @@ export function useBillingController() {
     if (syncRefreshLoading) return;
     setSyncRefreshLoading(true);
     try {
-      const orders = (await loadBilling(false))?.accountData?.orders ?? [];
-      if (purchaseSync) {
-        const recentOrder = findRecentOrder(orders, checkoutStartRef.current);
-        if (recentOrder) setPurchaseSync({ status: "synced", orderLabel: getOrderLabel(recentOrder) });
-      }
-      if (refundSync) {
-        const matchingOrder = orders.find((order) => order.polar_order_id === refundSync.orderId);
-        if (matchingOrder?.status === "refunded") {
-          setRefundSync({ ...refundSync, orderLabel: refundSync.orderLabel ?? getOrderLabel(matchingOrder), status: "synced" });
+      await handleBillingSyncRefresh({
+        target: activeSyncRef.current,
+        refreshOperation: startBillingOperationSync,
+        refreshSnapshot: () => loadBilling(false, true),
+        onSnapshotStatus: (snapshotStatus) => {
+          setPurchaseSync((current) => current ? { ...current, snapshotStatus } : current);
+          setRefundSync((current) => current ? { ...current, snapshotStatus } : current);
         }
-      }
+      });
     } finally {
       setSyncRefreshLoading(false);
     }
-  }, [loadBilling, purchaseSync, refundSync, syncRefreshLoading]);
+  }, [loadBilling, startBillingOperationSync, syncRefreshLoading]);
 
   const selectRefundTarget = (pack: PackBillingState) => {
     setError(null);

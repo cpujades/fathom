@@ -95,7 +95,12 @@ screen. Defaults are:
 Example: one user opens the same active briefing in three tabs. Those tabs can
 stream. A fourth open receives a temporary rate-limit response. Closing a tab
 releases its lease; a crashed tab ages out. On reconnect, `Last-Event-ID` replays
-the bounded missing history and an authoritative snapshot fills any gap.
+the bounded missing history and an authoritative snapshot fills any gap. Quiet
+processing does not poll once per tab: committed job events wake one coordinator
+per API process, which fetches once per job and fans out locally. Keepalives
+prove a quiet browser transport is still healthy. The 45-second durable
+reconciliation remains dormant while the listener is healthy and runs only
+during listener loss; a queue-overflow signal also reconciles all local jobs.
 
 Stream opening is also covered by the ordinary per-IP API rate limiter.
 `/meta/health` is intentionally exempt so a hosting platform can check whether
@@ -126,7 +131,7 @@ into the stream so the lookup is not repeated.
 
 Polar normally tells Talven about billing changes using webhooks. Webhooks can
 arrive late, arrive twice, or be missed during an outage. The existing worker
-loop schedules a billing-maintenance pass every 60 seconds; this is not a
+loop schedules a billing-maintenance pass every five minutes; this is not a
 separate dedicated billing process. The pass runs as one supervised background
 task, so a slow Polar response does not pause normal briefing job claims. The
 pass checks for:
@@ -138,14 +143,14 @@ pass checks for:
 
 Ordinary queued/running job recovery has its own worker lifecycle and stale-job
 sweep. The billing-maintenance pass does not poll or reprocess every normal
-briefing once per minute.
+briefing once every five minutes.
 
-The 60-second tick is only a cheap opportunity to find work that is due. It
-does not mean every subscription is sent to Polar once per minute:
+The five-minute tick is only a cheap opportunity to find work that is due. It
+does not mean every subscription is sent to Polar every five minutes:
 
 - webhooks remain the immediate, event-driven path;
 - a healthy non-terminal subscription is audited at most once every six hours;
-- a failed provider audit is eligible again after 15 minutes, not every minute;
+- a failed provider audit is eligible again after 15 minutes, not every pass;
 - each pass claims at most 20 due subscriptions; and
 - revoked, ended, and inactive subscriptions are removed from provider polling.
 

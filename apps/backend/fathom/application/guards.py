@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from urllib.parse import parse_qs, urlparse
 
-from fathom.core.errors import InvalidRequestError
+from fathom.core.errors import InvalidRequestError, SourceDurationUnknownError, SourceTooLongError
 from fathom.services.youtube import extract_youtube_video_id
 
 # ---------------------------------------------------------------------------
@@ -39,6 +39,11 @@ def validate_youtube_url(url: str) -> None:
 
 def validate_video_duration(duration_seconds: int | None) -> None:
     if duration_seconds is None or duration_seconds <= 0:
-        raise InvalidRequestError("We couldn't determine this video's length. Try another public YouTube video.")
+        raise SourceDurationUnknownError(
+            "Talven couldn't verify this video's length safely. Try another public YouTube video."
+        )
     if duration_seconds > MAX_VIDEO_DURATION_SECONDS:
-        raise InvalidRequestError("Video exceeds maximum allowed duration.")
+        raise SourceTooLongError(
+            "This video is longer than Talven's maximum supported length.",
+            details={"maximum_seconds": MAX_VIDEO_DURATION_SECONDS},
+        )

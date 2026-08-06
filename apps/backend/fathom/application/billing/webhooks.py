@@ -4,12 +4,18 @@ import logging
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
+from uuid import UUID
 
 from fathom.application.billing.parsing import as_str, extract_amount_cents, extract_event_fields, parse_dt
 from fathom.core.config import Settings
+from fathom.core.constants import BILLING_DEBT_CAP_SECONDS
 from fathom.core.errors import ExternalServiceError, InvalidRequestError
 from fathom.core.logging import log_context
-from fathom.crud.supabase.billing import apply_polar_webhook_transaction
+from fathom.crud.supabase.billing import (
+    apply_polar_webhook_transaction,
+    resolve_billing_sync_operation,
+    resolve_refund_sync_operations,
+)
 from fathom.services import polar
 from fathom.services.supabase import create_supabase_admin_client, managed_supabase_client
 
@@ -44,7 +50,7 @@ async def handle_polar_webhook(payload: bytes, headers: Mapping[str, str], setti
                 resource_type=resource_type,
                 resource_id=resource_id,
                 payload=normalized_payload,
-                debt_cap_seconds=settings.billing_debt_cap_seconds,
+                debt_cap_seconds=BILLING_DEBT_CAP_SECONDS,
             )
             resolution_type = str(result.get("resolution_type") or "")
             outcome = str(result.get("outcome") or "")
@@ -54,6 +60,48 @@ async def handle_polar_webhook(payload: bytes, headers: Mapping[str, str], setti
                     extra={"resolution_type": resolution_type, "outcome": outcome},
                 )
                 raise ExternalServiceError("Polar webhook processing failed.")
+
+            if resolution_type in {"processed", "already_processed"}:
+                if event_type == "order.paid":
+                    operation_id = as_str(normalized_payload.get("billing_operation_id"))
+                    user_id = as_str(normalized_payload.get("user_id"))
+                    plan_id = as_str(normalized_payload.get("billing_plan_id"))
+                    order_id = as_str(normalized_payload.get("order_id"))
+                    if operation_id and user_id and plan_id and order_id:
+                        operation_resolution = await resolve_billing_sync_operation(
+                            admin_client,
+                            operation_id=operation_id,
+                            user_id=user_id,
+                            operation_type="checkout",
+                            plan_id=plan_id,
+                            polar_order_id=order_id,
+                            status="succeeded",
+                        )
+                        if operation_resolution not in {"resolved", "already_resolved"}:
+                            logger.warning("billing.webhook.operation_correlation_mismatch")
+                    else:
+                        logger.warning(
+                            "billing.webhook.operation_correlation_missing",
+                            extra={
+                                "has_operation_id": bool(operation_id),
+                                "has_user_id": bool(user_id),
+                                "has_plan_id": bool(plan_id),
+                                "has_order_id": bool(order_id),
+                            },
+                        )
+                elif event_type == "order.refunded":
+                    order_id = as_str(normalized_payload.get("order_id"))
+                    if order_id:
+                        resolved_count = await resolve_refund_sync_operations(
+                            admin_client,
+                            polar_order_id=order_id,
+                            status="succeeded",
+                        )
+                        if resolved_count == 0:
+                            logger.warning(
+                                "billing.webhook.refund_operation_correlation_missing",
+                                extra={"polar_order_id": order_id},
+                            )
 
             logger.info(
                 "billing.webhook.resolved",
@@ -133,6 +181,8 @@ def normalize_event_payload(
                 data,
                 candidates=("total_amount", "net_amount", "amount"),
             ),
+            "billing_operation_id": _extract_billing_operation_id(data),
+            "billing_plan_id": _extract_metadata_uuid(data, "plan_id"),
         }
         return "order", order_id, normalized
 
@@ -209,3 +259,20 @@ def _extract_refunded_amount(data: dict[str, Any]) -> int | None:
             except ValueError:
                 continue
     return None
+
+
+def _extract_billing_operation_id(data: dict[str, Any]) -> str | None:
+    return _extract_metadata_uuid(data, "billing_operation_id")
+
+
+def _extract_metadata_uuid(data: dict[str, Any], key: str) -> str | None:
+    metadata = data.get("metadata")
+    if not isinstance(metadata, dict):
+        return None
+    value = as_str(metadata.get(key))
+    if not value:
+        return None
+    try:
+        return str(UUID(value))
+    except ValueError:
+        return None

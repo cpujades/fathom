@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Path
 from pydantic import TypeAdapter
@@ -9,6 +10,7 @@ from fathom.application.billing import (
     create_checkout_session,
     create_portal_session,
     get_billing_account,
+    get_billing_sync_operation,
     list_billing_plans,
     request_pack_refund,
 )
@@ -17,6 +19,7 @@ from fathom.application.usage import get_usage_history, get_usage_overview
 from fathom.core.config import Settings, get_settings
 from fathom.schemas.billing import (
     BillingAccountResponse,
+    BillingSyncOperationResponse,
     CheckoutSessionRequest,
     CheckoutSessionResponse,
     CustomerPortalSessionResponse,
@@ -88,6 +91,27 @@ async def refund_pack(
 
 
 @router.get(
+    "/operations/{operation_id}",
+    response_model=BillingSyncOperationResponse,
+    responses={
+        401: {"model": ErrorResponse, "description": "Missing or invalid auth token."},
+        404: {"model": ErrorResponse, "description": "Billing operation not found."},
+        500: {"model": ErrorResponse, "description": "Unexpected server error."},
+    },
+)
+async def get_operation(
+    operation_id: UUID,
+    auth: Annotated[AuthenticatedUser, Depends(get_auth_context)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> BillingSyncOperationResponse:
+    return await get_billing_sync_operation(
+        operation_id=str(operation_id),
+        auth=auth,
+        settings=settings,
+    )
+
+
+@router.get(
     "/plans",
     response_model=list[PlanResponse],
     responses={
@@ -118,6 +142,7 @@ async def get_usage(
     overview = await get_usage_overview(auth.user_id, settings)
     return UsageOverviewResponse(
         subscription_plan_name=overview.subscription_plan_name,
+        has_active_paid_subscription=overview.has_active_paid_subscription,
         subscription_remaining_seconds=overview.subscription_remaining,
         pack_remaining_seconds=overview.pack_remaining,
         total_remaining_seconds=overview.total_remaining,

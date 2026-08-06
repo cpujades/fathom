@@ -24,7 +24,10 @@ export type BillingSnapshot = {
 };
 
 export type UsageSnapshot = {
+  debtSeconds: number | null;
   fetchedAt: number;
+  hasActivePaidSubscription: boolean | null;
+  isBlocked: boolean | null;
   remainingSeconds: number | null;
 };
 
@@ -310,10 +313,28 @@ export function hasFreshBillingCache(userId: string): boolean {
   );
 }
 
-export async function loadBillingSnapshot(userId: string, accessToken: string): Promise<BillingSnapshot> {
+export async function loadBillingSnapshot(
+  userId: string,
+  accessToken: string,
+  options: { refreshAfterInFlight?: boolean } = {}
+): Promise<BillingSnapshot> {
   const scope = captureAuthenticatedRequestScope(userId);
   if (billingRequest && scopesMatch(billingRequest.scope, scope)) {
-    return billingRequest.value;
+    if (!options.refreshAfterInFlight) {
+      return billingRequest.value;
+    }
+
+    const inFlightRequest = billingRequest;
+    try {
+      await inFlightRequest.value;
+    } catch {
+      // A terminal billing operation still warrants one authoritative refresh
+      // even when the page's earlier snapshot request failed.
+    }
+    assertAuthenticatedRequestScopeCurrent(scope);
+    if (billingRequest === inFlightRequest) {
+      billingRequest = null;
+    }
   }
 
   const api = createApiClient(accessToken);

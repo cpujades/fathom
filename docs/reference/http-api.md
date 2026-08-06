@@ -34,8 +34,8 @@ server-side.
 | Method and path | Purpose | Main input | Main result |
 | --- | --- | --- | --- |
 | `GET /meta/health` | Process liveness | None | Basic healthy response |
-| `GET /meta/ready` | Dependency/config readiness | None | Readiness state and checks |
-| `GET /meta/status` | Bounded service snapshot | None | Version and service status |
+| `GET /meta/ready` | Dependency/config readiness | None | Readiness and healthy/degraded event delivery |
+| `GET /meta/status` | Bounded service snapshot | None | Version, uptime, and coarse event-delivery health |
 | `POST /briefing-sessions` | Create, join, reuse, or restore work | JSON `url` | Session snapshot and resolution type |
 | `GET /briefing-sessions/{session_id}` | Reconcile one owned session | Session UUID | Current session snapshot |
 | `GET /briefing-sessions/{session_id}/events` | Stream progress and result events | Session UUID; optional `Last-Event-ID` | `text/event-stream` |
@@ -63,11 +63,23 @@ Application and validation failures use one stable envelope:
 ```json
 {
   "error": {
-    "code": "invalid_request",
-    "message": "Invalid request"
+    "code": "insufficient_video_time",
+    "message": "This video needs more time than is currently available.",
+    "details": {
+      "required_seconds": 2520,
+      "available_seconds": 1080
+    }
   }
 }
 ```
+
+`details` is optional and contains only bounded, server-computed numeric fields.
+Briefing admission uses `source_duration_unknown`, `source_too_long`,
+`insufficient_video_time`, `no_video_time`, and `balance_blocked`; clients must
+branch on `code`, never on fragments of `message`. A failed worker session uses
+`provider_capacity_reached` for explicit rate limits and
+`provider_temporarily_unavailable` for other exhausted transient failures.
+Invalid provider output remains stage-specific.
 
 Common statuses are:
 

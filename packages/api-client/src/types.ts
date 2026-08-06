@@ -22,6 +22,7 @@ type PackBillingState = components["schemas"]["PackBillingState"];
 type SubscriptionBillingState = components["schemas"]["SubscriptionBillingState"];
 type CheckoutSessionRequest = components["schemas"]["CheckoutSessionRequest"];
 type CheckoutSessionResponse = components["schemas"]["CheckoutSessionResponse"];
+type BillingSyncOperationResponse = components["schemas"]["BillingSyncOperationResponse"];
 type CustomerPortalSessionResponse = components["schemas"]["CustomerPortalSessionResponse"];
 type PackRefundResponse = components["schemas"]["PackRefundResponse"];
 
@@ -47,6 +48,7 @@ export type {
   StatusResponse,
   CheckoutSessionRequest,
   CheckoutSessionResponse,
+  BillingSyncOperationResponse,
   CustomerPortalSessionResponse,
   PackRefundResponse,
   PlanResponse,

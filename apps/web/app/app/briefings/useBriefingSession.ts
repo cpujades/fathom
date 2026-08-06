@@ -12,7 +12,13 @@ import {
   isAuthenticatedRequestScopeCurrent
 } from "../../lib/appDataCache";
 import { logger } from "../../lib/logger";
-import { readSessionStream, type SessionStreamEvent } from "./sessionStream";
+import {
+  isValidSessionEventCursor,
+  nextSessionStreamReconnectDelay,
+  readSessionStream,
+  SessionStreamStaleError,
+  type SessionStreamEvent
+} from "./sessionStream";
 import {
   briefingSessionReducer,
   createInitialSessionUiState,
@@ -23,7 +29,7 @@ import {
 
 const RECONNECT_BASE_DELAY_MS = 1000;
 const RECONNECT_MAX_DELAY_MS = 5000;
-const RECONCILE_INTERVAL_MS = 4000;
+const STREAM_STALE_AFTER_MS = 30_000;
 const READY_MARKDOWN_RECONCILE_ATTEMPTS = 12;
 const READY_MARKDOWN_RECONCILE_INTERVAL_MS = 2500;
 
@@ -49,7 +55,6 @@ export function useBriefingSession({ accessToken, loading, sessionId, userId }: 
   const [sessionLoadAttempt, setSessionLoadAttempt] = useState(0);
   const lastEventIdRef = useRef<string | null>(null);
   const terminalStateRef = useRef(false);
-  const lastStreamActivityRef = useRef(Date.now());
 
   const { phase, session } = sessionState;
 
@@ -65,7 +70,6 @@ export function useBriefingSession({ accessToken, loading, sessionId, userId }: 
     }
 
     lastEventIdRef.current = null;
-    lastStreamActivityRef.current = Date.now();
     setSessionLoadError(null);
     setSessionLoadErrorCode(null);
 
@@ -83,7 +87,6 @@ export function useBriefingSession({ accessToken, loading, sessionId, userId }: 
       if (!requestIsCurrent()) return;
       dispatchSession({ type: "snapshot", snapshot });
       terminalStateRef.current ||= isTerminalSessionState(snapshot.state);
-      lastStreamActivityRef.current = Date.now();
       setSessionLoadError(null);
       setSessionLoadErrorCode(null);
     };
@@ -92,22 +95,18 @@ export function useBriefingSession({ accessToken, loading, sessionId, userId }: 
       if (!requestIsCurrent()) return;
       dispatchSession({ type: "status", status });
       terminalStateRef.current ||= isTerminalSessionState(status.state);
-      lastStreamActivityRef.current = Date.now();
     };
 
     const handleContentDelta = (contentDelta: SessionContentDeltaPayload) => {
       if (!requestIsCurrent()) return;
       dispatchSession({ type: "content_delta", contentDelta });
       terminalStateRef.current ||= isTerminalSessionState(contentDelta.state);
-      lastStreamActivityRef.current = Date.now();
     };
 
     const handleStreamEvent = (event: SessionStreamEvent) => {
       if (!requestIsCurrent()) return;
 
-      lastEventIdRef.current = event.id;
-      lastStreamActivityRef.current = Date.now();
-      dispatchSession({ type: "stream_restored" });
+      if (isValidSessionEventCursor(event.id)) lastEventIdRef.current = event.id;
       if (event.event === "session.event") return;
       if (event.event === "session.content_delta") {
         handleContentDelta(event.data);
@@ -159,7 +158,6 @@ export function useBriefingSession({ accessToken, loading, sessionId, userId }: 
         }
         if (data) {
           handleSessionSnapshot(data);
-          dispatchSession({ type: "stream_restored" });
         }
         return data ?? null;
       } catch (error) {
@@ -183,18 +181,12 @@ export function useBriefingSession({ accessToken, loading, sessionId, userId }: 
       if (isTerminalSessionState(snapshot.state)) return;
 
       let reconnectDelay = RECONNECT_BASE_DELAY_MS;
-      const reconcileTimer = window.setInterval(() => {
-        if (
-          !terminalStateRef.current &&
-          !abortController.signal.aborted &&
-          Date.now() - lastStreamActivityRef.current >= RECONCILE_INTERVAL_MS
-        ) {
-          void refreshSessionSnapshot();
-        }
-      }, RECONCILE_INTERVAL_MS);
-
-      try {
-        while (!abortController.signal.aborted) {
+      while (!abortController.signal.aborted) {
+        let opened = false;
+        const connectionController = new AbortController();
+        const closeConnection = () => connectionController.abort();
+        abortController.signal.addEventListener("abort", closeConnection, { once: true });
+        try {
           try {
             const headers = new Headers({ Accept: "text/event-stream", Authorization: `Bearer ${accessToken}` });
             if (lastEventIdRef.current) headers.set("Last-Event-ID", lastEventIdRef.current);
@@ -202,7 +194,7 @@ export function useBriefingSession({ accessToken, loading, sessionId, userId }: 
             const response = await fetch(new URL(snapshot.events_url, getApiBaseUrl()).toString(), {
               headers,
               cache: "no-store",
-              signal: abortController.signal
+              signal: connectionController.signal
             });
             if (!response.ok || !response.body) {
               logger.warn("web.session_stream.open_failed", {
@@ -213,20 +205,32 @@ export function useBriefingSession({ accessToken, loading, sessionId, userId }: 
               throw new Error(`Unable to open the live session stream (${response.status}).`);
             }
 
-            reconnectDelay = RECONNECT_BASE_DELAY_MS;
-            dispatchSession({ type: "stream_restored" });
+            opened = true;
             logger.info("web.session_stream.opened", {
               session_id: sessionId,
               last_event_id: lastEventIdRef.current
             });
-            await readSessionStream(response.body, handleStreamEvent);
+            let transportIsLive = false;
+            await readSessionStream(response.body, handleStreamEvent, {
+              staleAfterMs: STREAM_STALE_AFTER_MS,
+              onStale: () => connectionController.abort(),
+              onActivity: () => {
+                if (transportIsLive) return;
+                transportIsLive = true;
+                reconnectDelay = RECONNECT_BASE_DELAY_MS;
+                dispatchSession({ type: "stream_restored" });
+              }
+            });
             if (terminalStateRef.current || abortController.signal.aborted) return;
+            throw new Error("The live session stream ended before the briefing reached a final state.");
           } catch (error) {
             if (abortController.signal.aborted) return;
+            connectionController.abort();
             logger.warn("web.session_stream.error", {
               session_id: sessionId,
               error_type: error instanceof Error ? error.name : "UnknownError",
-              message: error instanceof Error ? error.message : "Unknown stream error"
+              message: error instanceof Error ? error.message : "Unknown stream error",
+              stale: error instanceof SessionStreamStaleError
             });
             dispatchSession({
               type: "stream_lost",
@@ -236,14 +240,20 @@ export function useBriefingSession({ accessToken, loading, sessionId, userId }: 
                   : "Live updates paused for a moment. Reconnecting now."
             });
           }
-
-          if (terminalStateRef.current || abortController.signal.aborted) return;
-          await sleep(reconnectDelay, abortController.signal);
-          logger.info("web.session_stream.reconnecting", { session_id: sessionId, delay_ms: reconnectDelay });
-          reconnectDelay = Math.min(reconnectDelay * 2, RECONNECT_MAX_DELAY_MS);
+        } finally {
+          abortController.signal.removeEventListener("abort", closeConnection);
+          connectionController.abort();
         }
-      } finally {
-        window.clearInterval(reconcileTimer);
+
+        if (terminalStateRef.current || abortController.signal.aborted) return;
+        if (opened) {
+          const recoveredSnapshot = await refreshSessionSnapshot();
+          if (recoveredSnapshot) snapshot = recoveredSnapshot;
+          if (terminalStateRef.current || abortController.signal.aborted) return;
+        }
+        await sleep(reconnectDelay, abortController.signal);
+        logger.info("web.session_stream.reconnecting", { session_id: sessionId, delay_ms: reconnectDelay });
+        reconnectDelay = nextSessionStreamReconnectDelay(reconnectDelay, RECONNECT_MAX_DELAY_MS);
       }
     };
 

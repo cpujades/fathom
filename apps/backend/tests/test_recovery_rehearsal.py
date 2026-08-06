@@ -5,6 +5,7 @@ import unittest
 from collections.abc import Awaitable, Callable
 
 from fathom.services.provider_resilience import (
+    BackoffPolicy,
     CallableProviderAdapter,
     ProviderFailureKind,
     ProviderOperationError,
@@ -32,7 +33,7 @@ def _adapter(operation: Callable[[], Awaitable[str]]) -> CallableProviderAdapter
         stage="rehearsal",
         operation=operation,
         error_classifier=lambda _exc: FakeRehearsalError(ProviderFailureKind.PERMANENT),
-        deadline_error_factory=lambda: FakeRehearsalError(ProviderFailureKind.TRANSIENT),
+        timeout_error_factory=lambda: FakeRehearsalError(ProviderFailureKind.TRANSIENT),
     )
 
 
@@ -63,11 +64,13 @@ class BoundedRecoveryRehearsalTests(unittest.IsolatedAsyncioTestCase):
                 return await call_with_resilience(
                     _adapter(operation),
                     RetryPolicy(
-                        deadline_seconds=5,
+                        attempt_timeout_seconds=5,
                         max_attempts=3,
-                        backoff_base_seconds=0,
-                        backoff_max_seconds=0,
-                        jitter_ratio=0,
+                        backoff=BackoffPolicy(
+                            backoff_base_seconds=0,
+                            backoff_max_seconds=0,
+                            jitter_ratio=0,
+                        ),
                     ),
                     sleep=lambda _delay: asyncio.sleep(0),
                     random_source=lambda: 0,

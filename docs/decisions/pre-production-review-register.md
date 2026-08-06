@@ -25,6 +25,24 @@ external public-beta boundary below.
 - **Public-launch decision:** may be deferred while the app is local only, but
   must be resolved before the public URL is announced.
 
+### How to sort a decision
+
+Use the label and evidence requirement, not how interesting the work sounds:
+
+| Kind of item | What to do |
+| --- | --- |
+| Public-launch prerequisite | Resolve and prove it before unattended external signup. Origins, SMTP/Auth, logs/alerts, privacy/retention, support, and backup/restore belong here. |
+| External or candidate proof | The code may already be correct; prove the real provider, staging, capacity, or human experience on the exact candidate. |
+| Paid-launch decision | It may wait during local work or a private pilot, but explicitly accept or change it before public payment. |
+| Trigger-based deferral | Leave it alone until its measurable trigger occurs. R2, Redis, shared source production, and cache-retention redesign are examples. |
+| Optional product experiment | Build it only to test a clear acquisition, activation, or retention hypothesis. |
+
+The [deferred work register](./deferred-work.md) owns the trigger and future-safe
+shape of deferred technical/product work. The
+[growth roadmap](../product/growth-feature-roadmap.md) owns optional feature
+experiments. An item may remain deferred after review; the goal is to make that
+choice deliberate, not to empty every list before launch.
+
 ## Owner review queue
 
 These are explicit follow-up reviews requested by the product owner. They are
@@ -35,7 +53,7 @@ the evidence and records any resulting decision.
 | Review task | Current scope to explain and inspect | Decision or evidence expected | Status |
 | --- | --- | --- | --- |
 | Local/staging security configuration | Environment validation; FastAPI middleware order; CORS allowlists and rejected wildcards; credentialed requests; trusted proxy/client-IP handling; local-development exceptions; Next.js CSP and other security headers; HSTS and HTTPS behavior; Supabase/Auth/Polar redirect origins | An environment-by-environment origin and proxy matrix; confirmation that local development remains usable; confirmation that staging/production fail closed; a plain-language before/after explanation of every header and middleware change; any hosting-dependent CSP decision recorded separately | Owner review requested before external configuration |
-| Supabase query and connection load | One-second event polling per open in-progress briefing; periodic snapshot reconciliation; API rate-limit bucket writes; history/detail queries; database connections used by API and workers | Measured query/connection load for realistic early concurrency; the safe capacity envelope; thresholds that would justify shared event wake-ups, retention, pooling, or query/index changes | Owner review requested; measure before scaling changes |
+| Supabase query and connection load | One dedicated job-event listener per API process; coalesced persisted-event fetches per active job and replica; four bounded per-job dispatchers; overflow-triggered convergence; a 45-second reconciliation only while the listener is unhealthy; API rate-limit bucket writes; history/detail queries; database connections used by API and workers | Measured query/connection load for realistic early concurrency; the safe capacity envelope; listener health and notification latency; thresholds that would justify retention, pooling, or query/index changes | Owner review requested; measure before scaling changes |
 | Content-suitability guardrails | Public YouTube inputs that are technically processable but may produce low-value briefings, including Shorts, gaming footage, silent/low-speech videos, clips, lectures, and interviews | Product definition of a suitable source; labeled examples; false-positive tolerance; charging/refund behavior; whether guidance, warnings, or rejection is appropriate before selecting an implementation | Owner review requested; implementation deferred |
 | Provider retry and timeout budgets | Per-request versus per-stage deadlines; up to three classified attempts; whole-job retries; long-source behavior; user-facing waiting/recovery states; provider cost after interrupted attempts | Capped real-provider latency data by source length and failure type; chosen request, stage, and end-to-end budgets; confirmation of which failures retry and what the user sees | Owner review requested before tuning |
 | PDF rendering design and capacity | Current isolated WeasyPrint subprocess; two concurrent renders per API process; five-second queue wait; 30-second render deadline; cache/single-flight behavior; CPU and memory isolation | Benchmark current memory, CPU, latency, and output fidelity; compare safe alternatives such as a dedicated export worker or another renderer; choose per-process capacity and scaling rules without weakening fetch/HTML/resource protections | Owner review requested before increasing concurrency or changing renderer |
@@ -71,7 +89,7 @@ deliberate and easy to revisit.
 | Polar sandbox contract | Billing transactions, signature checks, replay safety, ordering, and recovery are covered with fixtures and disposable database tests | On a taxable sandbox order, verify the provider's total-versus-net refund amount contract; also verify country/currency/tax inference because checkout is created server-side without forwarding the user's IP address | External proof needed before paid launch |
 | Retry deadlines | Retries occur only for transient/rate-limit failures, with bounded backoff and an overall stage deadline | Tune from measured provider percentiles rather than guesses; specifically review the summary 600-second request and 1,805-second stage ceilings after the real-provider rehearsal | Accepted for proof; metrics decision follows |
 | Briefing quality | Structured output, evidence validation, timestamp links, deterministic rendering, injection canaries, and free structural evaluations are automated | Run the capped paid evaluation and human rubric when the prompt/model/contract changes and before a release candidate | Verified in code; candidate proof needed |
-| Event load | Each open in-progress session performs about one event query per second and periodic snapshot reconciliation; renewable database leases cap simultaneous streams | Measure concurrent viewers and database load; introduce shared wake-ups only if real pressure appears | Accepted for bounded early use |
+| Event load | Postgres notifications wake one coordinator per API process; persisted events are fetched once per active job and fanned out through four bounded dispatchers; overflow reconciles all local jobs and the 45-second sweep runs only while the listener is unhealthy; renewable database leases cap simultaneous streams | Measure concurrent viewers, notification latency, listener reconnects, queue depth/overflow, fallback use, and database load on the chosen staging topology | Verified in code; external capacity proof needed |
 | API rate limiting | Database-backed per-IP/scope limits protect sensitive endpoints, including stream opens and readiness; only liveness and signed Polar webhooks are exempt | Configure trusted proxies correctly and load-test effective client-IP handling on the chosen ingress | Verified in code; environment proof needed |
 | PDF capacity | A per-process semaphore allows two concurrent renders, with caching, single-flight generation, denied resource fetches, a secret-minimized subprocess, and a short busy response | Measure CPU, memory, render time, and busy rate in the chosen container; run non-root with platform CPU/memory/network/filesystem controls | Accepted default; environment proof needed |
 | Logs and incidents | Correlation IDs and structured lifecycle logs cover request, job, lease, listener reconnect, summary, settlement, webhook, shutdown, and recovery; field and free-text redaction protect sensitive values | Select a log destination, access/retention policy, alerts, and an operator before unattended use. At minimum alert on listener reconnect loops, stuck/old queued jobs, exhausted retries, billing/webhook failures, repeated API 5xx, and PDF saturation | Public-launch prerequisite |

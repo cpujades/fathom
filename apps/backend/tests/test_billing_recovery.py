@@ -21,7 +21,13 @@ from fathom.core.errors import ExternalServiceError
 class BillingRecoveryTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.admin_client = object()
-        self.settings = cast(Settings, SimpleNamespace(billing_debt_cap_seconds=600))
+        self.settings = cast(Settings, SimpleNamespace())
+        self.resolve_refund_operations = self.enterContext(
+            patch(
+                "fathom.application.billing.recovery.resolve_refund_sync_operations",
+                AsyncMock(return_value=1),
+            )
+        )
 
     async def test_maintenance_skips_when_another_worker_owns_lease(self) -> None:
         with (
@@ -209,6 +215,11 @@ class BillingRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(kwargs["resource_id"], "ord_123")
         self.assertEqual(kwargs["payload"]["provider_total_refunded"], 1200)
         self.assertEqual(kwargs["event_at"], datetime(2026, 4, 1, 12, tzinfo=UTC))
+        self.resolve_refund_operations.assert_awaited_once_with(
+            self.admin_client,
+            polar_order_id="ord_123",
+            status="succeeded",
+        )
 
     async def test_paid_provider_state_atomically_reopens_pending_refund(self) -> None:
         order = {
@@ -249,6 +260,12 @@ class BillingRecoveryTests(unittest.IsolatedAsyncioTestCase):
             debt_cap_seconds=600,
         )
         apply_transaction.assert_not_awaited()
+        self.resolve_refund_operations.assert_awaited_once_with(
+            self.admin_client,
+            polar_order_id="ord_123",
+            status="failed",
+            failure_code="refund_not_completed",
+        )
 
     async def test_confirmed_refund_without_provider_timestamp_is_not_applied(self) -> None:
         order = {

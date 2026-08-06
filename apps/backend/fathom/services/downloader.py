@@ -14,11 +14,12 @@ from typing import Protocol, cast
 
 from pytubefix import YouTube
 
-from fathom.core.config import DEFAULT_SOURCE_DOWNLOAD_DEADLINE_SECONDS
 from fathom.core.errors import ExternalServiceError
 
 MAX_AUDIO_FILE_BYTES = 100_000_000
 DOWNLOAD_REQUEST_TIMEOUT_SECONDS = 60
+SOURCE_DOWNLOAD_TIMEOUT_SECONDS = 300.0
+SOURCE_METADATA_TIMEOUT_SECONDS = 30.0
 YOUTUBE_WORKER_MAX_RESPONSE_BYTES = 64_000
 _YOUTUBE_WORKER_ENV_KEYS = (
     "DYLD_FALLBACK_LIBRARY_PATH",
@@ -99,7 +100,7 @@ async def download_audio_with_deadline(
     output_dir: str,
     *,
     max_bytes: int = MAX_AUDIO_FILE_BYTES,
-    deadline_seconds: float = DEFAULT_SOURCE_DOWNLOAD_DEADLINE_SECONDS,
+    deadline_seconds: float = SOURCE_DOWNLOAD_TIMEOUT_SECONDS,
 ) -> DownloadResult:
     payload = await _run_youtube_worker(
         {
@@ -272,7 +273,7 @@ def download_audio(
     output_dir: str,
     *,
     max_bytes: int = MAX_AUDIO_FILE_BYTES,
-    deadline_seconds: float = DEFAULT_SOURCE_DOWNLOAD_DEADLINE_SECONDS,
+    deadline_seconds: float = SOURCE_DOWNLOAD_TIMEOUT_SECONDS,
     cancel_event: threading.Event | None = None,
 ) -> DownloadResult:
     if max_bytes <= 0:

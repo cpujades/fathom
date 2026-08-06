@@ -11,7 +11,15 @@ The public site explains the product and sends a new visitor to `/signup` or an
 existing user to `/signin`. A pricing selection can carry a bounded plan intent
 through authentication, so a user who chooses a plan before signing in returns
 to billing with that choice still selected. Arbitrary external redirect URLs
-are rejected.
+are rejected. Both authentication entry routes ask Supabase for the current
+user before rendering: an already-signed-in user goes directly to the safe app
+destination, including the exact known paid-plan selection when present.
+
+When a signed-out visitor arrives from a paid pricing choice, both authentication
+pages show the product name, catalog price, included time, and monthly or
+one-time cadence. The copy makes clear that payment has not started and that
+checkout will still be reviewed. Missing, Free, malformed, and unknown plan
+values do not produce a product summary.
 
 There is no invitation code or email allowlist in the product. Once a public
 deployment URL is announced, any visitor may create an account. Hosted email
@@ -19,8 +27,14 @@ confirmation, SMTP, CAPTCHA/bot protection, and Auth rate limits must therefore
 be configured before that URL is opened; local UI tests do not provide those
 controls.
 
-The supported entry methods are password, magic link, and Google OAuth. In the
-local Supabase stack, email confirmation is enabled: create a disposable user,
+The supported entry methods are password, magic link, and Google OAuth. A
+password sign-up that receives Supabase's existing-account result places a
+sign-in action beside the error, preserves the safe destination and known plan,
+and transfers only the email through one-use tab storage. The sign-in page
+consumes that email immediately; the password remains empty and no email is put
+in the URL. Magic-link sign-up uses neutral copy because the same link signs in
+an existing user or creates a new user. In the local Supabase stack, email
+confirmation is enabled: create a disposable user,
 open Inbucket at `http://localhost:54324`, and follow the confirmation link.
 Hosted email delivery and redirect allowlists are environment configuration,
 not database migrations; see the [hosted Auth runbook](../runbooks/hosted-auth-and-service-probes.md).
@@ -49,10 +63,20 @@ but not a known 9-minute video. The separate 600-second debt cap is a safety
 buffer during final settlement; it is not advertised or intentionally offered
 as extra minutes.
 
-If validation fails, the page keeps the URL editable and offers “Try again.”
-Credit or payment errors also offer a direct route to billing. The user does
-not need to know whether the failure came from URL validation, YouTube metadata,
-or the usage guard to recover.
+When the combined spendable subscription and pack balance is positive but below
+10 minutes, the workspace shows a non-blocking warning. A fitting source stays
+enabled. Active paid subscribers open one-time packs first; Free users see the
+normal plans-and-packs comparison. Zero balance, outstanding debt, and a debt
+block keep their stronger explanations instead. The shared balance says when it
+is checking and refreshes after known billing/briefing changes and when a stale
+tab regains focus; server admission remains authoritative.
+
+If validation fails, the API returns a stable admission code and bounded
+server-computed details where useful: `source_duration_unknown`,
+`insufficient_video_time` (`required_seconds` and `available_seconds`),
+`no_video_time`, or `balance_blocked` (`debt_seconds`). The page uses the code,
+not English-message matching, to choose source or billing recovery while keeping
+the URL editable.
 
 ## 3. Watch processing and understand the states
 
@@ -69,10 +93,21 @@ accepted
   -> ready
 ```
 
+If bounded transcription or writing attempts exhaust an explicit rate limit,
+the session exposes `provider_capacity_reached` and uses high-demand copy. A
+timeout, network failure, or provider 5xx exposes
+`provider_temporarily_unavailable` with neutral availability copy. Neither path
+names the provider or blames the source. “Try again” preserves the same source
+and opens a confirmation step; it never starts another briefing automatically.
+Invalid transcript or briefing responses remain the distinct
+`transcription_failed` or `summary_failed` stage errors.
+
 Progress is an explanation of the current stage, not a wall-clock promise. A
-disconnect is normal: the browser reconnects with `Last-Event-ID`, replays
-persisted events, and reconciles with a fresh snapshot. The server validates
-event payloads before the browser uses them.
+quiet stream remains healthy through 15-second keepalives and does not trigger
+periodic browser reads. A disconnect or 30 seconds without transport activity
+causes one recovery snapshot, then the browser reconnects with `Last-Event-ID`
+and replays persisted events. The server validates event payloads before the
+browser uses them.
 
 The system does not reveal an unvalidated AI draft as the source of truth. The
 worker waits for structured JSON, validates every evidence citation, and then
@@ -129,23 +164,32 @@ defined in `scripts/polar/plan_contract.json`:
 The UI opens Polar checkout or the customer portal; it never receives the
 Polar access token. A successful browser redirect is not the accounting proof.
 The signed Polar webhook creates or updates local billing state, and the worker
-reconciliation pass repairs missed or delayed provider events. The billing page
-shows “purchase syncing” until local state catches up.
+reconciliation pass repairs missed or delayed provider events. Checkout and
+refund requests each receive an opaque, user-scoped sync operation. The billing
+page checks that small status resource with bounded backoff, then refreshes the
+full billing view once when local state reaches a terminal result. If operation
+confirmation times out or cannot be read, the page still reloads the
+authoritative balance, subscription, and orders while clearly keeping the
+individual operation in a delayed state. Manual refresh performs one operation
+check and the same full billing refresh, so an already-applied webhook becomes
+visible without inviting a duplicate payment or refund request.
 
 Only purchased packs are refundable. Starting a refund immediately marks the
 pack `refund_pending` and removes its remaining seconds from spendable balance.
 If Polar confirms the refund, the pack becomes `refunded`; if Polar definitively
 rejects it, Talven reopens the pack. A timeout is not treated as rejection, so
-the user should not submit the refund twice.
+the UI says confirmation is taking longer and does not ask the user to submit
+the refund twice.
 
 New credits repay outstanding debt before becoming available. When debt reaches
 600 seconds, new briefing creation is blocked until credits pay it down.
 
-One billed “minute” means one second of source duration, not one minute of
-worker wall-clock time, model output, or browser activity. The duration read
-from YouTube is stored on the job, used for admission, and used again by the
-atomic settlement command. A 30-minute video therefore consumes 1,800 seconds
-even if its provider calls finish faster or slower.
+One billed minute means 60 seconds of source video, not one minute of worker
+wall-clock time, model output, or browser activity. Talven stores balances and
+settlements in seconds for accuracy. The duration read from YouTube is stored
+on the job, used for admission, and used again by the atomic settlement
+command. A 30-minute video therefore consumes 1,800 balance seconds—exactly 30
+billed minutes—even if its provider calls finish faster or slower.
 
 ## 7. Recover from common failures
 

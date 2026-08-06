@@ -33,9 +33,9 @@ The browser never talks directly to Groq, OpenRouter, or Polar. It has limited
 read-only access to two RLS-protected database tables (`jobs` and
 `job_events`), but normal product requests still go through the API.
 
-## Why there are 16 application tables
+## Why there are 17 application tables
 
-The 16 tables are the final public application schema after migrations; the
+The 17 tables are the final public application schema after migrations; the
 old Stripe customer table is removed. They do not include Supabase's internal
 Auth or Storage tables. The schema separates records that have different
 owners, lifecycles, security rules, and audit requirements instead of putting
@@ -55,6 +55,7 @@ unrelated mutable data into one large row.
 | `usage_settlements` | The unique, atomic final charge for one successful job |
 | `billing_orders` | Polar purchases, refunds, and order lifecycle |
 | `billing_webhook_events` | Provider-event deduplication, ordering, replay, and diagnostics |
+| `billing_sync_operations` | Short-lived, user-scoped checkout and refund confirmation state |
 | `billing_maintenance_leases` | Short-lived ownership fence ensuring only one worker performs billing recovery at a time |
 | `briefing_stream_leases` | Expiring per-user/client ownership records that bound active SSE streams across API replicas |
 | `polar_customers` | The private mapping between a Talven user and Polar customer state |
@@ -97,6 +98,7 @@ flowchart LR
         US --> CL
         US --> E
         BWE["billing_webhook_events"] -.-> BO
+        BSO["billing_sync_operations"] -.-> BO
     end
 
     subgraph OPERATIONS["Short-lived operational controls"]
@@ -110,6 +112,7 @@ flowchart LR
     AUTH -.-> CL
     AUTH -.-> BO
     AUTH -.-> PC
+    AUTH --> BSO
     AUTH -.-> BSL
 ```
 
@@ -128,6 +131,7 @@ source key rather than a direct foreign key.
 | `jobs` | `usage_settlements` | unique `job_id` foreign key | A settled job cannot be deleted underneath its audit record |
 | `jobs` and `usage_settlements` | `usage_ledger` | `job_id` and `settlement_id` foreign keys | New settlement evidence is retained rather than cascaded away |
 | `plans` | `billing_orders`, `credit_lots`, `entitlements` | `plan_id` fields | A removed plan definition clears the optional link but preserves financial history |
+| Supabase Auth users and `plans` | `billing_sync_operations` | `user_id` and optional `plan_id` foreign keys | User deletion removes the short-lived operation; plan deletion clears only its optional link |
 
 ### Intentional logical relationships
 
@@ -142,6 +146,9 @@ source key rather than a direct foreign key.
   order exists. This is why it keeps provider identifiers and payload evidence
   instead of requiring a foreign key to `billing_orders`: a legitimate webhook
   can arrive before the corresponding local order is visible.
+- `billing_sync_operations.polar_order_id` links refund confirmation to an
+  order logically, because the operation is created before the provider event
+  that proves the final order state.
 - `entitlements` is not an independent money history. It is a rebuildable,
   current snapshot updated from credit lots, debt, subscriptions, refunds, and
   settlements.
@@ -187,8 +194,9 @@ source without gaining access to each other's sessions or billing records.
    every evidence reference, and deterministically renders Markdown.
 7. Usage settlement commits once, then one lease-fenced database update marks
    the job successful.
-8. Persisted events plus periodic snapshots let the browser recover after an
-   SSE disconnect. Markdown and PDF remain private.
+8. Persisted events wake the API's replica-local SSE coordinator; keepalives,
+   durable replay, and one recovery snapshot let the browser recover after a
+   stale or disconnected stream. Markdown and PDF remain private.
 
 Pack refund initiation is also a database command. It locks the purchase before
 its credit lot in the same order as usage settlement, recomputes the refundable
@@ -251,7 +259,7 @@ A healthy worker attempts a queue claim only when one of these occurs:
 5. the database-calculated `run_after` timer becomes due; or
 6. stale-job recovery actually requeues an expired lease.
 
-The 30-second stale-lease sweep and 60-second billing maintenance pass still
+The 30-second stale-lease sweep and five-minute billing maintenance pass still
 run because they repair crashes and delayed billing state. They are not job
 queue polling, and a maintenance pass that finds nothing does not trigger a
 queue claim.
@@ -306,9 +314,9 @@ the worker returns to event-driven waiting.
 
 Two periodic safety tasks remain and are different from queue polling. Every
 30 seconds the stale-lease sweep checks whether a worker crashed while owning a
-job; it requests a new queue claim only when it actually requeues one. Every 60
-seconds billing maintenance gets an opportunity to repair billing work that is
-due. Healthy subscriptions are not sent to Polar every minute; their next due
+job; it requests a new queue claim only when it actually requeues one. Every
+five minutes billing maintenance gets an opportunity to repair billing work that is
+due. Healthy subscriptions are not sent to Polar every five minutes; their next due
 time is stored in the database and is normally six hours away.
 
 ## Lease and heartbeat model
@@ -398,10 +406,15 @@ through the API. The shared table itself is not browser-readable.
 
 Job events are persisted with one database sequence that never resets per
 connection. The SSE endpoint replays events after `Last-Event-ID`, then tails
-for new events. A full session snapshot is the reconciliation fallback.
-Current tailing performs roughly one event query per active viewer per second,
-plus a less frequent snapshot query. That is acceptable for bounded early
-usage; measure it before adding a shared wake-up or retention system.
+for new events. Each committed event emits a Postgres `NOTIFY` containing only
+its job ID. One supervised listener/coordinator per API process coalesces those
+wake hints, fetches persisted events once per affected job on that replica, and
+fans them out to matching locally authorized streams. Notifications are not the
+record: initial snapshots and bounded durable replay remain authoritative.
+Queue overflow requests an immediate full local reconciliation, while a
+45-second fallback sweep runs only during listener loss. Four bounded
+dispatchers keep an unrelated slow job from blocking every local subscriber,
+without allowing concurrent refreshes of the same job.
 
 ## Primary code paths
 
