@@ -185,12 +185,13 @@ Keep Supabase Storage for the first deployment unless measurements show a real
 cost or limit problem. It already shares the current service identity and all
 downloads are private signed URLs.
 
-R2 may later reduce PDF download egress cost, but it is not a drop-in rename.
-A safe change needs a storage adapter, least-privilege R2 credentials, private
-buckets, short-lived signed URLs, CORS, cleanup/retention behavior, migration
-of existing objects, failure tests, and rollback. Temporary audio and PDFs may
-also have different retention/security needs, so do not move both merely for
-architectural symmetry.
+R2 may later remove temporary-audio egress to the transcription provider or
+reduce PDF download egress cost, but it is not a drop-in rename. A safe change
+needs a storage adapter, least-privilege R2 credentials, private buckets,
+short-lived signed URLs, CORS, cleanup/retention behavior, migration of
+existing objects, failure tests, and rollback. Temporary audio and PDFs have
+different retention/security needs, so evaluate them separately and do not
+move both merely for architectural symmetry.
 
 Compare measured total cost and operational complexity after real usage. The
 cheapest price per stored gigabyte is not automatically the cheapest system to

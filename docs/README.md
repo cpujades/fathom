@@ -45,9 +45,10 @@ sections explain the contracts, data, operations, and deliberate trade-offs.
     and what is intentionally not built yet.
 13. [Unit economics](./product/unit-economics.md),
     [provider economics and limits](./decisions/provider-economics-and-limits.md),
+    [audio acquisition and delivery](./decisions/audio-acquisition-and-delivery.md),
     and the [growth feature roadmap](./product/growth-feature-roadmap.md): the
-    current commercial assumptions, provider boundaries, and staged product
-    options that remain proposals rather than implemented behavior.
+    current commercial assumptions, provider/source boundaries, and staged
+    product options that remain proposals rather than implemented behavior.
 14. Finish with the [runbooks](#runbooks) when you are ready to operate or
     release the system.
 
@@ -83,6 +84,10 @@ sections explain the contracts, data, operations, and deliberate trade-offs.
 - [Long-audio and transcription decision](./decisions/long-audio-and-transcription.md):
   the current YouTube-to-Groq pipeline, the reason for the initial two-hour limit,
   provider options, and the safe path to longer videos.
+- [Audio acquisition and temporary delivery](./decisions/audio-acquisition-and-delivery.md):
+  the current bounded YouTube path, `pytubefix` versus `yt-dlp`, podcast RSS and
+  upload alternatives, Supabase versus R2 delivery, cleanup, and the source
+  policy boundary.
 - [Provider economics, limits, and scaling boundaries](./decisions/provider-economics-and-limits.md):
   end-to-end file-size limits, synchronous versus batch transcription, Groq,
   Cloudflare and open-source options, Supabase/Railway billing, egress,

@@ -56,19 +56,63 @@ Show:
 - temporary audio created/deleted/orphaned bytes;
 - PDF count and bytes;
 - Supabase/Railway egress estimate;
+- allocated database disk, live database bytes, and the largest table/index
+  pairs;
 - Polar base sales, tax, fees, refunds, payouts, and contribution; and
 - referral credits granted, consumed, expired, or revoked.
 
 The dashboard must never log provider secrets, raw transcripts, full billing
 payloads, or unnecessary customer PII.
 
+Use Supabase's Usage dashboard/invoice as the authority for billable egress.
+Export or reproduce the operational trend in Grafana so Talven can alert and
+forecast before the quota is reached. Sentry may complement that view for
+exceptions and traces, but it is not the billing or capacity source of truth.
+
 ### Audio lifecycle
 
 - Keep immediate deletion with bounded retry.
 - Delete any private `groq-audio/*` object older than a conservative safety
-  window such as 24 hours.
+  window such as 24 hours, excluding objects referenced by active work.
 - Alert on orphan count/bytes and repeated cleanup failures.
 - Record cleanup evidence before assuming Storage is temporary.
+
+### Database lifecycle
+
+- Measure rows plus table and index bytes before redesigning the schema.
+- Treat a 90-day TTL for ordinary `job_events` belonging to terminal jobs as a
+  proposal to validate against support and SSE replay needs; never prune
+  queued, running, or recoverable-job events.
+- Preserve billing orders, settlements, ledger, refunds, and webhook evidence
+  for the approved accounting/audit period rather than applying the event TTL
+  to every append-only table.
+- Keep timestamped transcript segments while they power evidence links and
+  episode Q&A; reducing their row count would remove product value.
+- Physically purge only data whose privacy, shared-cache, foreign-key, and
+  backup consequences have been approved.
+
+## Parallel processing foundation: sources and chunking
+
+This technical track can proceed independently of the user-facing growth
+phases. The accepted source direction is documented in
+[Audio acquisition and temporary delivery](../decisions/audio-acquisition-and-delivery.md).
+
+- Keep bounded YouTube ingestion for the first release.
+- Add publisher podcast RSS enclosure URLs as the next source adapter, with
+  redirect, SSRF, byte, duration, and content-type controls.
+- Add direct user audio uploads after upload abuse, ownership, privacy, and
+  lifecycle rules are explicit.
+- Normalize speech audio and introduce a durable, provider-independent
+  chunking manifest before promising inputs beyond the current two-hour or
+  100,000,000-byte boundary.
+- Use ordered 15-25 minute chunks with small overlap, absolute timestamp
+  offsets, bounded concurrency, per-chunk retry, deterministic overlap removal,
+  and cache-compatible chunk hashes.
+- Keep synchronous Groq/Cloudflare inference inside the background worker; the
+  product remains asynchronous through its durable job and SSE progress.
+- Warn at 50% Supabase egress, benchmark R2 around a 70% forecast, and make the
+  move/no-move decision before a repeated 80% forecast. Do not add R2 merely to
+  avoid a few dollars of occasional overage.
 
 ## Phase 1: Markdown and clipboard export
 

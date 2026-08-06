@@ -1,7 +1,7 @@
 # Provider economics, limits, and scaling boundaries
 
 **Status:** Current launch recommendation and future-provider watchlist
-**Last reviewed:** 2026-08-05
+**Last reviewed:** 2026-08-06
 
 This page records the current limits that affect a Talven source from download
 through transcription, persistence, and email. Prices and provider quotas are
@@ -90,6 +90,14 @@ synchronous. Groq Batch is asynchronous, costs about `$0.02/audio-hour`, and
 uses a completion window between 24 hours and seven days. It is suitable only
 for a clearly labeled economy/background mode.
 
+This provider distinction is separate from Talven's web architecture. The API
+already creates a durable job and returns while the background worker performs
+the synchronous provider request; the browser watches progress over SSE. Thus a
+synchronous Groq or Cloudflare call does **not** block the browser request
+thread. Calling Python code `async` also does not turn a provider request into a
+provider batch job: it only lets Talven wait without monopolizing the event
+loop and run a bounded number of independent jobs concurrently.
+
 ## Transcription-provider comparison
 
 | Provider | Approximate price/hour | Timing and limits | Decision |
@@ -158,6 +166,23 @@ Supabase signed URL -> Groq            Supabase egress / Groq ingress
 Deleting the temporary object prevents storage accumulation but does not undo
 the bytes already transferred to Groq.
 
+A database read is not automatically the same thing as egress. PostgreSQL may
+scan pages internally without those scanned bytes leaving Supabase. The result
+bytes returned to the API/browser do count as Supabase database or pooler
+egress. Other Talven examples are:
+
+| Action | Egress charged by |
+| --- | --- |
+| Worker uploads temporary audio to Supabase | Railway; the bytes are ingress to Supabase |
+| Groq fetches the private signed audio URL | Supabase Storage |
+| API fetches a transcript/query result from Supabase | Supabase database/pooler |
+| Browser downloads a generated PDF | Supabase Storage |
+| Browser signs in and receives Auth data | Supabase Auth |
+
+Supabase combines those uncached outbound bytes into the 250 GB Pro quota for
+the billing cycle. Cached egress has a separate 250 GB quota. Uploading data to
+Supabase is ingress and does not consume its outbound quota.
+
 A **cold source** is a cache miss: Talven has no compatible stored transcript
 for that source/provider/version and must download and transcribe it. A cache
 hit reuses the stored transcript and avoids the temporary audio and Groq
@@ -175,6 +200,14 @@ The small-number arithmetic is:
 Therefore Supabase Pro's 250 GB monthly egress is substantial early headroom,
 but not unlimited. At 30-50 MB/audio-hour it represents roughly 5,000-8,300
 cold audio hours/month before other database/Auth/PDF egress.
+
+There is no separate daily Supabase quota; `250 GB / 30` is an average planning
+pace of about `8.3 GB/day`. At 50 MB per cold source, 100 cold sources/day use
+about 150 GB/month. At the maximum 100 MB, 100/day use about 300 GB/month; the
+50 GB Supabase overage would currently be only about `$4.50`, before other
+egress. The same 300 GB upload path costs about `$15` of Railway egress. At that
+volume, transcription and compute are normally more important than bandwidth,
+but the bytes should still be measured rather than guessed.
 
 The current double-hop through Supabase is useful for Groq URL ingestion but
 creates both Railway and Supabase egress. A future scale experiment may stream
@@ -195,11 +228,50 @@ cleanup.
 | Maximum configured file size | 50 MB | Up to 500 GB |
 | Backups | No automatic production backup | Daily database backup, seven days |
 
-The database is **8 GB, not 800 GB**, and it does not reset monthly. Ten
-thousand audio hours means ten thousand one-hour episodes, not 166. At an
-estimated 0.2-0.5 MB of database data per unique audio hour, those ten thousand
-hours could add about 2-5 GB before indexes and general billing/user data.
-That can fit once in 8 GB but cannot accumulate every month indefinitely.
+The database is **8 GB, not 800 GB**, and it does not reset monthly. It is the
+included provisioned disk available at one time. On paid projects Supabase can
+expand the disk when it reaches 90%, if the Spend Cap allows overage; the first
+automatic step is normally 8 GB to 12 GB. Current general-purpose disk overage
+is `$0.125/GB-month`, so storage growth itself is gradual:
+
+| Provisioned disk | Approximate disk overage above Pro |
+| ---: | ---: |
+| 8 GB | $0 |
+| 12 GB | $0.50/month |
+| 20 GB | $1.50/month |
+| 50 GB | $5.25/month |
+| 100 GB | $11.50/month |
+
+This is recurring provisioned-capacity billing, not a one-time expansion fee.
+For example, keeping a 100 GB general-purpose disk provisioned for a complete
+month adds about `$11.50` to every monthly bill above the `$25` Pro base, for a
+rough `$36.50/month` Supabase total before compute upgrades or other overage.
+Disk is metered in GB-hours, so a mid-cycle expansion is prorated. Provisioned
+disk does not automatically shrink during ordinary operation merely because
+rows are deleted.
+
+Those figures exclude larger database compute, extra IOPS/throughput, egress,
+and other services. Keep operating headroom rather than deliberately filling
+the disk to 100%.
+
+Postgres has no useful fixed “rows per 8 GB” answer because row width and
+indexes matter. A rough intuition, before WAL/system headroom, dead tuples, and
+page overhead, is:
+
+```text
+1,000,000 rows x 1 KB effective bytes/row  = about 1 GB
+1,000,000 rows x 4 KB effective bytes/row  = about 4 GB
+1,000,000 rows x 10 KB effective bytes/row = about 10 GB
+```
+
+So one million small billing rows can fit, while one million rows containing
+large transcript or JSON text cannot. In Talven the important multipliers are
+hundreds of `transcript_segments` per unique episode and multiple sparse
+`job_events` per user job. `transcripts.transcript_text` and segment text also
+intentionally retain overlapping textual evidence. At an estimated 0.2-0.5 MB
+of database data per unique audio hour, ten thousand one-hour episodes could
+add about 2-5 GB before indexes and general billing/user data. That can fit
+once in 8 GB but cannot accumulate every month indefinitely.
 
 Persistent growth includes full transcripts, duplicated timestamp-segment
 text, summaries, jobs, durable events, and billing evidence. Generated PDFs
@@ -209,21 +281,50 @@ repeated deletion failure can leave orphaned objects.
 
 Retention must distinguish disposable data from legal/financial evidence:
 
-- delete temporary `groq-audio/*` objects after a conservative safety window;
+- run a bounded, paginated sweeper that lists private `groq-audio/*` objects
+  and deletes objects older than a conservative window such as 24 hours, while
+  excluding any object referenced by an active job;
 - retain billing orders, settlements, refund, and webhook evidence for the
   required accounting/audit period;
 - measure per-table/index bytes before setting a transcript/summary TTL;
-- compact or prune old high-volume job events under a documented retention
-  policy;
+- propose pruning ordinary `job_events` 90 days after their job becomes
+  terminal, while retaining any explicitly selected audit milestones; never
+  prune events for queued/running/recoverable jobs;
 - physically purge eligible soft-deleted jobs and unreferenced derivatives;
 - preserve shared cache entries while they still save more than they cost;
 - back up durable PDF objects or make restore clear missing PDF-cache metadata
   so PDFs regenerate from Markdown.
 
+The 90-day event period is a proposal, not implemented behavior. It must be
+checked against support needs, SSE replay semantics, privacy policy, and the
+foreign-key restrictions that preserve usage-settlement evidence. The current
+`ttl_expires_at` columns also do not prove that a scheduled purge exists.
+
+Measure real table and index sizes before redesigning anything:
+
+```sql
+select
+  io.relname as table_name,
+  stats.n_live_tup as estimated_rows,
+  pg_size_pretty(pg_relation_size(io.relid)) as table_bytes,
+  pg_size_pretty(pg_indexes_size(io.relid)) as index_bytes,
+  pg_size_pretty(pg_total_relation_size(io.relid)) as total_bytes
+from pg_catalog.pg_statio_user_tables as io
+join pg_catalog.pg_stat_user_tables as stats using (relid)
+order by pg_total_relation_size(io.relid) desc;
+```
+
+Do not compact `transcript_segments` merely to reduce row count: their
+timestamp evidence enables cited briefings and episode Q&A. Event history is a
+safer first retention target because it is numerous, append-only, and becomes
+less useful after a job is terminal and old.
+
 Official references:
 
 - [Supabase pricing](https://supabase.com/pricing)
 - [Supabase egress](https://supabase.com/docs/guides/platform/manage-your-usage/egress)
+- [Supabase disk usage](https://supabase.com/docs/guides/platform/manage-your-usage/disk-size)
+- [Supabase database and disk size](https://supabase.com/docs/guides/platform/database-size)
 - [Supabase Storage pricing](https://supabase.com/docs/guides/storage/pricing)
 - [Supabase backups](https://supabase.com/docs/guides/platform/backups)
 
@@ -235,6 +336,83 @@ RAM, CPU, egress, and volume storage. If measured usage is below `$20`, the
 bill remains `$20`; if it is `$47`, the bill is approximately `$47`, not `$67`.
 Current published rates include `$10/GB-month` RAM, `$20/vCPU-month`,
 `$0.05/GB` egress, and `$0.15/GB-month` volume storage.
+
+Railway does not give Pro a fixed included quantity of RAM, CPU, or egress.
+Its published 1 TB RAM, 1,000 vCPU, 100 GB ephemeral storage, and up-to-1-TB
+volume figures are ceilings, including replicas—not prepaid resources. The
+first `$20` of the following combined meter is covered:
+
+```text
+average RAM GB x $10
++ average vCPU x $20
++ outbound GB x $0.05
++ average volume GB x $0.15
+```
+
+For intuition, 1 GB of always-on RAM ($10), an average 0.25 vCPU ($5), and 100
+GB egress ($5) exactly consume the $20 credit. Talven will run separate web,
+API, and continuous-worker services, so their combined idle RAM matters even
+with no users. Railway's own metrics and first full-cycle invoice are the only
+reliable forecast.
+
+Talven does not currently need a Railway persistent volume. Its audio lives in
+a per-job temporary directory and is copied to private object storage before
+transcription; crash recovery comes from Postgres and object storage, not a
+local filesystem. A volume would add cost and single-service attachment
+constraints without becoming an authoritative store. Ephemeral storage is
+still needed for active downloads and scales with worker concurrency.
+
+### Low-traffic Talven estimate
+
+No hosted invoice exists yet, so this is a capacity-planning envelope rather
+than a measurement:
+
+| Service | Expected average RAM | Expected low-traffic CPU |
+| --- | ---: | ---: |
+| Next.js web | 0.25-0.50 GB | 0.01-0.05 vCPU |
+| FastAPI API | 0.25-0.50 GB | 0.01-0.05 vCPU |
+| Continuous Python worker | 0.25-0.50 GB | 0.03-0.05 vCPU |
+| **Combined** | **0.75-1.50 GB** | **0.05-0.15 vCPU** |
+
+At Railway's current rates, that is roughly `$7.50-$15` RAM plus `$1-$3`
+CPU each month. Initial application/API egress should be small; even 10 GB is
+only `$0.50`. The likely low-traffic meter is therefore about `$8.50-$18.50`,
+which remains inside the Pro plan's `$20` credit. The resulting Railway bill is
+still `$20`, not `$20` plus those amounts. Peaks can be higher during source
+download, PDF rendering, deploys, or concurrent work, so set service resource
+ceilings and replace the estimate after one exact-topology staging week.
+
+Railway Serverless may let the web or API sleep, but any open database pool,
+telemetry, or outbound packet can prevent sleep. The continuous worker must
+remain awake because it listens for database notifications and owns recovery;
+do not enable sleeping on it merely to reduce its RAM bill.
+
+### Host recommendation
+
+- **Keep all three processes on Railway for launch.** It runs the existing
+  containers without a framework rewrite, and the forecast already fits the
+  Pro floor.
+- **Railway Hobby is the credible cost-saving option for a private pilot.** It
+  has a `$5` minimum but still bills actual usage above `$5`; this workload may
+  therefore cost roughly `$9-$19`, not necessarily `$5`. Upgrade when the
+  production/team/support boundary justifies Pro.
+- **Cloudflare for only the frontend does not remove the Railway minimum.** A
+  complete move is now technically possible through Workers/Containers, but
+  it adds a Worker routing layer and explicit container lifecycle. Talven's
+  continuously listening worker would need to remain active or be redesigned
+  around Queues/Workflows; that migration is not justified by a likely saving
+  of a few dollars.
+- **Fly.io can be cheaper for small shared-CPU Machines**, potentially around
+  `$10-$15` for three small always-on processes, but requires more explicit VM,
+  sizing, wake/sleep, network, and deployment ownership. Revisit if Railway's
+  measured bill exceeds its convenience/support value.
+
+References:
+
+- [Railway Serverless behavior](https://docs.railway.com/deployments/serverless)
+- [Cloudflare Containers pricing](https://developers.cloudflare.com/containers/pricing/)
+- [Cloudflare Container scaling](https://developers.cloudflare.com/containers/platform-details/scaling-and-routing/)
+- [Fly.io resource pricing](https://fly.io/docs/about/pricing/)
 
 Supabase Pro similarly includes quotas rather than unlimited use. The base is
 `$25`; database disk, Storage, egress, MAU, larger compute, custom domains, and
@@ -251,14 +429,24 @@ The requested early planning stack is:
 | Domain, monthly equivalent | about $1 |
 | Optional Supabase Auth custom domain | $0 or $10 |
 | Basic monitoring/backup reserve | $0-$5 |
-| Planning total | approximately €50-€100; use €80 in the owner model |
+| Production infrastructure cash floor | about $46 / €40 at the planning exchange rate |
+| Sensible zero-customer budget | about €50 |
+| Scenario allowance | use €80 in the owner model |
 
 At tens of thousands of audio hours/month, recalculate from measured bytes;
 do not carry the €80 constant into a capacity promise.
 
+The infra-only floor is not the whole no-revenue business floor. Once the owner
+is registered as an autónomo, the current planning model adds a €70 gestor and
+eligible €88.64 reduced contribution, making the first-year cash floor about
+€199/month from the exact converted infrastructure estimate, or €208.64 using
+the rounded €50 infrastructure budget. See
+[Unit economics and owner cash model](../product/unit-economics.md#zero-customer-monthly-floor).
+
 References:
 
 - [Railway plans and usage pricing](https://docs.railway.com/pricing/plans)
+- [Railway bill behavior](https://docs.railway.com/pricing/understanding-your-bill)
 - [Supabase billing](https://supabase.com/docs/guides/platform/billing-on-supabase)
 
 ## Email boundary

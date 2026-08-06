@@ -4,10 +4,13 @@ Status: keep the current provider and two-hour limit for the first bounded
 initial release; validate quality/privacy and design chunking before supporting longer
 videos.
 
-Provider limits and prices below were reviewed on August 5, 2026. They are
+Provider limits and prices below were reviewed on August 6, 2026. They are
 time-sensitive and must be rechecked before a purchase or migration. The
 broader hosted/open-source comparison and end-to-end file limits live in
 [Provider economics, limits, and scaling boundaries](./provider-economics-and-limits.md).
+Downloader, podcast RSS/upload, Supabase/R2, and provider-delivery alternatives
+live in
+[Audio acquisition and temporary delivery](./audio-acquisition-and-delivery.md).
 
 ## Current pipeline
 

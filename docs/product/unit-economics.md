@@ -1,7 +1,7 @@
 # Unit economics and owner cash model
 
 **Status:** Planning model, not booked financial results
-**Last reviewed:** 2026-08-05
+**Last reviewed:** 2026-08-06
 
 This page makes Talven's pricing arithmetic explicit. It separates customer
 tax, Polar fees, provider costs, business contribution, autónomo costs, and
@@ -167,6 +167,50 @@ The pack mix averages `$20` and 14.6 hours.
 
 “Paid conversion” means the share of monthly active users who purchase in that
 month. The 60/30/10 plan mix applies only to subscribers, not to Free users.
+
+## Zero-customer monthly floor
+
+The public-production stack has a lower fixed floor than the €80 scenario
+allowance. Using the same planning exchange rate, and assuming usage remains
+inside both base plans:
+
+| Item with no customers | Monthly cash |
+| --- | ---: |
+| Railway Pro minimum, including its first $20 of metered usage | $20 |
+| Supabase Pro, including one Micro project through its compute credit | $25 |
+| Resend Free, Polar Early Member, Groq, and OpenRouter with no usage | $0 |
+| Domain, monthly equivalent of an annual renewal | about $1 |
+| **Infrastructure cash floor** | **about $46 / €40** |
+| Sensible infrastructure budget | **€50** |
+
+Therefore “roughly €50 with no clients” is a sound owner budget, but it is not
+the entire fixed cost of operating as a registered autónomo. If the owner is
+already registered and eligible for the first-year reduced contribution:
+
+```text
+Infrastructure floor at the planning exchange rate     about €40.35
+Gestor                                                     €70.00
+Reduced autónomo contribution                              €88.64
+Whole-business cash floor                                about €198.99/month
+
+Using the rounded €50 infrastructure budget              €208.64/month
+```
+
+The exact card charge can differ because of vendor VAT treatment, exchange
+rate/card spread, and the fact that a domain is usually paid annually. The €50
+infrastructure budget is intended to absorb that small uncertainty; invoices
+and the gestor remain authoritative for deductible/input-VAT treatment.
+
+There is no Polar payout or transaction fee without a sale, and no IRPF on
+nonexistent profit. Filing/accounting obligations and the autónomo contribution
+can still continue while the activity is registered. The optional $10/month
+Supabase custom domain would raise the infrastructure floor to about €49 before
+the gestor and autónomo contribution; it is not needed for the first release.
+
+Railway Hobby can reduce a private pre-launch environment to a $5 minimum, but
+the production recommendation remains Pro for the commercial support/limits
+boundary. Supabase Free also reduces pre-launch cash, but its 50 MB Storage
+upload limit does not satisfy Talven's current 100,000,000-byte source contract.
 
 ## Detailed 5,000-MAU scenario
 
