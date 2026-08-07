@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.21.7](https://github.com/cpujades/fathom/compare/v0.21.6...v0.21.7) (2026-08-07)
+
+_Automated release from [#173](https://github.com/cpujades/fathom/pull/173) chore(security): harden release dependency trust_
+
+### Chores
+
+- chore(security): harden release dependency trust (cbb819c)
+
 ## [0.21.6](https://github.com/cpujades/fathom/compare/v0.21.5...v0.21.6) (2026-08-07)
 
 _Automated release from [#172](https://github.com/cpujades/fathom/pull/172) chore(deps): bump h2 from 4.3.0 to 4.4.1_
