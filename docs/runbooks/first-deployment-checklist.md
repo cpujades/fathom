@@ -1,7 +1,7 @@
 # First deployment checklist
 
 **Status:** Required later; no application deployment exists yet
-**Last reviewed:** 2026-08-03
+**Last reviewed:** 2026-08-07
 
 Use this page only after the code candidate is accepted and a host is being
 chosen. It records the work that is intentionally not configured while Talven
@@ -119,7 +119,46 @@ signature is the authority. Send a sandbox event, replay the same event, send
 an invalid signature, and confirm respectively: one state change, no duplicate
 state change, and rejection.
 
-### 5. Send logs somewhere and create alerts
+#### Blocker: harden Polar catalog-sync destinations
+
+Before running `scripts/polar/generate_polar_plans.py` with a production Polar
+token, close the difference between that operator script and the stricter
+runtime Polar client:
+
+- accept the named `sandbox` and `production` destinations, and require HTTPS
+  for every custom remote destination;
+- reject URLs containing credentials;
+- disable automatic redirects or permit only an explicitly validated
+  same-origin redirect;
+- bound response bytes before parsing provider JSON; and
+- add tests proving that plaintext HTTP, credential-bearing URLs, cross-origin
+  redirects, and oversized responses fail before the bearer token can reach an
+  unsafe destination.
+
+If a local HTTP mock remains useful, give it an explicit development-only path
+that cannot use a real Polar token. A local `--dry-run` does not contact Polar,
+so it is not proof that this production-token boundary is safe.
+
+### 5. Bound public marketing telemetry
+
+`POST /api/events/marketing` is intentionally reachable from the public landing
+and pricing pages. Before routing public traffic to the web application:
+
+- read the request stream through a small hard byte limit that also protects
+  chunked requests instead of trusting only `Content-Length`;
+- set short maximum lengths and expected formats for every accepted field;
+- configure a hosting-edge or server-side rate limit using a trustworthy client
+  identity;
+- sample or deduplicate events so anonymous traffic cannot create unbounded log
+  volume; and
+- test that oversized bodies and fields are rejected, abusive bursts are
+  throttled, and an ordinary valid event still returns `204`.
+
+Do not treat an undocumented hosting-provider default as this control. Record
+the chosen limit, where it is enforced, and the hosted test evidence before
+launch.
+
+### 6. Send logs somewhere and create alerts
 
 Talven emits stable event names plus small context fields. The fields are not
 decoration; each answers a specific incident question:
@@ -155,7 +194,7 @@ The complete dashboard ownership, metric inventory, review cadence, and
 provisional capacity thresholds are in
 [Operational metrics and provider review](./operational-metrics-and-provider-review.md).
 
-### 6. Approve retention, backups, and support
+### 7. Approve retention, backups, and support
 
 Before an external user creates data, record:
 
@@ -171,7 +210,7 @@ Before an external user creates data, record:
 Example: “PDFs are kept while the reusable summary is retained” is a policy.
 “Storage keeps them for a while” is not. Use exact periods or exact events.
 
-### 7. Prove the release candidate
+### 8. Prove the release candidate
 
 - Run deterministic checks and the disposable database gate.
 - Run the authenticated fake-provider journey.
