@@ -4,13 +4,11 @@ on:
   workflow_call:
     inputs:
       release_tag:
-        description: "Exact release tag to deploy, for example v0.21.1."
         required: true
         type: string
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "Exact release tag to deploy, for example v0.21.1."
         required: true
         type: string
 
