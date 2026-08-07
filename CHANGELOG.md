@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.21.2](https://github.com/cpujades/fathom/compare/v0.21.1...v0.21.2) (2026-08-07)
+
+_Automated release from [#167](https://github.com/cpujades/fathom/pull/167) chore(deps): bump cryptography from 48.0.1 to 50.0.0_
+
+### Chores
+
+- chore(deps): bump cryptography from 48.0.1 to 50.0.0 (b780d8d)
+
 ## [0.21.1](https://github.com/cpujades/fathom/compare/v0.21.0...v0.21.1) (2026-08-07)
 
 _Automated release from [#169](https://github.com/cpujades/fathom/pull/169) fix: regenerate API contract during releases_
