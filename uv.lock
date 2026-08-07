@@ -447,7 +447,7 @@ wheels = [
 
 [[package]]
 name = "fathom"
-version = "0.21.3"
+version = "0.21.5"
 source = { editable = "." }
 dependencies = [
     { name = "asyncpg" },
