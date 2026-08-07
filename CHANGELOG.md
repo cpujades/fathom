@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.21.8](https://github.com/cpujades/fathom/compare/v0.21.7...v0.21.8) (2026-08-07)
+
+_Automated release from [#174](https://github.com/cpujades/fathom/pull/174) docs(security): track pre-launch hardening blockers_
+
+### Documentation
+
+- docs(security): track pre-launch hardening blockers (940e45a)
+
 ## [0.21.7](https://github.com/cpujades/fathom/compare/v0.21.6...v0.21.7) (2026-08-07)
 
 _Automated release from [#173](https://github.com/cpujades/fathom/pull/173) chore(security): harden release dependency trust_
