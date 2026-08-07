@@ -89,17 +89,21 @@ journey against a real staging project.
 
 ## How staging receives migrations
 
-After a successful release on `main`, `.github/workflows/staging.yml` checks
-whether `supabase/**` changed. If it did, the workflow:
+After a successful release on `main`, the release workflow passes its exact
+generated tag to `.github/workflows/staging.yml`. Staging compares that tag
+with the preceding release and checks whether `supabase/**` changed. If it did,
+the workflow:
 
-1. Uses the `staging` GitHub environment's `SUPABASE_ACCESS_TOKEN`,
+1. Checks out the exact released tag.
+2. Uses the `staging` GitHub environment's `SUPABASE_ACCESS_TOKEN`,
    `SUPABASE_PROJECT_REF`, and `SUPABASE_DB_PASSWORD`.
-2. Links the CLI to the staging project.
-3. previews pending changes with `supabase db push --dry-run`.
-4. Applies the pending migrations with `supabase db push`.
+3. Links the CLI to the staging project.
+4. Previews pending changes with `supabase db push --dry-run`.
+5. Applies the pending migrations with `supabase db push`.
 
-The staging workflow can also be started manually. It never targets production
-when its GitHub environment secrets correctly belong to the staging project.
+The staging workflow can also be started manually by supplying an exact release
+tag. It never targets production when its GitHub environment secrets correctly
+belong to the staging project.
 
 ## How production receives migrations
 
