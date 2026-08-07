@@ -2,6 +2,10 @@ packages:
   - apps/*
   - packages/*
 
+# Delay newly published packages so registry malware has time to be detected.
+minimumReleaseAge: 4320
+minimumReleaseAgeStrict: true
+
 allowBuilds:
   sharp: true
   unrs-resolver: true
