@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.21.4](https://github.com/cpujades/fathom/compare/v0.21.3...v0.21.4) (2026-08-07)
+
+_Automated release from [#170](https://github.com/cpujades/fathom/pull/170) fix(deps): patch August npm advisories_
+
+### Bug Fixes
+
+- fix(deps): patch August npm advisories (c48f3f4)
+- fix(deps): patch js-yaml advisory (12cb9d6)
+
 ## [0.21.3](https://github.com/cpujades/fathom/compare/v0.21.2...v0.21.3) (2026-08-07)
 
 _Automated release from [#166](https://github.com/cpujades/fathom/pull/166) chore(deps): bump aiohttp from 3.14.1 to 3.14.3_
