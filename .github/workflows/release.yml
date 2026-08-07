@@ -16,6 +16,9 @@ jobs:
   release:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
+    outputs:
+      released: ${{ steps.release.outputs.released }}
+      release_tag: ${{ format('v{0}', steps.release.outputs.version) }}
 
     steps:
       - name: Checkout
@@ -205,3 +208,11 @@ jobs:
         with:
           tag_name: v${{ steps.release.outputs.version }}
           body_path: .github/tmp/release-notes.md
+
+  staging:
+    name: 🚧 Deploy release to staging
+    needs: release
+    if: needs.release.outputs.released == 'true'
+    uses: ./.github/workflows/staging.yml
+    with:
+      release_tag: ${{ needs.release.outputs.release_tag }}
