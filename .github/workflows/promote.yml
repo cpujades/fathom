@@ -109,11 +109,6 @@ jobs:
     runs-on: ubuntu-latest
     environment: prod
 
-    env:
-      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
-      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-
     steps:
       - name: Checkout promoted release
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -126,10 +121,20 @@ jobs:
           version: 2.111.0
 
       - name: Link Supabase project (prod)
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
 
       - name: Preview migrations (prod dry-run)
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: supabase db push --dry-run
 
       - name: Apply migrations (prod)
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: supabase --yes db push

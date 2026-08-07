@@ -38,8 +38,11 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Install deps
-        run: uv sync --group dev
+      - name: Install locked build dependencies
+        run: uv sync --locked --group dev --no-install-project
+
+      - name: Install locked project
+        run: uv sync --locked --group dev --no-build-isolation-package fathom
 
       - name: Collect merged PR commits
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
