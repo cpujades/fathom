@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.21.3](https://github.com/cpujades/fathom/compare/v0.21.2...v0.21.3) (2026-08-07)
+
+_Automated release from [#166](https://github.com/cpujades/fathom/pull/166) chore(deps): bump aiohttp from 3.14.1 to 3.14.3_
+
+### Chores
+
+- chore(deps): bump aiohttp from 3.14.1 to 3.14.3 (b90d716)
+
 ## [0.21.2](https://github.com/cpujades/fathom/compare/v0.21.1...v0.21.2) (2026-08-07)
 
 _Automated release from [#167](https://github.com/cpujades/fathom/pull/167) chore(deps): bump cryptography from 48.0.1 to 50.0.0_
