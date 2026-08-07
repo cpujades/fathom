@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.21.5](https://github.com/cpujades/fathom/compare/v0.21.4...v0.21.5) (2026-08-07)
+
+_Automated release from [#171](https://github.com/cpujades/fathom/pull/171) chore(security): enforce pnpm release-age gate_
+
+### Chores
+
+- chore(security): enforce pnpm release-age gate (13bdd50)
+
 ## [0.21.4](https://github.com/cpujades/fathom/compare/v0.21.3...v0.21.4) (2026-08-07)
 
 _Automated release from [#170](https://github.com/cpujades/fathom/pull/170) fix(deps): patch August npm advisories_
