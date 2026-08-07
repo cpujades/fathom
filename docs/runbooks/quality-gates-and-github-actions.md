@@ -114,8 +114,8 @@ commit conventional is still the project convention.
 
 | Workflow | Trigger | Current effect |
 | --- | --- | --- |
-| `.github/workflows/release.yml` | Push to `main` | Reads the merged PR commits, calculates the next semantic version, updates `CHANGELOG.md`, `pyproject.toml`, and `uv.lock`, creates the release commit and tag, and publishes the GitHub release |
-| `.github/workflows/staging.yml` | Successful release workflow, or manual dispatch | If Supabase changed, links the staging project, previews `db push`, and applies pending migrations using the `staging` GitHub environment secrets |
+| `.github/workflows/release.yml` | Push to `main` | Reads the merged PR commits, calculates the next semantic version, updates the release and generated API-client files, creates the release commit and tag, publishes the GitHub release, and passes that exact tag to staging |
+| `.github/workflows/staging.yml` | Called with the generated release tag, or manually dispatched with an exact tag | Compares the selected tag with the preceding release; if Supabase changed, it checks out that tag, links the staging project, previews `db push`, and applies pending migrations using the `staging` GitHub environment secrets |
 | `.github/workflows/promote.yml` | Manual dispatch with an exact release tag | Resolves that immutable tag, summarizes it, links the production project, previews `db push`, and applies that tag's migrations using the `prod` GitHub environment secrets |
 
 The security workflow also runs CodeQL after pushes to `main` and on its weekly

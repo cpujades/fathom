@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.21.1](https://github.com/cpujades/fathom/compare/v0.21.0...v0.21.1) (2026-08-07)
+
+_Automated release from [#169](https://github.com/cpujades/fathom/pull/169) fix: regenerate API contract during releases_
+
+### Bug Fixes
+
+- fix: regenerate API contract during releases (13cf6be)
+- fix: deploy exact release tag to staging (c11041b)
+
+### Style
+
+- style: simplify staging workflow inputs (9593039)
+
 ## [0.21.0](https://github.com/cpujades/fathom/compare/v0.20.6...v0.21.0) (2026-08-06)
 
 _Automated release from [#168](https://github.com/cpujades/fathom/pull/168) feat: complete user workflow improvements_
