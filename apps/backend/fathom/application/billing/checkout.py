@@ -28,10 +28,18 @@ async def create_checkout_session(
     request: CheckoutSessionRequest,
     auth: AuthenticatedUser,
     settings: Settings,
+    *,
+    customer_ip_address: str | None = None,
 ) -> CheckoutSessionResponse:
     plan_id = str(request.plan_id)
     async with managed_supabase_client(await create_supabase_admin_client(settings)) as admin_client:
-        return await _create_checkout_session(plan_id, auth, settings, admin_client)
+        return await _create_checkout_session(
+            plan_id,
+            auth,
+            settings,
+            admin_client,
+            customer_ip_address=customer_ip_address,
+        )
 
 
 async def _create_checkout_session(
@@ -39,6 +47,8 @@ async def _create_checkout_session(
     auth: AuthenticatedUser,
     settings: Settings,
     admin_client: AsyncClient,
+    *,
+    customer_ip_address: str | None,
 ) -> CheckoutSessionResponse:
     plan = await fetch_plan_by_id(admin_client, plan_id)
     if not plan.get("is_active"):
@@ -79,6 +89,7 @@ async def _create_checkout_session(
                 "plan_type": plan_type,
                 "billing_operation_id": operation_id,
             },
+            **({"customer_ip_address": customer_ip_address} if customer_ip_address else {}),
         )
     except Exception:
         try:

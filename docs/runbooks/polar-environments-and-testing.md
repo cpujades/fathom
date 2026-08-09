@@ -36,7 +36,7 @@ files have different jobs and must not become competing price definitions:
 | `scripts/polar/plan_contract.json` | Tracked, non-secret plan names, prices, allowances, and versions | Edit deliberately when the public product promise changes. |
 | `scripts/polar/plans.json` | Ignored mapping from `(plan_code, version)` to an environment-specific Polar product UUID | Use only to reuse or recover known sandbox/production products. Never commit it. |
 | `scripts/polar/plan_seed.json` | Ignored diagnostic output from the generator | Inspect after a run; never maintain it by hand. |
-| `scripts/polar/generate_polar_plans.py` | Validation, Polar product create/reuse, and Supabase plan upsert | Run after a contract change. |
+| `scripts/polar/generate_polar_plans.py` | Validation, Polar product create/reuse/archive, and Supabase plan upsert/deactivation | Run after a contract change. |
 | `apps/web/app/content/pricing.ts` | Marketing-page wording and presentation | Keep its public promises aligned with the contract; tests compare the two. |
 
 Example:
@@ -44,7 +44,7 @@ Example:
 | Field | Local/staging example | Production example |
 | --- | --- | --- |
 | Talven `plan_code` | `creator_pack` | `creator_pack` |
-| Talven `version` | `1` | `1` |
+| Talven `version` | `2` | `2` |
 | Supabase `plans.id` | `11111111-1111-1111-1111-111111111111` | `22222222-2222-2222-2222-222222222222` |
 | `plans.polar_product_id` | sandbox product UUID | different production product UUID |
 
@@ -56,8 +56,8 @@ IDs; it must not become a second business contract.
 
 If price or billing cadence changes materially, create a new plan version and
 map it to the corresponding Polar product. Do not edit only Polar and leave the
-tracked contract stale. `--deactivate-missing` deactivates missing Talven plan
-versions; it does not archive the provider product for you.
+tracked contract stale. `--retire-missing` retires an old version in both
+places: it deactivates the Supabase row and archives its Polar product.
 
 ### What `plan_contract.json` contains
 
@@ -66,22 +66,32 @@ Each entry is a business version. For example:
 ```json
 {
   "plan_code": "creator_pack",
-  "version": 1,
+  "version": 2,
   "name": "Creator Pack",
   "plan_type": "pack",
   "currency": "usd",
-  "amount_cents": 1500,
+  "amount_cents": 2100,
+  "prices": {
+    "usd": 2100,
+    "eur": 1800,
+    "gbp": 1600
+  },
   "billing_interval": null,
   "quota_seconds": 36000,
   "rollover_cap_seconds": null,
-  "pack_expiry_days": 180
+  "pack_expiry_days": 90
 }
 ```
 
-`amount_cents = 1500` means `$15.00`; `quota_seconds = 36000` means ten
-hours of source duration. Subscriptions currently require a monthly interval;
-packs require `billing_interval = null`. The zero-price free subscription maps
-to the internal ID `internal_free` and is not created as a Polar product.
+`amount_cents = 2100` and `currency = "usd"` make `$21.00` the reference
+price stored in the Supabase plan row. The `prices` map defines the complete
+Polar catalog: $21, €18, and £16. `quota_seconds = 36000` means ten hours of
+source duration. Subscriptions require a monthly interval; packs require
+`billing_interval = null`. The zero-price free subscription maps to the
+internal ID `internal_free` and is not created as a Polar product. It is a
+singleton exception to paid-product versioning and remains `free@v1`; changing
+its allowance or carryover metadata updates that internal row instead of
+creating another row with the same unique product ID.
 
 The fields mean:
 
@@ -91,25 +101,30 @@ The fields mean:
 | `version` | Immutable version of that product promise. |
 | `name` | Customer-facing plan name. |
 | `plan_type` | Monthly `subscription` or one-time `pack`. |
-| `currency` | Lowercase price currency, currently `usd`. |
-| `amount_cents` | Base price in the smallest currency unit; `900` means `$9.00`. |
+| `currency` | Reference/default currency stored in Supabase; currently `usd`. |
+| `amount_cents` | Reference price in the smallest unit of `currency`; `2100` means `$21.00`. |
+| `prices` | Complete currency-to-amount map sent to Polar; launch requires `eur`, `gbp`, and `usd`. |
 | `billing_interval` | `month` for subscriptions and `null` for packs. |
 | `quota_seconds` | Source-audio time granted by the plan. |
 | `rollover_cap_seconds` | Most subscription time that may accumulate; `null` for packs. |
 | `pack_expiry_days` | Pack lifetime; `null` for subscriptions. |
 
-There is no `tax_behavior` field in the tracked contract today, and the
-generator does not send one in its Polar price payload. Product creation
-therefore uses the applicable Polar organization/price behavior. The
-organization default has been set to tax-exclusive, but a taxable sandbox order
+The contract does not repeat `tax_behavior` in every plan. The generator owns
+that invariant: it creates every EUR, GBP, and USD price with
+`tax_behavior = "exclusive"` and rejects a mapped Polar product if any expected
+amount, currency, interval, or tax behavior is missing. A taxable sandbox order
 must still prove the intended base-price-plus-tax checkout and the provider's
 `net_amount`, `tax_amount`, `total_amount`, and `tax_behavior` values before
-paid launch. Adding an explicit per-price setting later is a code and provider
-contract change, not an undocumented extra JSON field.
+paid launch.
+
+Polar uses the organization's default payment currency when no configured
+currency matches the customer's location. Keep that organization setting on
+USD if the launch promise is EUR for euro customers, GBP for UK customers, and
+USD elsewhere.
 
 Changing a public price, allowance, interval, or expiry rule changes the
 product promise. Preserve the earlier entry for existing purchases and add a
-new version instead of silently rewriting what version 1 means.
+new version instead of silently rewriting what an earlier version means.
 
 ### What optional `plans.json` contains
 
@@ -119,12 +134,12 @@ new version instead of silently rewriting what version 1 means.
 [
   {
     "plan_code": "creator_pack",
-    "version": 1,
+    "version": 2,
     "polar_product_id": "<sandbox-product-uuid>"
   },
   {
     "plan_code": "starter",
-    "version": 1,
+    "version": 2,
     "polar_product_id": "<sandbox-product-uuid>"
   }
 ]
@@ -136,10 +151,17 @@ field through this file. The file is ignored by Git because its UUIDs belong to
 one Polar environment. Replace or remove sandbox mappings before a production
 sync; production must use production UUIDs.
 
+After a contract version bump, an older `plans.json` is intentionally stale.
+Do not change its v1 entries to v2 while keeping the old product UUIDs: those
+UUIDs still represent the old prices. Move or remove the file before the first
+v2 sandbox sync so the generator can create fresh v2 products. Recreate the
+file with the new UUIDs only if you need explicit recovery mappings.
+
 The file is optional:
 
 - if it supplies a product UUID, the script fetches that Polar product and
-  verifies a matching amount, currency, and recurring interval;
+  verifies every expected amount, currency, interval, and exclusive tax
+  behavior;
 - otherwise, the script reuses the product UUID already stored on the matching
   Supabase `(plan_code, version)` row; or
 - if neither mapping exists, the script creates the product in the selected
@@ -160,10 +182,10 @@ uv run python scripts/polar/generate_polar_plans.py --dry-run
 # Create/verify sandbox products and upsert the selected Supabase plans.
 uv run python scripts/polar/generate_polar_plans.py --server sandbox
 
-# Deliberately deactivate Supabase plan versions no longer in the contract.
+# Deliberately retire plan versions no longer in the contract in both systems.
 uv run python scripts/polar/generate_polar_plans.py \
   --server sandbox \
-  --deactivate-missing
+  --retire-missing
 ```
 
 Every mode writes ignored diagnostic output to
@@ -173,30 +195,54 @@ contains those products. A non-dry run requires `SUPABASE_URL`,
 `SUPABASE_SECRET_KEY`, and `POLAR_ACCESS_TOKEN`, upserts Supabase by
 `(plan_code, version)`, and marks included rows active.
 
+Before creating any Polar product, the generator rejects a product ID already
+owned by another Supabase plan version. Contract validation also keeps the
+singleton `internal_free` plan on `free@v1`. These checks prevent a catalog
+versioning mistake from creating paid Polar products before a later database
+constraint fails.
+
 PR frontend tests read `plan_contract.json` so public pricing and billing-intent
-expectations cannot drift silently, while the ordinary Python checks cover the
-generator's syntax and lint. PR CI deliberately does not execute a live catalog
-sync because that would mutate Polar and Supabase. Run `--dry-run` when the
-contract changes, then prove the non-dry behavior in sandbox before production.
+expectations cannot drift silently. Python unit tests cover localized product
+creation, strict existing-product validation, and the one-row Supabase payload;
+lint covers the script itself. PR CI deliberately does not execute a live
+catalog sync because that would mutate Polar and Supabase. Run `--dry-run` when
+the contract changes, then prove the non-dry behavior in sandbox before
+production.
 
 Changing plan values regenerates and synchronizes catalog data. It does not
 require regenerating the OpenAPI client unless an HTTP request or response
 schema also changed.
 
-`--deactivate-missing` changes Supabase visibility only. It does not delete
-billing history or archive a Polar product, so use it only after deliberately
-reviewing which versions disappeared from the contract.
+`--retire-missing` is one operator action, but it cannot be a literal atomic
+transaction: Polar and Supabase are separate services and do not share a
+transaction manager. The generator instead makes the operation safe to rerun:
 
-Polar product creation and the Supabase upsert are two different network
-operations, not one cross-provider transaction. If a run creates products and
-then fails before saving their Supabase mappings, inspect Polar, place the
-created UUIDs in the environment's `plans.json`, and rerun. That avoids creating
-duplicates while recovering from the partial run.
+1. Validate the contract, current product mappings, and every product that
+   would be retired before changing either service.
+2. Reuse a generator-managed Polar product found by its plan/version metadata,
+   including one created by an earlier run that stopped before the Supabase
+   upsert.
+3. Create or verify every current Polar product, then upsert all current
+   Supabase rows as active.
+4. Deactivate missing Supabase rows, then archive their Polar products.
+
+This order keeps an old checkout available until its replacement is installed.
+If the run stops after Supabase deactivation or after archiving only some old
+products, run the same command again. Inactive missing rows remain retirement
+targets, already archived products are skipped, and the unfinished products are
+archived. Do not run two catalog syncs concurrently. Manual recovery through
+`plans.json` is only needed if Polar already contains ambiguous duplicate
+managed products or a product fails the identity validation.
+
+Archiving removes a product from new purchase surfaces; it does not delete the
+product or cancel existing subscriptions. Always review which versions were
+removed from `plan_contract.json` before using the flag.
 
 For production, export or load production Supabase and Polar credentials,
 ensure `plans.json` contains only production UUIDs (or is absent), and run the
-dry run first. Then use `--server production` explicitly. Review the generated
-rows and the provider organization before allowing the non-dry run.
+dry run first. Then use `--server production --retire-missing` explicitly.
+Review the generated rows, the versions to retire, and the provider organization
+before allowing the non-dry run.
 
 ## What happens during checkout
 
@@ -309,9 +355,10 @@ Two current provider-contract details need explicit sandbox proof:
 1. For a taxable order, verify whether Polar's `total_amount` and `net_amount`
    fields include tax, and confirm Talven sends the provider's allowed
    refundable amount. Do not assume a tax-free fixture proves this.
-2. Talven currently creates checkout server-side without forwarding the user's
-   IP address. Verify the country/currency/tax experience from representative
-   locations and record whether the behavior is acceptable before launch.
+2. Talven forwards the resolved customer IP only through the configured
+   trusted-proxy boundary. Verify that the hosted proxy configuration preserves
+   the real customer address, then confirm the country/currency/tax experience
+   from representative locations before launch.
 
 These are evidence requirements, not claims that the current code is wrong.
 They remain open until a real sandbox order proves the contract.

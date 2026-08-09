@@ -239,6 +239,7 @@ async def create_checkout_session(
     external_customer_id: str,
     metadata: dict[str, str],
     success_url: str | None = None,
+    customer_ip_address: str | None = None,
 ) -> str:
     payload = {
         "products": [product_id],
@@ -246,6 +247,8 @@ async def create_checkout_session(
         "external_customer_id": external_customer_id,
         "metadata": metadata,
     }
+    if customer_ip_address:
+        payload["customer_ip_address"] = customer_ip_address
     checkout_return_url = get_polar_checkout_return_url(settings)
     if checkout_return_url:
         payload["return_url"] = checkout_return_url

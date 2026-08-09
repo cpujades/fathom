@@ -6,81 +6,116 @@
     "plan_type": "subscription",
     "currency": "usd",
     "amount_cents": 0,
+    "prices": {
+      "usd": 0,
+      "eur": 0,
+      "gbp": 0
+    },
     "billing_interval": "month",
     "quota_seconds": 3600,
-    "rollover_cap_seconds": 7200,
+    "rollover_cap_seconds": 0,
     "pack_expiry_days": null
   },
   {
     "plan_code": "starter",
-    "version": 1,
+    "version": 2,
     "name": "Starter",
     "plan_type": "subscription",
     "currency": "usd",
-    "amount_cents": 900,
+    "amount_cents": 1000,
+    "prices": {
+      "usd": 1000,
+      "eur": 900,
+      "gbp": 800
+    },
     "billing_interval": "month",
     "quota_seconds": 21600,
-    "rollover_cap_seconds": 43200,
+    "rollover_cap_seconds": 21600,
     "pack_expiry_days": null
   },
   {
     "plan_code": "pro",
-    "version": 1,
+    "version": 2,
     "name": "Pro",
     "plan_type": "subscription",
     "currency": "usd",
-    "amount_cents": 1900,
+    "amount_cents": 2200,
+    "prices": {
+      "usd": 2200,
+      "eur": 1900,
+      "gbp": 1700
+    },
     "billing_interval": "month",
     "quota_seconds": 54000,
-    "rollover_cap_seconds": 108000,
+    "rollover_cap_seconds": 54000,
     "pack_expiry_days": null
   },
   {
     "plan_code": "agency",
-    "version": 1,
+    "version": 2,
     "name": "Agency",
     "plan_type": "subscription",
     "currency": "usd",
-    "amount_cents": 4900,
+    "amount_cents": 5600,
+    "prices": {
+      "usd": 5600,
+      "eur": 4900,
+      "gbp": 4200
+    },
     "billing_interval": "month",
     "quota_seconds": 180000,
-    "rollover_cap_seconds": 360000,
+    "rollover_cap_seconds": 180000,
     "pack_expiry_days": null
   },
   {
     "plan_code": "trial_pack",
-    "version": 1,
+    "version": 2,
     "name": "Trial Pack",
     "plan_type": "pack",
     "currency": "usd",
-    "amount_cents": 500,
+    "amount_cents": 700,
+    "prices": {
+      "usd": 700,
+      "eur": 600,
+      "gbp": 550
+    },
     "billing_interval": null,
     "quota_seconds": 10800,
     "rollover_cap_seconds": null,
-    "pack_expiry_days": 180
+    "pack_expiry_days": 90
   },
   {
     "plan_code": "creator_pack",
-    "version": 1,
+    "version": 2,
     "name": "Creator Pack",
     "plan_type": "pack",
     "currency": "usd",
-    "amount_cents": 1500,
+    "amount_cents": 2100,
+    "prices": {
+      "usd": 2100,
+      "eur": 1800,
+      "gbp": 1600
+    },
     "billing_interval": null,
     "quota_seconds": 36000,
     "rollover_cap_seconds": null,
-    "pack_expiry_days": 180
+    "pack_expiry_days": 90
   },
   {
     "plan_code": "studio_pack",
-    "version": 1,
+    "version": 2,
     "name": "Studio Pack",
     "plan_type": "pack",
     "currency": "usd",
-    "amount_cents": 5000,
+    "amount_cents": 6900,
+    "prices": {
+      "usd": 6900,
+      "eur": 6000,
+      "gbp": 5200
+    },
     "billing_interval": null,
     "quota_seconds": 144000,
     "rollover_cap_seconds": null,
-    "pack_expiry_days": 180
+    "pack_expiry_days": 90
   }
 ]

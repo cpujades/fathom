@@ -40,6 +40,17 @@ def _get_rate_limit_ip(
         return client_host or "unknown"
 
 
+def resolve_client_ip(request: Request) -> str | None:
+    """Resolve the caller IP using the application's trusted-proxy policy."""
+
+    resolved = _get_rate_limit_ip(
+        request,
+        trust_proxy_headers=bool(getattr(request.app.state, "trust_proxy_headers", False)),
+        trusted_proxy_networks=tuple(getattr(request.app.state, "trusted_proxy_networks", ())),
+    )
+    return None if resolved == "unknown" else resolved
+
+
 def get_request_client_ip(request: Request) -> str:
     return _get_rate_limit_ip(
         request,

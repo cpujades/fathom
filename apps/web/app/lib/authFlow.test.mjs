@@ -6,12 +6,12 @@ import { storeSignInEmail, takeSignInEmail } from "./authEmailTransfer.ts";
 import { isExistingAccountAuthError } from "./authErrors.ts";
 
 const expectedPaidPlans = [
-  ["starter", "Starter", "$9", "6 hours / month", "monthly"],
-  ["pro", "Pro", "$19", "15 hours / month", "monthly"],
-  ["agency", "Agency", "$49", "50 hours / month", "monthly"],
-  ["trial_pack", "Trial Pack", "$5", "3 hours", "one-time"],
-  ["creator_pack", "Creator Pack", "$15", "10 hours", "one-time"],
-  ["studio_pack", "Studio Pack", "$50", "40 hours", "one-time"]
+  ["starter", "Starter", "€9 · $10 · £8", "6 hours / month", "monthly"],
+  ["pro", "Pro", "€19 · $22 · £17", "15 hours / month", "monthly"],
+  ["agency", "Agency", "€49 · $56 · £42", "50 hours / month", "monthly"],
+  ["trial_pack", "Trial Pack", "€6 · $7 · £5.50", "3 hours", "one-time"],
+  ["creator_pack", "Creator Pack", "€18 · $21 · £16", "10 hours", "one-time"],
+  ["studio_pack", "Studio Pack", "€60 · $69 · £52", "40 hours", "one-time"]
 ];
 
 test("auth context resolves every paid selection from the trusted public catalog", () => {

@@ -32,11 +32,11 @@ const packPlans: Plan[] = [
     tag: "Trial pack",
     name: "Trial",
     planCode: "trial_pack",
-    price: "$5",
+    price: "€6 · $7 · £5.50",
     hours: "3 hours",
     features: [
       "One-time credits, no commitment",
-      "Credits valid for 6 months",
+      "Each purchase is valid for 90 days",
       "PDF + Markdown exports"
     ]
   },
@@ -44,11 +44,11 @@ const packPlans: Plan[] = [
     tag: "Creator pack",
     name: "Creator",
     planCode: "creator_pack",
-    price: "$15",
+    price: "€18 · $21 · £16",
     hours: "10 hours",
     features: [
       "Best starter value",
-      "Top up to extend expiry",
+      "Independent 90-day expiry",
       "PDF + Markdown exports"
     ],
     highlight: true
@@ -57,11 +57,11 @@ const packPlans: Plan[] = [
     tag: "Studio pack",
     name: "Studio",
     planCode: "studio_pack",
-    price: "$50",
+    price: "€60 · $69 · £52",
     hours: "40 hours",
     features: [
       "Largest pack for heavy users",
-      "Top up anytime to extend",
+      "Independent 90-day expiry",
       "No monthly fees"
     ]
   }
@@ -72,7 +72,7 @@ const subscriptionPlans: Plan[] = [
     tag: "Free",
     name: "Free",
     planCode: "free",
-    price: "$0",
+    price: "Free",
     hours: "1 hour / month",
     features: ["Summaries + PDF export", "Email + magic link", "Monthly reset"]
   },
@@ -80,11 +80,11 @@ const subscriptionPlans: Plan[] = [
     tag: "Starter",
     name: "Starter",
     planCode: "starter",
-    price: "$9",
+    price: "€9 · $10 · £8",
     hours: "6 hours / month",
     features: [
-      "Unused hours roll over",
-      "Rollover up to 2x monthly limit",
+      "Unused time carries into the next month",
+      "Balance stays within 2x the monthly allowance",
       "PDF + Markdown exports"
     ],
     highlight: true
@@ -93,19 +93,23 @@ const subscriptionPlans: Plan[] = [
     tag: "Pro",
     name: "Pro",
     planCode: "pro",
-    price: "$19",
+    price: "€19 · $22 · £17",
     hours: "15 hours / month",
-    features: ["Higher monthly hours", "Rollover up to 2x monthly limit", "PDF + Markdown exports"]
+    features: [
+      "Higher monthly hours",
+      "One-month carryover, up to 2x the allowance",
+      "PDF + Markdown exports"
+    ]
   },
   {
     tag: "Agency",
     name: "Agency",
     planCode: "agency",
-    price: "$49",
+    price: "€49 · $56 · £42",
     hours: "50 hours / month",
     features: [
       "Highest monthly hours",
-      "Rollover up to 2x monthly limit",
+      "One-month carryover, up to 2x the allowance",
       "Best for heavy usage"
     ]
   }
@@ -149,11 +153,11 @@ const pricingCopy: Record<"packs" | "subscriptions", PricingCopy> = {
     section_label: "One-time packs",
     headline: "Prefer to pay only when you need more time?",
     subhead:
-      "Use packs when briefing needs come in bursts. Buy video time when needed, keep it for six months, and extend the window when you top up.",
+      "Use packs when briefing needs come in bursts. Every purchase has its own balance and remains available for 90 days.",
     secondary_cta: "Start with a free briefing",
     notes_label: "Pack details",
     footnote:
-      "Credits remain valid for 6 months. Top up before expiry and the remaining time rolls into a fresh 6-month window. Prices are shown in USD; applicable taxes are calculated at checkout."
+      "Each pack expires independently 90 days after purchase. EUR is used in euro countries, GBP in the UK, and USD elsewhere. Prices exclude tax; applicable tax is added at checkout."
   },
   subscriptions: {
     section_label: "Monthly plans",
@@ -163,12 +167,12 @@ const pricingCopy: Record<"packs" | "subscriptions", PricingCopy> = {
     secondary_cta: "Go straight to paid access",
     notes_label: "Plan details",
     benefits: [
-      "Rollover - keep unused video time in play.",
+      "Carryover - keep unused time for one additional billing month.",
       "Readiness - always have briefing capacity on hand.",
       "Lower cost - better economics than packs at recurring usage."
     ],
     footnote:
-      "Unused credits roll over for one month, up to 2x your monthly limit. Prices are shown in USD; applicable taxes are calculated at checkout."
+      "Paid-plan time carries into the next billing month only, keeping the balance within 2x the monthly allowance. EUR is used in euro countries, GBP in the UK, and USD elsewhere. Prices exclude tax; applicable tax is added at checkout."
   }
 };
 

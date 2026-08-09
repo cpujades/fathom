@@ -99,7 +99,7 @@ fields that are intentionally absent or inherited are:
 
 | Field | Current treatment | Decision |
 | --- | --- | --- |
-| `prices[].tax_behavior` | Omitted; inherits organization default | Exclusive is already configured. A future script change may pin and validate it for reproducibility. |
+| `prices[].tax_behavior` | Explicitly `exclusive` for every localized price | Keeps the tax-exclusive base price reproducible even if the organization default changes later. |
 | `visibility` | Omitted; Polar default applies | Review public/private behavior before production catalog sync; not a pricing calculation. |
 | `recurring_interval_count` | Omitted; defaults to one | Correct for monthly plans. |
 | `trial_interval` / `trial_interval_count` | Omitted | Talven owns Free and promotional credits; do not create a second trial system in Polar. |

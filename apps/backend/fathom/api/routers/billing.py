@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Path
+from fastapi import APIRouter, Depends, Path, Request
 from pydantic import TypeAdapter
 
 from fathom.api.deps.auth import get_auth_context
@@ -17,6 +17,7 @@ from fathom.application.billing import (
 from fathom.application.identity import AuthenticatedUser
 from fathom.application.usage import get_usage_history, get_usage_overview
 from fathom.core.config import Settings, get_settings
+from fathom.core.rate_limits import resolve_client_ip
 from fathom.schemas.billing import (
     BillingAccountResponse,
     BillingSyncOperationResponse,
@@ -45,11 +46,17 @@ DATETIME_ADAPTER = TypeAdapter(datetime)
     },
 )
 async def create_checkout(
-    request: CheckoutSessionRequest,
+    payload: CheckoutSessionRequest,
+    request: Request,
     auth: Annotated[AuthenticatedUser, Depends(get_auth_context)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> CheckoutSessionResponse:
-    return await create_checkout_session(request, auth, settings)
+    return await create_checkout_session(
+        payload,
+        auth,
+        settings,
+        customer_ip_address=resolve_client_ip(request),
+    )
 
 
 @router.post(
