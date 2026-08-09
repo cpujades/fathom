@@ -2,7 +2,7 @@ begin;
 
 set local search_path = extensions, public, pg_catalog;
 
-select plan(51);
+select plan(59);
 
 select col_not_null(
   'public',
@@ -449,6 +449,135 @@ select is(
   ),
   'revoked',
   'refund policy revokes the remaining pack exactly as before'
+);
+
+create temporary table rollover_cycle_one as
+select public.apply_polar_webhook_event(
+  'evt_rollover_cycle_one',
+  'subscription.active',
+  '2026-07-29T11:00:00+00:00',
+  'subscription',
+  'sub_rollover_001',
+  jsonb_build_object(
+    'subscription_id', 'sub_rollover_001',
+    'user_id', '91000000-0000-0000-0000-000000000006',
+    'product_id', 'prod_subscription_replay',
+    'status', 'active',
+    'period_start', '2098-01-01T00:00:00+00:00',
+    'period_end', '2098-02-01T00:00:00+00:00'
+  ),
+  600
+) as result;
+
+select is(
+  (select result ->> 'resolution_type' from rollover_cycle_one),
+  'processed',
+  'first subscription cycle applies'
+);
+
+update public.credit_lots
+set consumed_seconds = 200
+where lot_type = 'subscription_cycle'
+  and source_key = 'sub_rollover_001:2098-01-01T00:00:00+00:00';
+
+create temporary table rollover_cycle_two as
+select public.apply_polar_webhook_event(
+  'evt_rollover_cycle_two',
+  'subscription.active',
+  '2026-07-29T12:00:00+00:00',
+  'subscription',
+  'sub_rollover_001',
+  jsonb_build_object(
+    'subscription_id', 'sub_rollover_001',
+    'user_id', '91000000-0000-0000-0000-000000000006',
+    'product_id', 'prod_subscription_replay',
+    'status', 'active',
+    'period_start', '2098-02-01T00:00:00+00:00',
+    'period_end', '2098-03-01T00:00:00+00:00'
+  ),
+  600
+) as result;
+
+select is(
+  (select result ->> 'resolution_type' from rollover_cycle_two),
+  'processed',
+  'second subscription cycle applies'
+);
+select is(
+  (
+    select granted_seconds
+    from public.credit_lots
+    where lot_type = 'subscription_cycle'
+      and source_key = 'sub_rollover_001:2098-02-01T00:00:00+00:00:rollover'
+  ),
+  300,
+  'only the capped remainder rolls into the next cycle'
+);
+select is(
+  (
+    select subscription_available_seconds
+    from public.entitlements
+    where user_id = '91000000-0000-0000-0000-000000000006'
+  ),
+  1500,
+  'current allowance plus one capped rollover is available'
+);
+
+create temporary table rollover_cycle_three as
+select public.apply_polar_webhook_event(
+  'evt_rollover_cycle_three',
+  'subscription.active',
+  '2026-07-29T13:00:00+00:00',
+  'subscription',
+  'sub_rollover_001',
+  jsonb_build_object(
+    'subscription_id', 'sub_rollover_001',
+    'user_id', '91000000-0000-0000-0000-000000000006',
+    'product_id', 'prod_subscription_replay',
+    'status', 'active',
+    'period_start', '2098-03-01T00:00:00+00:00',
+    'period_end', '2098-04-01T00:00:00+00:00'
+  ),
+  600
+) as result;
+
+select is(
+  (select result ->> 'resolution_type' from rollover_cycle_three),
+  'processed',
+  'third subscription cycle applies'
+);
+select is(
+  (
+    select status
+    from public.credit_lots
+    where lot_type = 'subscription_cycle'
+      and source_key = 'sub_rollover_001:2098-02-01T00:00:00+00:00:rollover'
+  ),
+  'expired',
+  'rollover from the preceding grant cannot survive a second renewal'
+);
+select is(
+  (
+    select coalesce(sum(granted_seconds - consumed_seconds - revoked_seconds), 0)::integer
+    from public.credit_lots
+    where user_id = '91000000-0000-0000-0000-000000000006'
+      and lot_type = 'subscription_cycle'
+      and status = 'active'
+  ),
+  1500,
+  'active credit remains capped at the current allowance plus one rollover'
+);
+select is(
+  (
+    select count(*)
+    from public.credit_lots
+    where user_id = '91000000-0000-0000-0000-000000000006'
+      and lot_type = 'subscription_cycle'
+      and source_key like '%:rollover'
+      and status = 'active'
+  ),
+  1::bigint,
+  'only one rollover lot is active after consecutive renewals'
 );
 
 create temporary table subscription_active as

@@ -151,15 +151,21 @@ generation is fenced so only one producer publishes the compatible summary.
 pack balance, debt, expiry, and billing history. The current public catalog is
 defined in `scripts/polar/plan_contract.json`:
 
-| Offer | Included time | Price | Expiry/renewal |
-| --- | ---: | ---: | --- |
-| Free | 60 minutes | $0/month | Renews every 30 days |
-| Starter | 6 hours | $9/month | Monthly subscription |
-| Pro | 15 hours | $19/month | Monthly subscription |
-| Agency | 50 hours | $49/month | Monthly subscription |
-| Trial Pack | 3 hours | $5 one-time | Expires after 180 days |
-| Creator Pack | 10 hours | $15 one-time | Expires after 180 days |
-| Studio Pack | 40 hours | $50 one-time | Expires after 180 days |
+| Offer | Included time | EUR | USD | GBP | Expiry/renewal |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Free | 60 minutes | €0 | $0 | £0 | Monthly reset, no carryover |
+| Starter | 6 hours | €9 | $10 | £8 | Monthly; one-month carryover |
+| Pro | 15 hours | €19 | $22 | £17 | Monthly; one-month carryover |
+| Agency | 50 hours | €49 | $56 | £42 | Monthly; one-month carryover |
+| Trial Pack | 3 hours | €6 | $7 | £5.50 | Expires after 90 days |
+| Creator Pack | 10 hours | €18 | $21 | £16 | Expires after 90 days |
+| Studio Pack | 40 hours | €60 | $69 | £52 | Expires after 90 days |
+
+Prices exclude tax. Polar adds applicable tax at checkout and selects EUR for
+euro customers, GBP for UK customers, and the organization's default USD price
+elsewhere. Every pack expires independently; buying another pack does not
+extend an older one. Paid subscription time may carry into the immediately
+following billing month only, up to twice the normal monthly allowance.
 
 The UI opens Polar checkout or the customer portal; it never receives the
 Polar access token. A successful browser redirect is not the accounting proof.

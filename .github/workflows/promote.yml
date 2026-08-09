@@ -90,7 +90,7 @@ jobs:
             echo "### Operator checklist"
             echo
             echo "- [x] Exact release tag selected."
-            echo "- [ ] If billing plans changed, run \`POLAR_SERVER=production python scripts/polar/generate_polar_plans.py\` with production Supabase and Polar credentials after schema promotion."
+            echo "- [ ] If billing plans changed, run \`uv run python scripts/polar/generate_polar_plans.py --server production --retire-missing\` with production Supabase and Polar credentials after schema promotion."
             echo
             echo "### Supabase migrations in this release"
             echo

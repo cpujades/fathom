@@ -79,10 +79,13 @@ Read in this order:
 2. [Deferred work register](./decisions/deferred-work.md): why larger changes
    are postponed, what evidence would reactivate them, and what a safe future
    version needs.
-3. [First deployment checklist](./runbooks/first-deployment-checklist.md):
+3. [Future billing options](./product/future-billing-options.md): the launch
+   billing contract and the evidence required before subscriber discounts,
+   custom packs, or metered pay as you go.
+4. [First deployment checklist](./runbooks/first-deployment-checklist.md):
    hosting topology, HTTPS/origins, public signup, SMTP, Polar webhook,
    retention, backups, support, and release proof.
-4. [Operational metrics and provider review](./runbooks/operational-metrics-and-provider-review.md):
+5. [Operational metrics and provider review](./runbooks/operational-metrics-and-provider-review.md):
    Grafana versus provider dashboards, alerts, review cadence, capacity
    thresholds, and provider-change evidence.
 
@@ -132,6 +135,8 @@ backup, alerting, capacity, and support evidence that remains external.
   rules and limits.
 - [Unit economics](./product/unit-economics.md): revenue, cost, margin, and
   Spanish owner-cash model.
+- [Future billing options](./product/future-billing-options.md): current launch
+  contract and evidence-gated subscriber discounts, custom packs, and PAYG.
 - [Growth feature roadmap](./product/growth-feature-roadmap.md): staged export,
   sharing, referral, episode Q&A, Explore, and later social/research work.
 
