@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.22.2](https://github.com/cpujades/fathom/compare/v0.22.1...v0.22.2) (2026-08-09)
+
+_Automated release from [#178](https://github.com/cpujades/fathom/pull/178) Bump the "weekly-maintenance" group with 2 updates across multiple ecosystems_
+
+### Chores
+
+- chore(deps): bump the weekly-maintenance group across 1 directory with 74 updates (05372fc)
+
 ## [0.22.1](https://github.com/cpujades/fathom/compare/v0.22.0...v0.22.1) (2026-08-09)
 
 _Automated release from [#175](https://github.com/cpujades/fathom/pull/175) Bump the "weekly-maintenance" group with 3 updates across multiple ecosystems_
