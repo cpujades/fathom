@@ -6,6 +6,9 @@ on:
       release_tag:
         required: true
         type: string
+    secrets:
+      SUPABASE_ACCESS_TOKEN:
+        required: true
   workflow_dispatch:
     inputs:
       release_tag:

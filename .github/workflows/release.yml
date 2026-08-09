@@ -219,4 +219,5 @@ jobs:
     uses: ./.github/workflows/staging.yml
     with:
       release_tag: ${{ needs.release.outputs.release_tag }}
-    secrets: inherit
+    secrets:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
