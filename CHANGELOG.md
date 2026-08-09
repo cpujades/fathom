@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.22.0](https://github.com/cpujades/fathom/compare/v0.21.8...v0.22.0) (2026-08-09)
+
+_Automated release from [#176](https://github.com/cpujades/fathom/pull/176) feat(billing): localize catalog and bound rollover_
+
+### Features
+
+- feat(billing): localize catalog and bound rollover (d8b1160)
+
 ## [0.21.8](https://github.com/cpujades/fathom/compare/v0.21.7...v0.21.8) (2026-08-07)
 
 _Automated release from [#174](https://github.com/cpujades/fathom/pull/174) docs(security): track pre-launch hardening blockers_
