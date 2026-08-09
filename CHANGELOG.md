@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.22.1](https://github.com/cpujades/fathom/compare/v0.22.0...v0.22.1) (2026-08-09)
+
+_Automated release from [#175](https://github.com/cpujades/fathom/pull/175) Bump the "weekly-maintenance" group with 3 updates across multiple ecosystems_
+
+### Bug Fixes
+
+- fix(deps): patch transitive nanoid (40220d8)
+
+### Chores
+
+- chore(deps): bump the weekly-maintenance group with 6 updates (96dea3c)
+
 ## [0.22.0](https://github.com/cpujades/fathom/compare/v0.21.8...v0.22.0) (2026-08-09)
 
 _Automated release from [#176](https://github.com/cpujades/fathom/pull/176) feat(billing): localize catalog and bound rollover_
