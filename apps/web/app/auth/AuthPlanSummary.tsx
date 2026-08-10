@@ -1,4 +1,8 @@
+"use client";
+
 import { resolveAuthPlanSummary } from "../content/pricing";
+import { formatPricingPrice } from "../lib/pricingCurrency";
+import { usePricingCurrency } from "../lib/usePricingCurrency";
 import styles from "./auth.module.css";
 
 type AuthPlanSummaryProps = {
@@ -7,6 +11,7 @@ type AuthPlanSummaryProps = {
 };
 
 export function AuthPlanSummary({ intent, plan }: AuthPlanSummaryProps) {
+  const { currency } = usePricingCurrency();
   const selection = resolveAuthPlanSummary(intent, plan);
   if (!selection) {
     return null;
@@ -18,10 +23,7 @@ export function AuthPlanSummary({ intent, plan }: AuthPlanSummaryProps) {
         Continue with {selection.productName}
       </h3>
       <p className={styles.planSummaryDetails}>
-        {selection.price} {selection.paymentCadence} · {selection.includedTime}
-      </p>
-      <p className={styles.planSummaryNote}>
-        Payment has not started. You will review the details before checkout.
+        {formatPricingPrice(selection.prices, currency)} {selection.paymentCadence} · {selection.includedTime}
       </p>
     </section>
   );

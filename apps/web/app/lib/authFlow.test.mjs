@@ -6,21 +6,21 @@ import { storeSignInEmail, takeSignInEmail } from "./authEmailTransfer.ts";
 import { isExistingAccountAuthError } from "./authErrors.ts";
 
 const expectedPaidPlans = [
-  ["starter", "Starter", "€9 · $10 · £8", "6 hours / month", "monthly"],
-  ["pro", "Pro", "€19 · $22 · £17", "15 hours / month", "monthly"],
-  ["agency", "Agency", "€49 · $56 · £42", "50 hours / month", "monthly"],
-  ["trial_pack", "Trial Pack", "€6 · $7 · £5.50", "3 hours", "one-time"],
-  ["creator_pack", "Creator Pack", "€18 · $21 · £16", "10 hours", "one-time"],
-  ["studio_pack", "Studio Pack", "€60 · $69 · £52", "40 hours", "one-time"]
+  ["starter", "Starter", { eur: 900, usd: 1000, gbp: 800 }, "6 hours / month", "monthly"],
+  ["pro", "Pro", { eur: 1900, usd: 2200, gbp: 1700 }, "15 hours / month", "monthly"],
+  ["agency", "Agency", { eur: 4900, usd: 5600, gbp: 4200 }, "50 hours / month", "monthly"],
+  ["trial_pack", "Trial Pack", { eur: 600, usd: 700, gbp: 550 }, "3 hours", "one-time"],
+  ["creator_pack", "Creator Pack", { eur: 1800, usd: 2100, gbp: 1600 }, "10 hours", "one-time"],
+  ["studio_pack", "Studio Pack", { eur: 6000, usd: 6900, gbp: 5200 }, "40 hours", "one-time"]
 ];
 
 test("auth context resolves every paid selection from the trusted public catalog", () => {
-  for (const [planCode, productName, price, includedTime, paymentCadence] of expectedPaidPlans) {
+  for (const [planCode, productName, prices, includedTime, paymentCadence] of expectedPaidPlans) {
     assert.deepEqual(resolveAuthPlanSummary("paid", planCode), {
       includedTime,
       paymentCadence,
       planCode,
-      price,
+      prices,
       productName
     });
   }

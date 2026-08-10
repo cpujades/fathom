@@ -2,12 +2,14 @@
 
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { type KeyboardEvent, useEffect, useState, useTransition } from "react";
+import { type KeyboardEvent, useEffect, useState } from "react";
 
 import { packPlans, pricingCopy, subscriptionPlans } from "../content/pricing";
 import { trackMarketingEvent } from "../lib/marketingEvents";
+import { formatPricingPrice } from "../lib/pricingCurrency";
 import { buildPaidCheckoutHref } from "../lib/pricingIntent";
+import { usePricingCurrency } from "../lib/usePricingCurrency";
+import { PricingCurrencySelect } from "./PricingCurrencySelect";
 import styles from "./pricing-toggle-section.module.css";
 
 type BillingMode = "subscriptions" | "packs";
@@ -17,10 +19,9 @@ type PricingToggleSectionProps = {
 };
 
 export default function PricingToggleSection({ mode }: PricingToggleSectionProps) {
-  const router = useRouter();
   const shouldReduceMotion = useReducedMotion();
-  const [isPending, startTransition] = useTransition();
   const [activeMode, setActiveMode] = useState<BillingMode>(mode);
+  const { currency, selectCurrency } = usePricingCurrency();
 
   useEffect(() => {
     setActiveMode(mode);
@@ -32,10 +33,6 @@ export default function PricingToggleSection({ mode }: PricingToggleSectionProps
   const stageTransition = shouldReduceMotion
     ? { duration: 0 }
     : { duration: 0.22, ease: [0.22, 1, 0.36, 1] as const };
-  const cardTransition = shouldReduceMotion
-    ? { duration: 0 }
-    : { duration: 0.18, ease: [0.22, 1, 0.36, 1] as const };
-
   const trackPricingCtaClick = (ctaName: "card" | "secondary", planName?: string) => {
     trackMarketingEvent({
       event: "pricing_plan_cta_clicked",
@@ -47,7 +44,7 @@ export default function PricingToggleSection({ mode }: PricingToggleSectionProps
   };
 
   const handleModeChange = (nextMode: BillingMode) => {
-    if (nextMode === activeMode && nextMode === mode) {
+    if (nextMode === activeMode) {
       return;
     }
 
@@ -59,23 +56,14 @@ export default function PricingToggleSection({ mode }: PricingToggleSectionProps
       mode: nextMode
     });
 
-    const href = nextMode === "packs" ? "/?pricing=packs#pricing" : "/#pricing";
-    const navigate = () => {
-      startTransition(() => {
-        router.replace(href, { scroll: false });
-      });
-    };
-
-    const transitionDocument = document as Document & {
-      startViewTransition?: (update: () => void) => void;
-    };
-
-    if (transitionDocument.startViewTransition) {
-      transitionDocument.startViewTransition(navigate);
-      return;
+    const nextUrl = new URL(window.location.href);
+    if (nextMode === "packs") {
+      nextUrl.searchParams.set("pricing", "packs");
+    } else {
+      nextUrl.searchParams.delete("pricing");
     }
-
-    navigate();
+    nextUrl.hash = "pricing";
+    window.history.replaceState(window.history.state, "", nextUrl);
   };
 
   const handleTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, currentMode: BillingMode) => {
@@ -100,40 +88,53 @@ export default function PricingToggleSection({ mode }: PricingToggleSectionProps
   };
 
   return (
-    <div className={styles.wrap} data-pending={isPending ? "true" : "false"}>
-      <div className={styles.toggle} role="tablist" aria-label="Billing mode">
-        <button
-          aria-controls="pricing-subscriptions-panel"
-          type="button"
-          id="pricing-subscriptions-tab"
-          role="tab"
-          aria-selected={activeMode === "subscriptions"}
-          tabIndex={activeMode === "subscriptions" ? 0 : -1}
-          data-pricing-mode="subscriptions"
-          className={activeMode === "subscriptions" ? styles.toggleActive : styles.toggleButton}
-          onClick={() => handleModeChange("subscriptions")}
-          onKeyDown={(event) => handleTabKeyDown(event, "subscriptions")}
-        >
-          Subscription
-        </button>
-        <button
-          aria-controls="pricing-packs-panel"
-          type="button"
-          id="pricing-packs-tab"
-          role="tab"
-          aria-selected={activeMode === "packs"}
-          tabIndex={activeMode === "packs" ? 0 : -1}
-          data-pricing-mode="packs"
-          className={activeMode === "packs" ? styles.toggleActive : styles.toggleButton}
-          onClick={() => handleModeChange("packs")}
-          onKeyDown={(event) => handleTabKeyDown(event, "packs")}
-        >
-          One-time packs
-        </button>
+    <div className={styles.wrap}>
+      <div className={styles.pricingToolbar}>
+        <div className={styles.toggle} role="tablist" aria-label="Billing mode">
+          <button
+            aria-controls="pricing-subscriptions-panel"
+            type="button"
+            id="pricing-subscriptions-tab"
+            role="tab"
+            aria-selected={activeMode === "subscriptions"}
+            tabIndex={activeMode === "subscriptions" ? 0 : -1}
+            data-pricing-mode="subscriptions"
+            className={activeMode === "subscriptions" ? styles.toggleActive : styles.toggleButton}
+            onClick={() => handleModeChange("subscriptions")}
+            onKeyDown={(event) => handleTabKeyDown(event, "subscriptions")}
+          >
+            Subscription
+          </button>
+          <button
+            aria-controls="pricing-packs-panel"
+            type="button"
+            id="pricing-packs-tab"
+            role="tab"
+            aria-selected={activeMode === "packs"}
+            tabIndex={activeMode === "packs" ? 0 : -1}
+            data-pricing-mode="packs"
+            className={activeMode === "packs" ? styles.toggleActive : styles.toggleButton}
+            onClick={() => handleModeChange("packs")}
+            onKeyDown={(event) => handleTabKeyDown(event, "packs")}
+          >
+            One-time packs
+          </button>
+        </div>
+
+        <div className={styles.pricingMeta}>
+          <span className={styles.taxDisclosure} title="Prices exclude tax">
+            Excl. tax
+          </span>
+          <PricingCurrencySelect
+            className={styles.currencyControl}
+            currency={currency}
+            onChange={selectCurrency}
+          />
+        </div>
       </div>
 
-      <div className={styles.modeViewport}>
-        <AnimatePresence mode="wait" initial={false}>
+      <motion.div className={styles.modeViewport} layout transition={stageTransition}>
+        <AnimatePresence mode="sync" initial={false}>
           <motion.div
             aria-labelledby={`pricing-${activeMode}-tab`}
             id={`pricing-${activeMode}-panel`}
@@ -141,24 +142,19 @@ export default function PricingToggleSection({ mode }: PricingToggleSectionProps
             className={styles.modeStage}
             data-mode={activeMode}
             role="tabpanel"
-            initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.995 }}
-            animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, scale: 1 }}
-            exit={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, scale: 0.995 }}
+            initial={shouldReduceMotion ? false : { opacity: 0, y: 7 }}
+            animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+            exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: -5 }}
             transition={stageTransition}
           >
-            <motion.div
-              className={styles.copyBlock}
-              initial={shouldReduceMotion ? false : { opacity: 0 }}
-              animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1 }}
-              transition={stageTransition}
-            >
+            <div className={styles.copyBlock}>
               <p className={styles.sectionLabel}>{copy.section_label}</p>
               <h3>{copy.headline}</h3>
               <p>{copy.subhead}</p>
-            </motion.div>
+            </div>
 
             <div className={styles.cardGrid} data-mode={activeMode}>
-              {plans.map((plan, index) => {
+              {plans.map((plan) => {
                 const isFeatured = Boolean(plan.highlight);
                 const cardHref =
                   activeMode === "subscriptions" && plan.name.toLowerCase() === "free"
@@ -170,15 +166,9 @@ export default function PricingToggleSection({ mode }: PricingToggleSectionProps
                     : `Select ${plan.name}`;
 
                 return (
-                  <motion.article
+                  <article
                     key={plan.planCode}
                     className={isFeatured ? styles.planCardFeatured : styles.planCard}
-                    initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.988 }}
-                    animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, scale: 1 }}
-                    transition={{
-                      ...cardTransition,
-                      delay: shouldReduceMotion ? 0 : index * 0.015
-                    }}
                   >
                     <header className={styles.planHeader}>
                       <div className={styles.planMeta}>
@@ -189,7 +179,7 @@ export default function PricingToggleSection({ mode }: PricingToggleSectionProps
                     </header>
 
                     <div className={styles.planLedger}>
-                      <p className={styles.planPrice}>{plan.price}</p>
+                      <p className={styles.planPrice}>{formatPricingPrice(plan.prices, currency)}</p>
                       <p className={styles.planHours}>{plan.hours}</p>
                     </div>
 
@@ -208,20 +198,12 @@ export default function PricingToggleSection({ mode }: PricingToggleSectionProps
                     >
                       {cardCtaLabel}
                     </Link>
-                  </motion.article>
+                  </article>
                 );
               })}
             </div>
 
-            <motion.div
-              className={styles.notesPanel}
-              initial={shouldReduceMotion ? false : { opacity: 0 }}
-              animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1 }}
-              transition={{
-                ...stageTransition,
-                delay: shouldReduceMotion ? 0 : 0.04
-              }}
-            >
+            <div className={styles.notesPanel}>
               <p className={styles.notesLabel}>{copy.notes_label}</p>
               <p className={styles.footnote}>{copy.footnote}</p>
               {copy.footnoteMuted ? <p className={styles.footnoteMuted}>{copy.footnoteMuted}</p> : null}
@@ -232,17 +214,9 @@ export default function PricingToggleSection({ mode }: PricingToggleSectionProps
                   ))}
                 </ul>
               ) : null}
-            </motion.div>
+            </div>
 
-            <motion.div
-              className={styles.secondaryActions}
-              initial={shouldReduceMotion ? false : { opacity: 0 }}
-              animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1 }}
-              transition={{
-                ...stageTransition,
-                delay: shouldReduceMotion ? 0 : 0.06
-              }}
-            >
+            <div className={styles.secondaryActions}>
               <Link
                 href={activeMode === "subscriptions" ? buildPaidCheckoutHref(highlightedPlan.planCode) : "/signup"}
                 className={styles.secondaryLink}
@@ -252,10 +226,10 @@ export default function PricingToggleSection({ mode }: PricingToggleSectionProps
               >
                 {copy.secondary_cta}
               </Link>
-            </motion.div>
-        </motion.div>
+            </div>
+          </motion.div>
         </AnimatePresence>
-      </div>
+      </motion.div>
     </div>
   );
 }

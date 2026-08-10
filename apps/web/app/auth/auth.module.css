@@ -140,8 +140,7 @@
 }
 
 .planSummaryTitle,
-.planSummaryDetails,
-.planSummaryNote {
+.planSummaryDetails {
   margin: 0;
 }
 
@@ -154,12 +153,6 @@
   color: #315c47;
   font-size: 0.86rem;
   font-weight: 650;
-}
-
-.planSummaryNote {
-  color: #65756b;
-  font-size: 0.78rem;
-  line-height: 1.45;
 }
 
 .form {

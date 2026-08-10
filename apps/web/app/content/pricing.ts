@@ -2,11 +2,15 @@ type Plan = {
   tag: string;
   name: string;
   planCode: string;
-  price: string;
+  prices: PricingPrices;
   hours: string;
   features: string[];
   highlight?: boolean;
 };
+
+type PricingCurrency = "eur" | "usd" | "gbp";
+
+type PricingPrices = Record<PricingCurrency, number>;
 
 type PricingCopy = {
   section_label: string;
@@ -23,7 +27,7 @@ type AuthPlanSummary = {
   includedTime: string;
   paymentCadence: "monthly" | "one-time";
   planCode: string;
-  price: string;
+  prices: PricingPrices;
   productName: string;
 };
 
@@ -32,7 +36,7 @@ const packPlans: Plan[] = [
     tag: "Trial pack",
     name: "Trial",
     planCode: "trial_pack",
-    price: "€6 · $7 · £5.50",
+    prices: { eur: 600, usd: 700, gbp: 550 },
     hours: "3 hours",
     features: [
       "One-time credits, no commitment",
@@ -44,7 +48,7 @@ const packPlans: Plan[] = [
     tag: "Creator pack",
     name: "Creator",
     planCode: "creator_pack",
-    price: "€18 · $21 · £16",
+    prices: { eur: 1800, usd: 2100, gbp: 1600 },
     hours: "10 hours",
     features: [
       "Best starter value",
@@ -57,7 +61,7 @@ const packPlans: Plan[] = [
     tag: "Studio pack",
     name: "Studio",
     planCode: "studio_pack",
-    price: "€60 · $69 · £52",
+    prices: { eur: 6000, usd: 6900, gbp: 5200 },
     hours: "40 hours",
     features: [
       "Largest pack for heavy users",
@@ -72,7 +76,7 @@ const subscriptionPlans: Plan[] = [
     tag: "Free",
     name: "Free",
     planCode: "free",
-    price: "Free",
+    prices: { eur: 0, usd: 0, gbp: 0 },
     hours: "1 hour / month",
     features: ["Summaries + PDF export", "Email + magic link", "Monthly reset"]
   },
@@ -80,7 +84,7 @@ const subscriptionPlans: Plan[] = [
     tag: "Starter",
     name: "Starter",
     planCode: "starter",
-    price: "€9 · $10 · £8",
+    prices: { eur: 900, usd: 1000, gbp: 800 },
     hours: "6 hours / month",
     features: [
       "Unused time carries into the next month",
@@ -93,7 +97,7 @@ const subscriptionPlans: Plan[] = [
     tag: "Pro",
     name: "Pro",
     planCode: "pro",
-    price: "€19 · $22 · £17",
+    prices: { eur: 1900, usd: 2200, gbp: 1700 },
     hours: "15 hours / month",
     features: [
       "Higher monthly hours",
@@ -105,7 +109,7 @@ const subscriptionPlans: Plan[] = [
     tag: "Agency",
     name: "Agency",
     planCode: "agency",
-    price: "€49 · $56 · £42",
+    prices: { eur: 4900, usd: 5600, gbp: 4200 },
     hours: "50 hours / month",
     features: [
       "Highest monthly hours",
@@ -114,6 +118,13 @@ const subscriptionPlans: Plan[] = [
     ]
   }
 ];
+
+const resolvePricingPrices = (planCode: string): PricingPrices | null => {
+  const plan =
+    subscriptionPlans.find((candidate) => candidate.planCode === planCode) ??
+    packPlans.find((candidate) => candidate.planCode === planCode);
+  return plan?.prices ?? null;
+};
 
 const resolveAuthPlanSummary = (intent?: string | null, planCode?: string | null): AuthPlanSummary | null => {
   if (intent !== "paid" || !planCode) {
@@ -129,7 +140,7 @@ const resolveAuthPlanSummary = (intent?: string | null, planCode?: string | null
       includedTime: subscription.hours,
       paymentCadence: "monthly",
       planCode: subscription.planCode,
-      price: subscription.price,
+      prices: subscription.prices,
       productName: subscription.name
     };
   }
@@ -143,7 +154,7 @@ const resolveAuthPlanSummary = (intent?: string | null, planCode?: string | null
     includedTime: pack.hours,
     paymentCadence: "one-time",
     planCode: pack.planCode,
-    price: pack.price,
+    prices: pack.prices,
     productName: `${pack.name} Pack`
   };
 };
@@ -156,8 +167,7 @@ const pricingCopy: Record<"packs" | "subscriptions", PricingCopy> = {
       "Use packs when briefing needs come in bursts. Every purchase has its own balance and remains available for 90 days.",
     secondary_cta: "Start with a free briefing",
     notes_label: "Pack details",
-    footnote:
-      "Each pack expires independently 90 days after purchase. EUR is used in euro countries, GBP in the UK, and USD elsewhere. Prices exclude tax; applicable tax is added at checkout."
+    footnote: "Each pack expires independently 90 days after purchase."
   },
   subscriptions: {
     section_label: "Monthly plans",
@@ -172,9 +182,9 @@ const pricingCopy: Record<"packs" | "subscriptions", PricingCopy> = {
       "Lower cost - better economics than packs at recurring usage."
     ],
     footnote:
-      "Paid-plan time carries into the next billing month only, keeping the balance within 2x the monthly allowance. EUR is used in euro countries, GBP in the UK, and USD elsewhere. Prices exclude tax; applicable tax is added at checkout."
+      "Paid-plan time carries into the next billing month only, keeping the balance within 2x the monthly allowance."
   }
 };
 
-export type { AuthPlanSummary, Plan, PricingCopy };
-export { packPlans, pricingCopy, resolveAuthPlanSummary, subscriptionPlans };
+export type { AuthPlanSummary, Plan, PricingCopy, PricingCurrency, PricingPrices };
+export { packPlans, pricingCopy, resolveAuthPlanSummary, resolvePricingPrices, subscriptionPlans };
