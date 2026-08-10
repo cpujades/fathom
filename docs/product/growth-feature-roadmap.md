@@ -1,12 +1,16 @@
 # Growth and product feature roadmap
 
-**Status:** Proposed; nothing on this page is implemented unless the current
-workflow documentation says otherwise
-**Last reviewed:** 2026-08-05
+**Status:** Paid-launch scope accepted; detailed behavior remains proposed until
+implemented and verified
+**Last reviewed:** 2026-08-09
 
 This page preserves the smallest useful versions of Talven's sharing, export,
 referral, episode-chat, discovery, and follow-up ideas. It is a product
 sequence, not authorization to implement every item at once.
+
+The accepted execution order, product contracts, and release runway live in the
+[paid launch action plan](./paid-launch-action-plan.md). Use this roadmap for
+deeper feature details and future extensions.
 
 The product wedge is an evidence-backed, timestamp-verifiable briefing that a
 person can reuse and share. The growth loop should strengthen that artifact
@@ -26,15 +30,18 @@ before Talven attempts a forum or broad social network.
 
 ## Sequence
 
-1. Cost telemetry and temporary-audio lifecycle cleanup.
-2. Copy/download Markdown improvements for Obsidian, Notion, and other editors.
-3. Opt-in unlisted share pages and social cards.
-4. Referral attribution and first-purchase promotional credits.
-5. Full-context, cited “Ask this episode” MVP.
-6. Opt-in Explore/discovery and “save to my library.”
-7. Lightweight public identity and follows, only after public inventory exists.
-8. Channel follows and a weekly digest.
-9. Cross-episode retrieval, research tools, and advanced collaboration.
+1. Keep cost telemetry and temporary-audio lifecycle cleanup in the launch
+   readiness track.
+2. Add Copy Markdown while preserving the existing download.
+3. Add opt-in unlisted sharing with publish and unpublish.
+4. Add Save to my library using compatible ready work without spending audio
+   minutes.
+5. Add a curated Explore catalogue using deliberately listed briefings.
+6. Add referral attribution and first-paid-subscription promotional credits.
+7. Build the full-context, cited Ask this episode MVP as an independent
+   workstream.
+8. Consider public identity, follows, digests, and advanced research only after
+   launch evidence.
 
 Direct Notion OAuth is intentionally absent from the near-term sequence.
 Copy/paste and Markdown import cover the initial need without token storage,
@@ -48,22 +55,26 @@ The current candidates are connected, but they are not equal in effort:
 | --- | --- | --- | --- |
 | Referrals | 30-day attribution; first-paid-purchase reward; fixed bonus seconds; email verification, CAPTCHA, no self-referral, and monthly cap | Durable attribution, idempotent credit grant, refund/revocation rules, abuse controls, and clear terms | Reasonable before launch if acquisition is part of the experiment. Prove the reward path against Polar sandbox. |
 | Curated Explore | Curated or explicitly opted-in public briefings; simple filters; open instantly or save; no comments, follows, or ranking algorithm | Safe publishing, reporting/takedown, cache reuse, and enough initial content. Public identity is optional and must be explicit | Reasonable for launch after the sharing/privacy boundary exists. Start curated and postpone the social graph. |
-| Ask this episode | One private episode; transcript in model context; bounded history and plan limits; timestamp citations and abstention | Chat UI/state, LLM cost/latency, prompt-injection defense, citation evaluation, and retention/privacy | Largest stretch. Keep post-launch unless cited Q&A is the central value hypothesis that launch must test. |
+| Ask this episode | One private episode; transcript in model context; bounded history and plan limits; timestamp citations and abstention | Chat UI/state, LLM cost/latency, prompt-injection defense, citation evaluation, and retention/privacy | Accepted as an independent paid-launch workstream. Keep the MVP deliberately bounded. |
 
 A small episode chat does not need an agent, vector database, Redis, WebSockets,
 or Supabase Realtime. One authenticated request can send the bounded transcript
 and conversation to the LLM and return one answer. Larger systems matter later
 for multi-episode retrieval, tools, or live shared collaboration.
 
-Sharing is the common foundation for the other launch loops. One private-by-
-default public/unlisted briefing page can carry a referral parameter and later
-be listed in Explore:
+Sharing is the common foundation for the connected launch loop. One private-by-
+default public/unlisted briefing can be saved, deliberately listed in Explore,
+and later carry referral attribution. Ask this episode is independent of public
+visibility:
 
 ```text
-public/unlisted briefing primitive
+public/unlisted briefing
+-> save to my library
+-> curated Explore
 -> referral attribution and first-paid-purchase reward
--> curated Explore using opted-in or curated briefings
--> cited Ask this episode only when deliberately chosen
+
+private authorized briefing
+-> cited Ask this episode
 ```
 
 Before implementing a slice, write one sentence for its hypothesis and one
@@ -151,6 +162,11 @@ phases. The accepted source direction is documented in
 Talven already downloads the generated Markdown. The MVP extends that existing
 path rather than adding an external integration.
 
+Current status (2026-08-09): Copy Markdown is implemented locally using the
+same content as the existing `.md` download. The metadata envelope below
+remains a separate enhancement and is not required for the first clipboard
+slice.
+
 ### Actions
 
 - **Copy Markdown** to the clipboard with visible success/failure feedback.
@@ -181,11 +197,17 @@ place private signed URLs or user identifiers in the export.
 
 ### Obsidian and Notion decision
 
-- Obsidian already accepts `.md`; copy/download plus frontmatter is sufficient.
-- Notion users can paste or import the Markdown in the first release; validate
-  the exact formatting and document the simplest working flow.
+- Obsidian officially supports adding Markdown files to a vault by drag and
+  drop or by moving them into the vault. The existing `.md` download is the
+  dependable workflow; Copy Markdown is an additional convenience.
+- Notion officially imports Markdown files. Use the `.md` download as the
+  documented first-release workflow; treat raw clipboard paste as a
+  convenience only after its formatting is manually verified.
 - Defer direct Notion OAuth until measured export usage proves that one-click
   delivery materially improves retention.
+
+Official references: [Obsidian Markdown import](https://obsidian.md/help/import/markdown)
+and [Notion data import](https://www.notion.com/help/import-data-into-notion).
 
 ## Phase 2: unlisted public briefing and social sharing
 
