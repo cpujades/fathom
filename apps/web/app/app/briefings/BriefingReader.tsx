@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { ArrowUp } from "lucide-react";
 
 import type { BriefingSessionResponse } from "@fathom/api-client";
 
@@ -29,7 +30,6 @@ type BriefingReaderProps = {
   failureActionHref: string;
   failureActionLabel: string;
   failureDetail: string;
-  headline: string;
   isFailed: boolean;
   isReady: boolean;
   isStreaming: boolean;
@@ -38,20 +38,16 @@ type BriefingReaderProps = {
   navigationSections: NavigationSection[];
   onCancelDelete: () => void;
   onConfirmDelete: () => void;
-  onDownloadMarkdown: () => void;
   onOpenPdf: () => void;
   onRequestDelete: () => void;
   parsedBriefing: ParsedBriefing;
   pdfLoading: boolean;
   pdfUrl: string | null;
   primaryPdfActionLabel: string;
-  rawMarkdown: string;
   readingProgress: number;
   session: BriefingSessionResponse | null;
+  showNowReading: boolean;
   showLifecyclePanel: boolean;
-  sourceDurationLabel: string | null;
-  sourceLabel: string;
-  sourceUrl: string;
   takeawayItems: TakeawayItem[];
 };
 
@@ -63,7 +59,6 @@ export function BriefingReader({
   failureActionHref,
   failureActionLabel,
   failureDetail,
-  headline,
   isFailed,
   isReady,
   isStreaming,
@@ -72,20 +67,16 @@ export function BriefingReader({
   navigationSections,
   onCancelDelete,
   onConfirmDelete,
-  onDownloadMarkdown,
   onOpenPdf,
   onRequestDelete,
   parsedBriefing,
   pdfLoading,
   pdfUrl,
   primaryPdfActionLabel,
-  rawMarkdown,
   readingProgress,
   session,
+  showNowReading,
   showLifecyclePanel,
-  sourceDurationLabel,
-  sourceLabel,
-  sourceUrl,
   takeawayItems
 }: BriefingReaderProps) {
   return (
@@ -198,6 +189,32 @@ export function BriefingReader({
       <aside className={styles.briefingSide}>
         {navigationSections.length > 2 ? (
           <nav className={`${chrome.readerSideCard} ${styles.contentsCard}`} aria-label="Briefing sections">
+            <a
+              className={`${styles.nowReading} ${showNowReading ? styles.nowReadingVisible : ""}`}
+              href="#briefing-hero"
+              aria-hidden={!showNowReading}
+              aria-label={`Back to the top of ${parsedBriefing.title}`}
+              tabIndex={showNowReading ? undefined : -1}
+            >
+              <span className={styles.nowReadingMedia}>
+                {session?.source_thumbnail_url ? (
+                  <Image
+                    className={styles.nowReadingThumbnail}
+                    src={session.source_thumbnail_url}
+                    alt=""
+                    fill
+                    sizes="42px"
+                  />
+                ) : (
+                  <span className={styles.nowReadingFallback} aria-hidden="true">T</span>
+                )}
+              </span>
+              <span className={styles.nowReadingCopy}>
+                <span>Now reading</span>
+                <strong>{parsedBriefing.title}</strong>
+              </span>
+              <ArrowUp className={styles.nowReadingTopIcon} aria-hidden="true" size={15} strokeWidth={1.9} />
+            </a>
             <div className={styles.contentsHeader}>
               <h2 className={chrome.surfaceTitle}>Contents</h2>
               <span>{readingProgress}% read</span>
@@ -215,48 +232,13 @@ export function BriefingReader({
           </nav>
         ) : null}
 
-        {session ? (
-          <section className={`${chrome.readerSideCard} ${styles.sourceCard}`} aria-label="Source">
-            <p className={styles.sideKicker}>Source</p>
-            <div className={styles.sourceHeader}>
-              <div className={styles.sourceMedia}>
-                <div className={styles.sourceThumbnailFrame}>
-                  {session.source_thumbnail_url ? (
-                    <Image className={styles.sourceThumbnail} src={session.source_thumbnail_url} alt="" fill sizes="112px" />
-                  ) : (
-                    <div className={styles.sourceThumbnailFallback}>
-                      <span>{sourceLabel}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div className={styles.sourceBody}>
-                <div className={styles.sourceSummary}>
-                  <h2 className={styles.sourceTitle}>{session.source_title || headline}</h2>
-                  <div className={styles.sourceMeta}>
-                    {session.source_author ? <span>{session.source_author}</span> : null}
-                    {sourceDurationLabel ? <span>{sourceDurationLabel}</span> : null}
-                  </div>
-                </div>
-                {sourceUrl ? (
-                  <a className={styles.sourceCardLink} href={sourceUrl} target="_blank" rel="noreferrer">
-                    Open original
-                  </a>
-                ) : null}
-              </div>
-            </div>
-          </section>
-        ) : null}
-
         <ReaderActions
           deleteConfirming={deleteConfirming}
           deleteLoading={deleteLoading}
           isReady={isReady}
           onCancelDelete={onCancelDelete}
           onConfirmDelete={onConfirmDelete}
-          onDownloadMarkdown={onDownloadMarkdown}
           onRequestDelete={onRequestDelete}
-          rawMarkdown={rawMarkdown}
         />
 
         {isFailed ? (
@@ -298,11 +280,6 @@ export function BriefingReader({
           ) : null}
         </div>
         <div className={styles.footerNavigationRow}>
-          {isReady && rawMarkdown ? (
-            <button className={styles.textActionLink} type="button" onClick={onDownloadMarkdown}>
-              Download Markdown
-            </button>
-          ) : null}
           <Link className={styles.textActionLink} href="/app/briefings">Back to briefings</Link>
           <Link className={styles.textActionLink} href="/app">Start another briefing</Link>
         </div>
@@ -350,9 +327,7 @@ function ReaderActions({
   isReady,
   onCancelDelete,
   onConfirmDelete,
-  onDownloadMarkdown,
-  onRequestDelete,
-  rawMarkdown
+  onRequestDelete
 }: Pick<
   BriefingReaderProps,
   | "deleteConfirming"
@@ -360,13 +335,10 @@ function ReaderActions({
   | "isReady"
   | "onCancelDelete"
   | "onConfirmDelete"
-  | "onDownloadMarkdown"
   | "onRequestDelete"
-  | "rawMarkdown"
 >) {
   return (
     <div className={styles.desktopActionCard}>
-      {isReady && rawMarkdown ? <button className={styles.textActionLink} type="button" onClick={onDownloadMarkdown}>Download Markdown</button> : null}
       <Link className={styles.textActionLink} href="/app/briefings">Back to briefings</Link>
       <Link className={styles.textActionLink} href="/app">Start another briefing</Link>
       {isReady && !deleteConfirming ? <DeleteTrigger disabled={deleteLoading} onClick={onRequestDelete} /> : null}

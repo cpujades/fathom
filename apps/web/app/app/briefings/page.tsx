@@ -17,7 +17,6 @@ import type {
   BriefingListSort
 } from "../../lib/briefings";
 import { DEFAULT_BRIEFINGS_LIMIT } from "../../lib/briefings";
-import { formatDateTime, formatDuration, formatExactDuration } from "../../lib/format";
 import {
   getCachedBriefings,
   hasFreshBriefingsCache,
@@ -325,7 +324,6 @@ export default function BriefingsPage() {
             </p>
           </div>
           <div className={chrome.heroMeta}>
-            <span className={chrome.statusPillMuted}>Available {formatDuration(remainingSeconds ?? 0)}</span>
             <span className={chrome.statusPillMuted}>
               {getStatusLabel(loading, shellLoading, briefings.total_count, activeBriefingCount)}
             </span>

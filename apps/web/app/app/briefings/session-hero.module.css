@@ -95,6 +95,38 @@
   border-radius: 999px;
   background: rgba(67, 82, 71, 0.35);
 }
+.sourceMetaLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: #285c46;
+  font-weight: 720;
+  text-decoration: none;
+  transition: color 160ms ease;
+}
+.sourceMetaLink span {
+  text-decoration: none;
+  background-image: linear-gradient(currentColor, currentColor);
+  background-position: left bottom;
+  background-repeat: no-repeat;
+  background-size: 100% 1.5px;
+}
+.sourceMetaLink svg {
+  transition: transform 280ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.sourceMetaLink:hover {
+  color: #17382b;
+}
+.sourceMetaLink:hover span {
+  animation: underlineRetrace 320ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.sourceMetaLink:hover svg {
+  transform: translate(1px, -1px);
+}
+.sourceMetaLink:focus-visible {
+  outline: 3px solid rgba(45, 98, 75, 0.2);
+  outline-offset: 3px;
+}
 .lifecyclePanel {
   display: grid;
   gap: 0.86rem;
@@ -251,15 +283,33 @@
   font-size: 0.86rem;
   font-weight: 750;
   line-height: 1.25;
-  text-decoration: underline;
-  text-underline-offset: 0.18rem;
+  text-decoration: none;
+  background-image: linear-gradient(currentColor, currentColor);
+  background-position: left bottom;
+  background-repeat: no-repeat;
+  background-size: 100% 1.5px;
+  background-origin: content-box;
   cursor: pointer;
+  transition: color 160ms ease;
 }
 .textActionLink:hover {
   color: #17382b;
+  animation: underlineRetrace 320ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.textActionLink:focus-visible {
+  outline: 3px solid rgba(45, 98, 75, 0.2);
+  outline-offset: 2px;
 }
 .newBriefingLink {
   margin-left: auto;
+}
+@keyframes underlineRetrace {
+  from {
+    background-size: 0 1.5px;
+  }
+  to {
+    background-size: 100% 1.5px;
+  }
 }
 @media (min-width: 721px) {
   .sessionTitle {

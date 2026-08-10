@@ -1,16 +1,19 @@
 import Image from "next/image";
 import Link from "next/link";
+import { ExternalLink } from "lucide-react";
 
 import type { BriefingSessionResponse } from "@fathom/api-client";
 
 import chrome from "../../components/app-chrome";
+import { MarkdownExportActions } from "./MarkdownExportActions";
 import { getLifecycleStepDescription, LIFECYCLE_STEPS } from "./sessionLifecycle";
 import type { SessionUiPhase, StreamHealth } from "./sessionState";
 import styles from "./session-hero.module.css";
 
 type BriefingSessionHeroProps = {
   connectionNotice: string | null;
-  exportNotice: string | null;
+  copyLoading: boolean;
+  exportFeedback: { kind: "error" | "success"; message: string } | null;
   failureActionHref: string;
   failureActionLabel: string;
   failureDetail: string;
@@ -27,6 +30,7 @@ type BriefingSessionHeroProps = {
   lifecycleStepIndex: number;
   lifecycleTitle: string;
   longRunningNotice: string | null;
+  onCopyMarkdown: () => void;
   onDownloadMarkdown: () => void;
   onOpenPdf: () => void;
   onRetry: () => void;
@@ -51,7 +55,8 @@ type BriefingSessionHeroProps = {
 
 export function BriefingSessionHero({
   connectionNotice,
-  exportNotice,
+  copyLoading,
+  exportFeedback,
   failureActionHref,
   failureActionLabel,
   failureDetail,
@@ -68,6 +73,7 @@ export function BriefingSessionHero({
   lifecycleStepIndex,
   lifecycleTitle,
   longRunningNotice,
+  onCopyMarkdown,
   onDownloadMarkdown,
   onOpenPdf,
   onRetry,
@@ -116,6 +122,12 @@ export function BriefingSessionHero({
           <div className={styles.sourceMetaLine}>
             {session?.source_author ? <span>By {session.source_author}</span> : null}
             {sourceDurationLabel ? <span>{sourceDurationLabel}</span> : null}
+            {sourceUrl ? (
+              <a className={styles.sourceMetaLink} href={sourceUrl} target="_blank" rel="noreferrer">
+                <span>{sourceActionLabel}</span>
+                <ExternalLink aria-hidden="true" size={14} strokeWidth={1.9} />
+              </a>
+            ) : null}
           </div>
           {subhead ? <p className={styles.sessionDeck}>{subhead}</p> : null}
         </div>
@@ -192,14 +204,27 @@ export function BriefingSessionHero({
             </button>
           )}
           <div className={styles.heroUtilityLinks}>
-            {isReady && rawMarkdown ? <button className={styles.textActionLink} type="button" onClick={onDownloadMarkdown}>Download Markdown</button> : null}
-            {sourceUrl ? <a className={styles.textActionLink} href={sourceUrl} target="_blank" rel="noreferrer">{sourceActionLabel}</a> : null}
+            {isReady && rawMarkdown.trim() ? (
+              <MarkdownExportActions
+                copying={copyLoading}
+                downloadClassName={styles.textActionLink}
+                onCopy={onCopyMarkdown}
+                onDownload={onDownloadMarkdown}
+              />
+            ) : null}
             <Link className={`${styles.textActionLink} ${styles.newBriefingLink}`} href="/app">Start another briefing</Link>
           </div>
         </div>
       ) : null}
       {pdfError ? <p className={`${chrome.inlineStatus} ${chrome.inlineStatusError}`} role="alert">{pdfError}</p> : null}
-      {exportNotice ? <p className={chrome.inlineStatus} role="status">{exportNotice}</p> : null}
+      {exportFeedback ? (
+        <p
+          className={`${chrome.inlineStatus} ${exportFeedback.kind === "error" ? chrome.inlineStatusError : ""}`}
+          role={exportFeedback.kind === "error" ? "alert" : "status"}
+        >
+          {exportFeedback.message}
+        </p>
+      ) : null}
     </section>
   );
 }

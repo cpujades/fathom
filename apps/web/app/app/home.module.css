@@ -20,26 +20,18 @@
   line-height: 1.08;
   letter-spacing: 0;
   font-weight: 700;
-  max-width: 25ch;
+  max-width: none;
   overflow-wrap: anywhere;
 }
 
 .commandBlock {
   display: grid;
-  gap: 0.58rem;
+  gap: 0.42rem;
   margin-top: 0.25rem;
 }
 
-.commandRow {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 0.75rem;
-  align-items: center;
-}
-
-.commandField {
-  display: grid;
-  gap: 0.38rem;
+.commandComposer {
+  position: relative;
 }
 
 .commandLabel {
@@ -49,25 +41,53 @@
 }
 
 .commandInput {
-  min-height: 54px;
+  min-height: 50px;
   border-radius: 16px;
-  padding: 0.88rem 0.94rem;
+  padding: 0.8rem 3.55rem 0.8rem 0.94rem;
   font-size: 0.96rem;
 }
 
-.commandActions {
-  display: flex;
+.commandButton {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: inline-flex;
+  width: 38px;
+  height: 38px;
   align-items: center;
-  gap: 0.6rem;
+  justify-content: center;
+  border: 1px solid rgba(23, 56, 43, 0.12);
+  border-radius: 999px;
+  padding: 0;
+  background: linear-gradient(155deg, #2d624b, #17382b);
+  color: #f7f3e7;
+  box-shadow: 0 7px 16px rgba(23, 56, 43, 0.14);
+  cursor: pointer;
+  transition:
+    background-color 180ms ease,
+    box-shadow 180ms ease,
+    opacity 180ms ease,
+    transform 180ms ease;
 }
 
-.commandButton {
-  min-height: 44px;
-  padding: 0.62rem 0.98rem;
-  border-radius: 999px;
-  font-size: 0.84rem;
-  box-shadow: 0 10px 18px rgba(23, 56, 43, 0.12);
-  white-space: nowrap;
+.commandButton:hover:not(:disabled) {
+  box-shadow: 0 9px 20px rgba(23, 56, 43, 0.18);
+  transform: translateY(-1px);
+}
+
+.commandButton:focus-visible {
+  outline: 3px solid rgba(45, 98, 75, 0.24);
+  outline-offset: 2px;
+}
+
+.commandButton:disabled {
+  opacity: 0.44;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.commandButtonSpinner {
+  animation: commandButtonSpin 900ms linear infinite;
 }
 
 .commandMetaRow {
@@ -78,10 +98,7 @@
   color: #667267;
   font-size: 0.82rem;
   line-height: 1.45;
-}
-
-.commandMetaRow:empty {
-  display: none;
+  flex-wrap: wrap;
 }
 
 .commandMetaRow a {
@@ -93,7 +110,6 @@
 }
 
 .commandMetaRow p,
-.commandMetaRow span,
 .usageRefreshNote {
   margin: 0;
 }
@@ -116,28 +132,6 @@
   line-height: 1.45;
 }
 
-.quotaBadge {
-  min-width: 58px;
-  min-height: 44px;
-  padding: 0.45rem 0.68rem;
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgba(36, 58, 47, 0.1);
-  border-radius: 999px;
-  background: rgba(248, 244, 236, 0.5);
-  color: #17382b;
-}
-
-.quotaValue {
-  color: #17382b;
-  font-size: 0.74rem;
-  font-weight: 760;
-  line-height: 1;
-  white-space: nowrap;
-}
-
 @media (max-width: 720px) {
   .workspaceShell {
     min-height: auto;
@@ -154,19 +148,14 @@
     max-width: none;
   }
 
-  .commandRow {
-    grid-template-columns: 1fr;
-    gap: 0.75rem;
+  .commandMetaRow {
+    align-items: flex-start;
   }
+}
 
-  .commandActions {
-    width: 100%;
-  }
-
-  .commandButton {
-    width: auto;
-    flex: 1 1 auto;
-    min-width: 0;
+@keyframes commandButtonSpin {
+  to {
+    transform: rotate(360deg);
   }
 }
 
@@ -189,19 +178,7 @@
     border-radius: 14px;
   }
 
-  .commandButton {
-    min-height: 44px;
-  }
-
   .commandMetaRow {
     font-size: 0.78rem;
-  }
-
-  .quotaBadge {
-    min-height: 44px;
-  }
-
-  .quotaValue {
-    font-size: 0.72rem;
   }
 }

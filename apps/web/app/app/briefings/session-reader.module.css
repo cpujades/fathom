@@ -4,20 +4,31 @@
   justify-content: center;
   border: 0;
   min-height: 42px;
-  margin: -0.38rem -0.34rem;
-  padding: 0.38rem 0.34rem;
+  border-radius: 10px;
+  margin: 0;
+  padding: 0.5rem 0.62rem;
   background: transparent;
   color: #435247;
   font: inherit;
   font-size: 0.86rem;
   font-weight: 750;
   line-height: 1.25;
-  text-decoration: underline;
-  text-underline-offset: 0.18rem;
+  text-decoration: none;
+  background-image: linear-gradient(currentColor, currentColor);
+  background-position: left bottom;
+  background-repeat: no-repeat;
+  background-size: 100% 1.5px;
+  background-origin: content-box;
   cursor: pointer;
+  transition: color 160ms ease;
 }
 .textActionLink:hover {
   color: #17382b;
+  animation: underlineRetrace 320ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.textActionLink:focus-visible {
+  outline: 3px solid rgba(45, 98, 75, 0.2);
+  outline-offset: 2px;
 }
 .removeTextButton {
   color: #9b3a36;
@@ -37,6 +48,14 @@
   color: #7a3835;
   font-size: 0.82rem;
   line-height: 1.45;
+}
+@keyframes underlineRetrace {
+  from {
+    background-size: 0 1.5px;
+  }
+  to {
+    background-size: 100% 1.5px;
+  }
 }
 .sidebarDeleteConfirm p {
   margin: 0;
@@ -126,6 +145,108 @@
   display: grid;
   gap: 0.78rem;
 }
+.nowReading {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  gap: 0.65rem;
+  align-items: center;
+  overflow: hidden;
+  max-height: 0;
+  border-radius: 13px;
+  margin: 0 -0.18rem -0.78rem;
+  padding: 0 0.38rem;
+  color: #18211d;
+  text-decoration: none;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-0.5rem);
+  visibility: hidden;
+  transition:
+    max-height 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    margin 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    padding 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 180ms ease,
+    transform 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s linear 360ms;
+}
+.nowReadingVisible {
+  max-height: 72px;
+  margin: -0.18rem -0.18rem 0.08rem;
+  padding: 0.38rem;
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+  visibility: visible;
+  transition:
+    max-height 620ms cubic-bezier(0.4, 0, 0.2, 1),
+    margin 620ms cubic-bezier(0.4, 0, 0.2, 1),
+    padding 620ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 420ms ease 90ms,
+    transform 620ms cubic-bezier(0.4, 0, 0.2, 1),
+    visibility 0s linear;
+}
+.nowReadingVisible:hover {
+  color: #17382b;
+}
+.nowReading:focus-visible {
+  outline: 3px solid rgba(45, 98, 75, 0.2);
+  outline-offset: 2px;
+}
+.nowReadingMedia {
+  position: relative;
+  display: block;
+  width: 42px;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  border-radius: 8px;
+  background: rgba(233, 227, 216, 0.9);
+}
+.nowReadingThumbnail {
+  object-fit: cover;
+}
+.nowReadingFallback {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(155deg, rgba(45, 98, 75, 0.16), rgba(23, 56, 43, 0.08));
+  color: #285c46;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+.nowReadingCopy {
+  min-width: 0;
+  display: grid;
+  gap: 0.12rem;
+}
+.nowReadingCopy > span {
+  color: #667267;
+  font-size: 0.66rem;
+  font-weight: 760;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.nowReadingCopy strong {
+  display: -webkit-box;
+  overflow: hidden;
+  color: inherit;
+  font-size: 0.8rem;
+  font-weight: 720;
+  line-height: 1.3;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.nowReadingTopIcon {
+  opacity: 0.56;
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
+}
+.nowReadingVisible:hover .nowReadingTopIcon {
+  opacity: 1;
+  transform: translateY(-2px);
+}
 .contentsHeader {
   display: flex;
   align-items: baseline;
@@ -173,105 +294,9 @@
   background: rgba(40, 92, 70, 0.08);
   color: #17382b;
 }
-.sourceCard {
-  padding: 1rem;
-  display: grid;
-  gap: 0.72rem;
-}
-.sideKicker {
-  margin: 0;
-  color: #667267;
-  text-transform: uppercase;
-  letter-spacing: 0;
-  font-size: 0.7rem;
-  font-weight: 760;
-}
-.sourceHeader {
-  display: grid;
-  grid-template-columns: 112px minmax(0, 1fr);
-  gap: 0.9rem;
-  align-items: start;
-}
-.sourceMedia {
-  width: 112px;
-}
-.sourceThumbnailFrame {
-  position: relative;
-  width: 112px;
-  aspect-ratio: 16 / 9;
-}
-.sourceThumbnail,
-.sourceThumbnailFallback {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: 12px;
-}
-.sourceThumbnail {
-  background: rgba(233, 227, 216, 0.9);
-}
-.sourceThumbnailFallback {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background:
-    radial-gradient(120% 120% at 0% 0%, rgba(40, 92, 70, 0.18), transparent 45%),
-    linear-gradient(180deg, rgba(237, 232, 222, 0.96), rgba(227, 220, 207, 0.92));
-  color: #667267;
-  text-transform: uppercase;
-  letter-spacing: 0;
-  font-size: 0.72rem;
-  font-weight: 700;
-}
-.sourceBody {
-  display: grid;
-  gap: 0.8rem;
-  min-width: 0;
-}
-.sourceSummary {
-  display: grid;
-  gap: 0.42rem;
-}
-.sourceTitle {
-  margin: 0;
-  font-family: var(--font-body), sans-serif;
-  font-size: 0.94rem;
-  font-weight: 700;
-  letter-spacing: 0;
-  line-height: 1.35;
-  color: #18211d;
-  overflow-wrap: anywhere;
-}
-.sourceCardLink {
-  justify-self: start;
-  color: #17382b;
-  font-size: 0.82rem;
-  font-weight: 760;
-  text-decoration: underline;
-  text-underline-offset: 0.18rem;
-}
-.sourceMeta {
-  display: flex;
-  gap: 0.7rem;
-  flex-wrap: wrap;
-  align-items: center;
-  color: #435247;
-  font-size: 0.84rem;
-  line-height: 1.5;
-}
-.sourceMeta span {
-  position: relative;
-}
-.sourceMeta span:not(:first-child)::before {
-  content: "";
-  position: absolute;
-  left: -0.42rem;
-  top: 0.55rem;
-  width: 4px;
-  height: 4px;
-  border-radius: 999px;
-  background: rgba(67, 82, 71, 0.35);
+.contentsList a:focus-visible {
+  outline: 3px solid rgba(45, 98, 75, 0.2);
+  outline-offset: 2px;
 }
 @media (max-width: 720px) {
   .briefingLayout {
@@ -286,9 +311,6 @@
     position: static;
   }
   .desktopActionCard {
-    display: none;
-  }
-  .sourceCard {
     display: none;
   }
   .mobileReaderBar {
@@ -350,14 +372,6 @@
     opacity: 0.58;
     cursor: not-allowed;
   }
-  .sourceHeader {
-    grid-template-columns: 96px minmax(0, 1fr);
-    gap: 0.75rem;
-  }
-  .sourceMedia,
-  .sourceThumbnailFrame {
-    width: 96px;
-  }
 }
 .errorCard {
   display: grid;
@@ -410,16 +424,6 @@
   }
 }
 @media (max-width: 520px) {
-  .sourceCard {
-    padding: 0.9rem;
-  }
-  .sourceHeader {
-    grid-template-columns: 1fr;
-  }
-  .sourceMedia,
-  .sourceThumbnailFrame {
-    width: min(150px, 100%);
-  }
   .briefingFooter {
     gap: 1.05rem;
   }
