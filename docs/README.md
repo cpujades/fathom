@@ -95,8 +95,17 @@ does not require building every possible improvement.
 
 ### Chapter 4: launch feature scope
 
-Read [Growth and product feature roadmap](./product/growth-feature-roadmap.md#current-launch-scope-decision).
-It owns the detailed proposals and acceptance evidence for:
+Read in this order:
+
+1. [Paid launch action plan](./product/paid-launch-action-plan.md): the accepted
+   six-feature boundary, execution order, plain-language product contracts,
+   minimum acceptance criteria, staging beta, production rehearsal, marketing,
+   and free-access decision.
+2. [Growth and product feature roadmap](./product/growth-feature-roadmap.md#current-launch-scope-decision):
+   the deeper feature proposals, reward values, evaluation ideas, metrics, and
+   later extensions.
+
+Together they cover:
 
 - Markdown/clipboard export;
 - private-by-default unlisted/public sharing;
@@ -105,10 +114,10 @@ It owns the detailed proposals and acceptance evidence for:
 - curated Explore and saving to a library;
 - later identity, follows, digests, and advanced research.
 
-Start with its **Current launch-scope decision** section, then read the detailed
-phase for any feature you are seriously considering. It explains why sharing is
-the common foundation for referrals and Explore, and why episode chat is the
-largest optional stretch. Do not treat roadmap text as implemented behavior.
+Use the action plan to decide what happens next. Use the roadmap when designing
+one specific feature. Sharing is the common foundation for saving, referrals,
+and Explore; Ask this episode is an independent workstream. Do not treat either
+document as proof that proposed behavior is already implemented.
 
 ### Chapter 5: operate and release
 
@@ -137,6 +146,8 @@ backup, alerting, capacity, and support evidence that remains external.
   Spanish owner-cash model.
 - [Future billing options](./product/future-billing-options.md): current launch
   contract and evidence-gated subscriber discounts, custom packs, and PAYG.
+- [Paid launch action plan](./product/paid-launch-action-plan.md): accepted MVP
+  scope, execution order, acceptance criteria, beta, rehearsal, and launch.
 - [Growth feature roadmap](./product/growth-feature-roadmap.md): staged export,
   sharing, referral, episode Q&A, Explore, and later social/research work.
 

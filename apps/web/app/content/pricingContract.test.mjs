@@ -2,26 +2,19 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { packPlans, subscriptionPlans } from "./pricing.ts";
+import { packPlans, resolvePricingPrices, subscriptionPlans } from "./pricing.ts";
+import {
+  DEFAULT_PRICING_CURRENCY,
+  formatPricingPlanPrice,
+  formatPricingPrice,
+  resolveLocalePricingCurrency
+} from "../lib/pricingCurrency.ts";
 import { buildPaidCheckoutHref } from "../lib/pricingIntent.ts";
 
 const catalog = JSON.parse(
   readFileSync(new URL("../../../../scripts/polar/plan_contract.json", import.meta.url), "utf8")
 );
 const publicPlans = [...subscriptionPlans, ...packPlans];
-
-const formatCatalogPrice = (catalogPlan) => {
-  if (catalogPlan.amount_cents === 0) {
-    return "Free";
-  }
-
-  const format = (currency, symbol) => {
-    const amount = catalogPlan.prices[currency] / 100;
-    return `${symbol}${Number.isInteger(amount) ? amount : amount.toFixed(2)}`;
-  };
-
-  return [format("eur", "€"), format("usd", "$"), format("gbp", "£")].join(" · ");
-};
 
 test("public pricing uses the exact stable plan codes from the billing catalog", () => {
   assert.deepEqual(
@@ -32,12 +25,39 @@ test("public pricing uses the exact stable plan codes from the billing catalog",
   for (const publicPlan of publicPlans) {
     const catalogPlan = catalog.find((plan) => plan.plan_code === publicPlan.planCode);
     assert.ok(catalogPlan, `Missing catalog plan ${publicPlan.planCode}`);
-    assert.equal(publicPlan.price, formatCatalogPrice(catalogPlan));
+    assert.deepEqual(publicPlan.prices, catalogPlan.prices);
+    assert.deepEqual(resolvePricingPrices(publicPlan.planCode), publicPlan.prices);
   }
+
+  assert.equal(resolvePricingPrices("unknown"), null);
+});
+
+test("pricing displays one selected currency with clean money formatting", () => {
+  const trialPack = packPlans.find((plan) => plan.planCode === "trial_pack");
+  const starter = subscriptionPlans.find((plan) => plan.planCode === "starter");
+  assert.ok(trialPack);
+  assert.ok(starter);
+
+  assert.equal(formatPricingPrice(trialPack.prices, "gbp"), "£5.50");
+  assert.equal(formatPricingPrice(starter.prices, "eur"), "€9");
+  assert.equal(formatPricingPrice(starter.prices, "usd"), "$10");
+  assert.equal(formatPricingPlanPrice(starter.prices, "eur", "month"), "€9/month");
+  assert.equal(formatPricingPlanPrice(trialPack.prices, "gbp", null), "£5.50");
+  assert.equal(formatPricingPlanPrice(subscriptionPlans[0].prices, "usd", "month"), "Free");
+});
+
+test("pricing uses the browser locale when its currency is available", () => {
+  assert.equal(resolveLocalePricingCurrency("es-ES"), "eur");
+  assert.equal(resolveLocalePricingCurrency("en-ES"), "eur");
+  assert.equal(resolveLocalePricingCurrency("en-GB"), "gbp");
+  assert.equal(resolveLocalePricingCurrency("en-US"), "usd");
+  assert.equal(resolveLocalePricingCurrency("en-CA"), DEFAULT_PRICING_CURRENCY);
+  assert.equal(resolveLocalePricingCurrency("not_a_locale"), DEFAULT_PRICING_CURRENCY);
 });
 
 test("billing catalog keeps launch expiry, carryover, and localized pricing rules explicit", () => {
   for (const plan of catalog) {
+    assert.equal(plan.currency, DEFAULT_PRICING_CURRENCY);
     assert.deepEqual(Object.keys(plan.prices).sort(), ["eur", "gbp", "usd"]);
     assert.equal(plan.prices[plan.currency], plan.amount_cents);
     assert.equal(plan.version, plan.plan_code === "free" ? 1 : 2);

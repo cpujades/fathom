@@ -30,6 +30,7 @@ import {
   parseBriefingMarkdown,
   removeGenericBriefingHeading
 } from "../../briefingMarkdown";
+import { buildMarkdownExport, copyMarkdownToClipboard } from "../../markdownExport";
 import { BriefingReader } from "../../BriefingReader";
 import { BriefingSessionHero } from "../../BriefingSessionHero";
 import {
@@ -39,6 +40,11 @@ import {
   STATE_LABELS
 } from "../../sessionLifecycle";
 import { useBriefingSession } from "../../useBriefingSession";
+
+type ExportFeedback = {
+  kind: "error" | "success";
+  message: string;
+};
 
 export default function BriefingSessionPage() {
   const router = useRouter();
@@ -69,12 +75,15 @@ export default function BriefingSessionPage() {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
-  const [exportNotice, setExportNotice] = useState<string | null>(null);
+  const [copyLoading, setCopyLoading] = useState(false);
+  const [exportFeedback, setExportFeedback] = useState<ExportFeedback | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteConfirming, setDeleteConfirming] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [readingProgress, setReadingProgress] = useState(0);
+  const [showReaderContext, setShowReaderContext] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const heroCardRef = useRef<HTMLDivElement | null>(null);
   const refreshedUsageSessionRef = useRef<string | null>(null);
   const {
     connectionNotice,
@@ -93,10 +102,12 @@ export default function BriefingSessionPage() {
   useEffect(() => {
     setPdfUrl(null);
     setPdfError(null);
-    setExportNotice(null);
+    setCopyLoading(false);
+    setExportFeedback(null);
     setDeleteLoading(false);
     setDeleteConfirming(false);
     setActionError(null);
+    setShowReaderContext(false);
   }, [sessionId]);
 
   const handlePdfAction = async () => {
@@ -105,6 +116,7 @@ export default function BriefingSessionPage() {
     }
 
     setPdfError(null);
+    setExportFeedback(null);
     setPdfLoading(true);
 
     try {
@@ -141,7 +153,10 @@ export default function BriefingSessionPage() {
       const nextPdfUrl = data?.pdf_url ?? null;
       setPdfUrl(nextPdfUrl);
       if (nextPdfUrl) {
-        setExportNotice("PDF ready. Choose Download PDF to open it.");
+        setExportFeedback({
+          kind: "success",
+          message: "PDF ready. Choose Download PDF to open it."
+        });
       } else {
         setPdfError("The PDF finished without a download link. Try again.");
       }
@@ -288,7 +303,7 @@ export default function BriefingSessionPage() {
     }
 
     const objectUrl = URL.createObjectURL(
-      new Blob([rawMarkdown.endsWith("\n") ? rawMarkdown : `${rawMarkdown}\n`], {
+      new Blob([buildMarkdownExport(rawMarkdown)], {
         type: "text/markdown;charset=utf-8"
       })
     );
@@ -299,7 +314,31 @@ export default function BriefingSessionPage() {
     downloadLink.click();
     downloadLink.remove();
     window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
-    setExportNotice("Markdown downloaded.");
+    setExportFeedback({ kind: "success", message: "Markdown downloaded." });
+  };
+
+  const handleMarkdownCopy = async () => {
+    if (!isReady || !rawMarkdown.trim() || copyLoading) {
+      return;
+    }
+
+    setCopyLoading(true);
+    setExportFeedback(null);
+
+    try {
+      await copyMarkdownToClipboard(rawMarkdown, window.navigator.clipboard);
+      setExportFeedback({
+        kind: "success",
+        message: "Markdown copied. It is ready to paste into your notes."
+      });
+    } catch {
+      setExportFeedback({
+        kind: "error",
+        message: "Could not copy the Markdown. Download the .md file instead."
+      });
+    } finally {
+      setCopyLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -355,6 +394,31 @@ export default function BriefingSessionPage() {
   }, [canShowReader, sessionId]);
 
   useEffect(() => {
+    if (!canShowReader) {
+      setShowReaderContext(false);
+      return undefined;
+    }
+
+    const heroCard = heroCardRef.current;
+    if (!heroCard || typeof IntersectionObserver === "undefined") {
+      return undefined;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setShowReaderContext(!entry.isIntersecting);
+      },
+      {
+        rootMargin: "-80px 0px 0px",
+        threshold: 0
+      }
+    );
+
+    observer.observe(heroCard);
+    return () => observer.disconnect();
+  }, [canShowReader, sessionId]);
+
+  useEffect(() => {
     if (!deleteConfirming) {
       return;
     }
@@ -384,46 +448,50 @@ export default function BriefingSessionPage() {
       />
 
       <main id="main-content" className={chrome.mainFrame}>
-        <BriefingSessionHero
-          connectionNotice={connectionNotice}
-          exportNotice={exportNotice}
-          failureActionHref={failurePresentation.actionHref}
-          failureActionLabel={failurePresentation.actionLabel}
-          failureDetail={failurePresentation.detail}
-          hasTopActions={hasTopActions}
-          headline={headline}
-          heroEyebrow={heroEyebrow}
-          isDeliveryFailed={isDeliveryFailed}
-          isFailed={isFailed}
-          isLoadFailed={isLoadFailed}
-          isReady={isReady}
-          lifecycleHint={lifecycleHint}
-          lifecycleKicker={lifecycleKicker}
-          lifecycleStatusLabel={lifecycleStatusLabel}
-          lifecycleStepIndex={lifecycleStepIndex}
-          lifecycleTitle={lifecycleTitle}
-          longRunningNotice={longRunningNotice}
-          onDownloadMarkdown={handleMarkdownDownload}
-          onOpenPdf={handlePdfAction}
-          onRetry={retrySessionLoad}
-          pdfError={pdfError}
-          pdfLoading={pdfLoading}
-          pdfUrl={pdfUrl}
-          phase={phase}
-          primaryPdfActionLabel={primaryPdfActionLabel}
-          rawMarkdown={rawMarkdown}
-          session={session}
-          sessionLoadError={sessionLoadError}
-          showCreditCta={showCreditCta}
-          showHeroTopline={showHeroTopline}
-          showLifecyclePanel={showLifecyclePanel}
-          sourceActionLabel={sourceActionLabel}
-          sourceDurationLabel={sourceDurationLabel}
-          sourceLabel={sourceLabel}
-          sourceUrl={sourceUrl}
-          streamHealth={streamHealth}
-          subhead={subhead}
-        />
+        <div id="briefing-hero" ref={heroCardRef}>
+          <BriefingSessionHero
+            connectionNotice={connectionNotice}
+            copyLoading={copyLoading}
+            exportFeedback={exportFeedback}
+            failureActionHref={failurePresentation.actionHref}
+            failureActionLabel={failurePresentation.actionLabel}
+            failureDetail={failurePresentation.detail}
+            hasTopActions={hasTopActions}
+            headline={headline}
+            heroEyebrow={heroEyebrow}
+            isDeliveryFailed={isDeliveryFailed}
+            isFailed={isFailed}
+            isLoadFailed={isLoadFailed}
+            isReady={isReady}
+            lifecycleHint={lifecycleHint}
+            lifecycleKicker={lifecycleKicker}
+            lifecycleStatusLabel={lifecycleStatusLabel}
+            lifecycleStepIndex={lifecycleStepIndex}
+            lifecycleTitle={lifecycleTitle}
+            longRunningNotice={longRunningNotice}
+            onCopyMarkdown={handleMarkdownCopy}
+            onDownloadMarkdown={handleMarkdownDownload}
+            onOpenPdf={handlePdfAction}
+            onRetry={retrySessionLoad}
+            pdfError={pdfError}
+            pdfLoading={pdfLoading}
+            pdfUrl={pdfUrl}
+            phase={phase}
+            primaryPdfActionLabel={primaryPdfActionLabel}
+            rawMarkdown={rawMarkdown}
+            session={session}
+            sessionLoadError={sessionLoadError}
+            showCreditCta={showCreditCta}
+            showHeroTopline={showHeroTopline}
+            showLifecyclePanel={showLifecyclePanel}
+            sourceActionLabel={sourceActionLabel}
+            sourceDurationLabel={sourceDurationLabel}
+            sourceLabel={sourceLabel}
+            sourceUrl={sourceUrl}
+            streamHealth={streamHealth}
+            subhead={subhead}
+          />
+        </div>
 
         {canShowReader ? (
           <BriefingReader
@@ -434,7 +502,6 @@ export default function BriefingSessionPage() {
             failureActionHref={failurePresentation.actionHref}
             failureActionLabel={failurePresentation.actionLabel}
             failureDetail={failurePresentation.detail}
-            headline={headline}
             isFailed={isFailed}
             isReady={isReady}
             isStreaming={isStreaming}
@@ -443,7 +510,6 @@ export default function BriefingSessionPage() {
             navigationSections={navigationSections}
             onCancelDelete={closeDeleteConfirmation}
             onConfirmDelete={handleDeleteSession}
-            onDownloadMarkdown={handleMarkdownDownload}
             onOpenPdf={handlePdfAction}
             onRequestDelete={() => {
               setDeleteConfirming(true);
@@ -453,13 +519,10 @@ export default function BriefingSessionPage() {
             pdfLoading={pdfLoading}
             pdfUrl={pdfUrl}
             primaryPdfActionLabel={primaryPdfActionLabel}
-            rawMarkdown={rawMarkdown}
             readingProgress={readingProgress}
             session={session}
+            showNowReading={showReaderContext}
             showLifecyclePanel={showLifecyclePanel}
-            sourceDurationLabel={sourceDurationLabel}
-            sourceLabel={sourceLabel}
-            sourceUrl={sourceUrl}
             takeawayItems={takeawayItems}
           />
         ) : null}

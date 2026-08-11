@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
+import { ArrowRight, LoaderCircle } from "lucide-react";
 
 import { AppShellHeader } from "../components/AppShellHeader";
 import { useAppShell } from "../components/AppShellProvider";
@@ -86,16 +87,6 @@ export default function AppHome() {
     isBlocked,
     remainingSeconds
   });
-  const availableSeconds = refreshedUsage?.total_remaining_seconds ?? remainingSeconds;
-  const quotaLabel = useMemo(() => {
-    if (availableSeconds === null) {
-      return "Checking";
-    }
-    if (availableSeconds <= 0) {
-      return "0m";
-    }
-    return formatDuration(availableSeconds);
-  }, [availableSeconds]);
   const creationAccess = getCreationAccessState(refreshedUsage);
   const lowBalanceSeconds = getLowBalanceSeconds(refreshedUsage);
   const billingAction = getBillingOffersAction(
@@ -130,50 +121,47 @@ export default function AppHome() {
             <h1 className={styles.workspaceTitle}>{workspaceTitle}</h1>
 
             <form className={styles.commandBlock} onSubmit={handleFormSubmit}>
-              <div className={styles.commandRow}>
-                <div className={styles.commandField}>
-                  <label className={styles.commandLabel} htmlFor="briefing-source-url">
-                    Public YouTube URL
-                  </label>
-                  <input
-                    className={`${chrome.input} ${styles.commandInput}`}
-                    id="briefing-source-url"
-                    type="url"
-                    placeholder="Paste a public YouTube URL"
-                    aria-describedby={inputDescriptionIds}
-                    aria-invalid={error ? true : undefined}
-                    value={url}
-                    onChange={(event) => setUrl(event.target.value)}
-                    disabled={loading}
-                  />
-                </div>
-                <div className={styles.commandActions}>
-                  <button
-                    className={`${chrome.primaryButton} ${styles.commandButton}`}
-                    type="submit"
-                    disabled={!canSubmit}
-                  >
-                    {submitting ? "Starting..." : "Start briefing"}
-                  </button>
-                  <div className={styles.quotaBadge} aria-label={`${quotaLabel} video time available`}>
-                    <span className={styles.quotaValue}>{quotaLabel}</span>
-                  </div>
-                </div>
+              <label className={styles.commandLabel} htmlFor="briefing-source-url">
+                YouTube video or podcast
+              </label>
+              <div className={styles.commandComposer}>
+                <input
+                  className={`${chrome.input} ${styles.commandInput}`}
+                  id="briefing-source-url"
+                  type="url"
+                  placeholder="Paste the link here"
+                  aria-describedby={inputDescriptionIds}
+                  aria-invalid={error ? true : undefined}
+                  value={url}
+                  onChange={(event) => setUrl(event.target.value)}
+                  disabled={loading}
+                />
+                <button
+                  className={styles.commandButton}
+                  type="submit"
+                  disabled={!canSubmit}
+                  aria-label={submitting ? "Starting briefing" : "Start briefing"}
+                  title="Start briefing"
+                >
+                  {submitting ? (
+                    <LoaderCircle className={styles.commandButtonSpinner} aria-hidden="true" size={18} />
+                  ) : (
+                    <ArrowRight aria-hidden="true" size={19} strokeWidth={2} />
+                  )}
+                </button>
               </div>
-              <div
-                className={`${styles.commandMetaRow} ${lowBalanceSeconds !== null ? styles.lowBalanceNotice : ""}`}
-              >
-                {usageNotice ? (
+              {usageNotice ? (
+                <div
+                  className={`${styles.commandMetaRow} ${lowBalanceSeconds !== null ? styles.lowBalanceNotice : ""}`}
+                >
                   <p id="briefing-usage-notice" role={refreshedUsage?.is_blocked ? "alert" : "status"}>
                     {usageNotice}
                   </p>
-                ) : (
-                  <span>Video time is charged only after a briefing is completed successfully.</span>
-                )}
-                {refreshedUsage?.is_blocked || creationAccess.hasNoCredits || lowBalanceSeconds !== null ? (
-                  <Link href={billingAction.href}>{billingAction.label}</Link>
-                ) : null}
-              </div>
+                  {refreshedUsage?.is_blocked || creationAccess.hasNoCredits || lowBalanceSeconds !== null ? (
+                    <Link href={billingAction.href}>{billingAction.label}</Link>
+                  ) : null}
+                </div>
+              ) : null}
               {usageRefreshFailed ? (
                 <p className={styles.usageRefreshNote} role="status">
                   Live debt details could not be refreshed. Talven will still verify access before starting.

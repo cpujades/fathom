@@ -1,10 +1,10 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { MouseEvent, ReactNode } from "react";
+import { ExternalLink } from "lucide-react";
 
 import type { BriefingListItem } from "../../lib/briefings";
 import { formatDateTime, formatExactDuration } from "../../lib/format";
-import chrome from "../../components/app-chrome";
 import styles from "./briefing-row.module.css";
 
 type BriefingLibraryRowProps = {
@@ -34,7 +34,7 @@ export function BriefingLibraryRow({
 }: BriefingLibraryRowProps) {
   const entryState = getBriefingState(entry);
   const stateLabel = getBriefingStateLabel(entryState);
-  const actionLabel = opening ? "Opening" : getBriefingActionLabel(entry);
+  const visibleStateLabel = opening ? "Opening" : stateLabel;
 
   return (
     <article className={styles.libraryRow}>
@@ -42,21 +42,29 @@ export function BriefingLibraryRow({
         <div className={styles.libraryRowMain}>
           <div className={styles.libraryTopRow}>
             <div className={styles.libraryMedia}>
-              <div className={styles.libraryThumbnailFrame}>
-                {entry.source_thumbnail_url ? (
-                  <Image
-                    className={styles.libraryThumbnail}
-                    src={entry.source_thumbnail_url}
-                    alt=""
-                    fill
-                    sizes="(max-width: 420px) 84px, (max-width: 720px) 96px, 96px"
-                  />
-                ) : (
-                  <div className={styles.libraryThumbnailFallback}>
-                    <span>{getSourceTypeLabel(entry.source_type)}</span>
-                  </div>
-                )}
-              </div>
+              <BriefingLink
+                ariaLabel={`Open ${entry.title}`}
+                entry={entry}
+                onOpen={onOpen}
+                onPrefetch={onPrefetch}
+                className={styles.libraryThumbnailLink}
+              >
+                <span className={styles.libraryThumbnailFrame}>
+                  {entry.source_thumbnail_url ? (
+                    <Image
+                      className={styles.libraryThumbnail}
+                      src={entry.source_thumbnail_url}
+                      alt=""
+                      fill
+                      sizes="(max-width: 420px) 84px, (max-width: 720px) 96px, 96px"
+                    />
+                  ) : (
+                    <span className={styles.libraryThumbnailFallback}>
+                      <span>{getSourceTypeLabel(entry.source_type)}</span>
+                    </span>
+                  )}
+                </span>
+              </BriefingLink>
             </div>
           </div>
 
@@ -66,9 +74,9 @@ export function BriefingLibraryRow({
                 <BriefingLink entry={entry} onOpen={onOpen} onPrefetch={onPrefetch} className={styles.libraryTitleLink}>
                   {entry.title}
                 </BriefingLink>
-                {stateLabel ? (
+                {visibleStateLabel ? (
                   <span className={`${styles.libraryStatePill} ${entryState === "failed" ? styles.libraryStatePillFailed : styles.libraryStatePillActive}`}>
-                    {stateLabel}
+                    {visibleStateLabel}
                   </span>
                 ) : null}
               </div>
@@ -79,28 +87,19 @@ export function BriefingLibraryRow({
                 {entry.source_duration_seconds ? (
                   <span className={styles.metaDuration}>{formatExactDuration(entry.source_duration_seconds)}</span>
                 ) : null}
+                <a className={styles.librarySourceLink} href={entry.source_url} target="_blank" rel="noreferrer">
+                  <ExternalLink aria-hidden="true" size={13} strokeWidth={1.9} />
+                  {getSourceActionLabel(entry.source_type)}
+                </a>
               </div>
             </div>
 
             <div className={styles.rowActions}>
-              <div className={styles.actionSet}>
-                <BriefingLink
-                  entry={entry}
-                  onOpen={onOpen}
-                  onPrefetch={onPrefetch}
-                  className={`${chrome.primaryButton} ${styles.libraryPrimaryAction}`}
-                >
-                  {actionLabel}
-                </BriefingLink>
-                <a className={`${chrome.ghostButton} ${styles.librarySecondaryAction}`} href={entry.source_url} target="_blank" rel="noreferrer">
-                  {getSourceActionLabel(entry.source_type)}
-                </a>
-                {!confirmingDelete ? (
-                  <button className={styles.menuDangerAction} type="button" onClick={onRequestDelete} ref={setRemoveButtonRef}>
-                    Archive
-                  </button>
-                ) : null}
-              </div>
+              {!confirmingDelete ? (
+                <button className={styles.menuDangerAction} type="button" onClick={onRequestDelete} ref={setRemoveButtonRef}>
+                  Archive
+                </button>
+              ) : null}
 
               {confirmingDelete ? (
                 <div className={styles.confirmBlock} role="group" aria-label={`Archive ${entry.title}`}>
@@ -126,12 +125,14 @@ export function BriefingLibraryRow({
 }
 
 function BriefingLink({
+  ariaLabel,
   children,
   className,
   entry,
   onOpen,
   onPrefetch
 }: {
+  ariaLabel?: string;
   children: ReactNode;
   className: string;
   entry: BriefingListItem;
@@ -142,6 +143,7 @@ function BriefingLink({
     <Link
       className={className}
       href={entry.session_path}
+      aria-label={ariaLabel}
       onClick={onOpen}
       onMouseEnter={onPrefetch}
       onPointerDown={onPrefetch}
@@ -164,7 +166,7 @@ function getSourceTypeLabel(sourceType: BriefingListItem["source_type"]): string
 }
 
 function getSourceActionLabel(sourceType: BriefingListItem["source_type"]): string {
-  return sourceType === "youtube" ? "Video" : "Source";
+  return sourceType === "youtube" ? "Original video" : "Original source";
 }
 
 function getBriefingState(entry: BriefingListItem): BriefingListItem["state"] {
@@ -179,9 +181,4 @@ function getBriefingStateLabel(state: BriefingListItem["state"]): string | null 
   if (state === "transcribing") return "Transcribing";
   if (state === "drafting_briefing") return "Writing";
   return "Saving";
-}
-
-function getBriefingActionLabel(entry: BriefingListItem): string {
-  if (getBriefingState(entry) === "failed") return "Review";
-  return isBriefingProcessing(entry) ? "Progress" : "Open";
 }

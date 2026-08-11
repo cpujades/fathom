@@ -6,12 +6,16 @@ import * as Dialog from "@radix-ui/react-dialog";
 import type { BillingOrderHistoryEntry, PackBillingState } from "@fathom/api-client";
 
 import { AppShellHeader } from "../../components/AppShellHeader";
+import { PricingCurrencySelect } from "../../components/PricingCurrencySelect";
 import { useAppShell } from "../../components/AppShellProvider";
 import chrome from "../../components/app-chrome";
+import { resolvePricingPrices } from "../../content/pricing";
 import dialogStyles from "./billing-dialog.module.css";
 import pageStyles from "./billing-page.module.css";
 import { formatDate, formatDuration } from "../../lib/format";
 import { getAccountLabel } from "../../lib/accountLabel";
+import { formatPricingPlanPrice } from "../../lib/pricingCurrency";
+import { usePricingCurrency } from "../../lib/usePricingCurrency";
 import { BillingSyncNotice } from "./BillingSyncNotice";
 import { formatPrice, getPlanBadge, getStatusTone } from "./billingFormatters";
 import { useBillingController } from "./useBillingController";
@@ -19,6 +23,7 @@ import { useBillingController } from "./useBillingController";
 const styles = { ...pageStyles, ...dialogStyles };
 
 function BillingPageContent() {
+  const { currency, selectCurrency } = usePricingCurrency();
   const {
     accessNote, account, activePackCount, canManageBilling, checkoutLoading, closeRefundDialog, displayedPacks,
     error, handleCheckout, handleConfirmRefund, handlePortal, handleRefreshSyncStatus, loading, offerMode,
@@ -187,6 +192,11 @@ function BillingPageContent() {
                 Choose a monthly subscription or add a one-time video-time pack when you need it.
               </p>
             </div>
+            <PricingCurrencySelect
+              className={styles.currencyControl}
+              currency={currency}
+              onChange={selectCurrency}
+            />
           </div>
 
           <div className={styles.offerSwitch} role="group" aria-label="Billing offer type">
@@ -219,6 +229,7 @@ function BillingPageContent() {
                   account.subscription.plan_name === plan.name;
                 const planBadge = getPlanBadge(plan, visiblePlanGroup.key);
                 const isRequestedPlan = requestedPlan?.plan_id === plan.plan_id;
+                const previewPrices = resolvePricingPrices(plan.plan_code);
 
                 return (
                   <article
@@ -237,7 +248,11 @@ function BillingPageContent() {
                             <span className={styles.planBadge}>{planBadge}</span>
                           ) : null}
                         </div>
-                        <p className={styles.planPrice}>{formatPrice(plan.amount_cents, plan.currency, plan.billing_interval)}</p>
+                        <p className={styles.planPrice}>
+                          {previewPrices
+                            ? formatPricingPlanPrice(previewPrices, currency, plan.billing_interval)
+                            : formatPrice(plan.amount_cents, plan.currency, plan.billing_interval)}
+                        </p>
                       </div>
                       <div className={styles.planMeta}>
                         <p className={chrome.subtleText}>{formatDuration(plan.quota_seconds ?? 0)} included</p>
