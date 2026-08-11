@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.23.0](https://github.com/cpujades/fathom/compare/v0.22.2...v0.23.0) (2026-08-11)
+
+_Automated release from [#180](https://github.com/cpujades/fathom/pull/180) feat(web): polish briefing workflows and pricing_
+
+### Features
+
+- feat(web): improve briefing workflow and exports (e4cf12c)
+- feat(billing): add consistent currency previews (e205fbe)
+
+### Documentation
+
+- docs(product): define paid launch execution plan (8dae150)
+
 ## [0.22.2](https://github.com/cpujades/fathom/compare/v0.22.1...v0.22.2) (2026-08-09)
 
 _Automated release from [#178](https://github.com/cpujades/fathom/pull/178) Bump the "weekly-maintenance" group with 2 updates across multiple ecosystems_
