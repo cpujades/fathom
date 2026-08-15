@@ -28,6 +28,18 @@ test("safe app destinations preserve submitted source URLs", () => {
   );
 });
 
+test("safe public briefing destinations survive authentication", () => {
+  const publicBriefing = `/b/${"a".repeat(32)}?from=explore`;
+
+  assert.equal(getSafeNextPath(publicBriefing), publicBriefing);
+  assert.equal(
+    buildSignInPath(publicBriefing),
+    `/signin?next=${encodeURIComponent(publicBriefing)}`
+  );
+  assert.equal(getSafeNextPath("/explore?topic=business"), "/explore?topic=business");
+  assert.equal(getSafeNextPath("/b/not-a-valid-slug"), "/app");
+});
+
 test("external, protocol-relative, and non-app destinations are rejected", () => {
   for (const candidate of [
     "https://attacker.example/app",

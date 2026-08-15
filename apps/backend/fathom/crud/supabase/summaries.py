@@ -37,7 +37,7 @@ def _summary_select_query(client: AsyncClient) -> Any:
     """Return the base summaries select query with the fields we need."""
     return client.table("summaries").select(
         "id,user_id,transcript_id,summary_markdown,pdf_object_key,pdf_cache_version,"
-        "status,status_updated_at,ready_at,failed_at"
+        "status,prompt_key,summary_model,status_updated_at,ready_at,failed_at"
     )
 
 
@@ -60,7 +60,12 @@ async def fetch_summaries_by_ids(client: AsyncClient, summary_ids: list[str]) ->
         return []
 
     try:
-        response = await client.table("summaries").select("id,transcript_id").in_("id", summary_ids).execute()
+        response = await (
+            client.table("summaries")
+            .select("id,transcript_id,status,prompt_key,summary_model")
+            .in_("id", summary_ids)
+            .execute()
+        )
     except APIError as exc:
         raise_for_postgrest_error(exc, "Failed to fetch summaries.")
 

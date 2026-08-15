@@ -27,7 +27,7 @@ the authenticated role `SELECT` on only two application tables:
 The browser has no direct insert, update, or delete permission on application
 tables. It also cannot directly read summaries, transcripts, plans, entitlements, usage
 ledger rows, settlements, Polar records, rate-limit buckets, or transcript
-segments.
+segments. Publication rows are also server-only.
 
 Shared summaries are server-mediated. For a detail, session, or PDF request,
 the API first uses the caller's token to find an owned `succeeded` or `deleted`
@@ -37,7 +37,7 @@ exposing internal producer, cache, generation-token, or PDF metadata.
 
 Anonymous users have no application-table privileges.
 
-RLS is enabled on all 16 current public application tables. `FORCE ROW LEVEL
+RLS is enabled on all 18 current public application tables. `FORCE ROW LEVEL
 SECURITY` is intentionally not enabled because trusted table owners and the
 service role run server operations. Security therefore depends on keeping
 server credentials server-only.
@@ -55,6 +55,19 @@ where mutations happen:
 
 This is a standard trusted-server pattern: the user may request an action, but
 cannot invent privileged database changes with browser developer tools.
+
+## Explore operator access
+
+Explore listing uses the backend-only `EXPLORE_OPERATOR_USER_IDS` allowlist.
+It contains exact Supabase Auth user UUIDs. Use one UUID, comma-separated UUIDs,
+or a JSON string array. The backend validates and deduplicates the list during
+startup.
+
+An allowlisted user may set only their own completed briefing to Listed. This
+does not grant a database role or direct table access. Normal users may still
+publish Unlisted links, but they cannot add content to Explore. Keep this value
+in the API deployment settings, never in a `NEXT_PUBLIC_*` variable. Restart
+the API deployment after changing the list.
 
 ## Server command boundary
 
@@ -149,4 +162,5 @@ verified.
 
 Important remaining non-code controls include service-key management, hosted
 backup and restore proof, retention/privacy approval, real-provider data
-settings, CAPTCHA/bot controls, and operator access controls.
+settings, CAPTCHA/bot controls, and controlled maintenance of the Explore
+operator allowlist.

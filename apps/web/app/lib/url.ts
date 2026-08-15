@@ -4,6 +4,7 @@ const DEFAULT_NEXT_PATH = "/app";
 const DEFAULT_SITE_URL = "http://localhost:3000";
 const AUTH_PLAN_PATTERN = /^[a-z0-9]+(?:[_-][a-z0-9]+)*$/;
 const MAX_AUTH_PLAN_LENGTH = 64;
+const PUBLIC_BRIEFING_PATH_PATTERN = /^\/b\/[0-9a-f]{32}$/;
 
 type AuthIntent = "paid";
 
@@ -18,7 +19,12 @@ type SafeAuthIntentContext = {
 };
 
 const isAllowedNextPathname = (pathname: string): boolean => {
-  return pathname === DEFAULT_NEXT_PATH || pathname.startsWith(`${DEFAULT_NEXT_PATH}/`);
+  return (
+    pathname === DEFAULT_NEXT_PATH ||
+    pathname.startsWith(`${DEFAULT_NEXT_PATH}/`) ||
+    pathname === "/explore" ||
+    PUBLIC_BRIEFING_PATH_PATTERN.test(pathname)
+  );
 };
 
 export const getSiteUrl = (): string => {

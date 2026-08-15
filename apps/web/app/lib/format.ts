@@ -63,4 +63,15 @@ const formatDateTime = (value?: string | null): string => {
   });
 };
 
-export { formatDate, formatDateTime, formatDuration, formatExactDuration };
+const formatExploreTopic = (topic: string): string => {
+  if (topic === "self-improvement") {
+    return "Self-improvement";
+  }
+  return topic
+    .split("-")
+    .filter(Boolean)
+    .map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`)
+    .join(" ");
+};
+
+export { formatDate, formatDateTime, formatDuration, formatExactDuration, formatExploreTopic };

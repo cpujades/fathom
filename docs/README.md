@@ -54,10 +54,13 @@ Read in this order:
    functions/RPCs, CRUD modules, and read-only queries for exact columns.
 2. [Security and data access](./architecture/security-and-data-access.md): what
    the browser, API, service role, worker, and Storage layer may access.
-3. [Supabase environments and migrations](./runbooks/supabase-environments-and-migrations.md):
+3. [Performance, queries, and caching](./architecture/query-performance-and-caching.md):
+   the full browser, API, database, worker, provider, Storage, SSE, query,
+   caching, load-test, and performance roadmap.
+4. [Supabase environments and migrations](./runbooks/supabase-environments-and-migrations.md):
    local, CI, staging, and production databases; migration deployment;
    connection modes; and backup boundaries.
-4. [Storage access boundary](./security/storage-access.md): private buckets,
+5. [Storage access boundary](./security/storage-access.md): private buckets,
    signed access, and server-mediated object operations.
 
 For exact implementation detail, continue into `supabase/migrations/`,
@@ -157,6 +160,7 @@ backup, alerting, capacity, and support evidence that remains external.
 - [Frontend, authentication, and user flows](./architecture/frontend-auth-and-user-flows.md).
 - [System and job lifecycle](./architecture/system-and-job-lifecycle.md).
 - [Cache and versioning](./architecture/cache-and-versioning.md).
+- [Performance, queries, and caching](./architecture/query-performance-and-caching.md).
 - [Database, RLS, and persistence](./architecture/database-and-persistence.md).
 - [Billing and Polar webhooks](./architecture/billing-and-webhooks.md).
 - [API contract and client generation](./architecture/api-contract.md).

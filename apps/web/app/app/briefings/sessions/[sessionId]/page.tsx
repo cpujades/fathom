@@ -33,6 +33,7 @@ import {
 import { buildMarkdownExport, copyMarkdownToClipboard } from "../../markdownExport";
 import { BriefingReader } from "../../BriefingReader";
 import { BriefingSessionHero } from "../../BriefingSessionHero";
+import { PublicationActions } from "../../PublicationActions";
 import {
   getLifecycleStepIndex,
   getLongRunningNotice,
@@ -492,6 +493,14 @@ export default function BriefingSessionPage() {
             subhead={subhead}
           />
         </div>
+
+        {isReady && accessToken ? (
+          <PublicationActions
+            accessToken={accessToken}
+            sessionId={sessionId}
+            title={parsedBriefing.title}
+          />
+        ) : null}
 
         {canShowReader ? (
           <BriefingReader

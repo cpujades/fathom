@@ -66,6 +66,19 @@ class ForbiddenError(AppError):
     code = "forbidden"
 
 
+class ConflictError(AppError):
+    """Request conflicts with the current resource state (409)."""
+
+    status_code = 409
+    code = "conflict"
+
+
+class PublicBriefingAvailableError(ConflictError):
+    """A free Listed briefing is available for the submitted source."""
+
+    code = "public_briefing_available"
+
+
 class NotFoundError(AppError):
     """Requested resource does not exist (404)."""
 

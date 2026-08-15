@@ -184,7 +184,7 @@ async def fetch_transcript_by_id(client: AsyncClient, transcript_id: str) -> dic
     try:
         response = await (
             client.table("transcripts")
-            .select("id,video_id,source_title,source_author,source_length_seconds")
+            .select("id,video_id,provider_model,source_title,source_author,source_length_seconds")
             .eq("id", transcript_id)
             .limit(1)
             .execute()
@@ -206,7 +206,7 @@ async def fetch_transcripts_by_ids(client: AsyncClient, transcript_ids: list[str
     try:
         response = await (
             client.table("transcripts")
-            .select("id,video_id,source_title,source_author,source_length_seconds")
+            .select("id,video_id,provider_model,source_title,source_author,source_length_seconds")
             .in_("id", transcript_ids)
             .execute()
         )

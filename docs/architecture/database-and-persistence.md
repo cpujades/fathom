@@ -5,7 +5,7 @@ The Python code uses Supabase PostgREST for ordinary reads/writes and protected
 Postgres RPCs for operations that must be atomic, fenced, or multi-row. There
 is no ORM model layer to update separately from the migrations.
 
-## The 17 application tables
+## The 18 application tables
 
 These are the current public application tables. Supabase Auth and Storage
 tables are platform-owned and are not included.
@@ -14,6 +14,7 @@ tables are platform-owned and are not included.
 | --- | --- | --- |
 | User work | `jobs`, `job_events` | Private session/library state, queue progress, and replayable state changes |
 | Reusable processing | `transcripts`, `transcript_segments`, `summaries` | Source metadata, immutable timestamp evidence, and versioned briefing output |
+| Public distribution | `briefing_publications` | Server-mediated public links, Talven-curated Explore listing, and moderation state |
 | Catalog and billing | `plans`, `polar_customers`, `billing_orders`, `billing_webhook_events`, `billing_sync_operations`, `credit_lots`, `entitlements`, `usage_ledger`, `usage_settlements` | Product catalog, provider identity, commerce facts, webhook audit, user-scoped checkout/refund synchronization, credit lots, balance snapshot, usage history, and one charge per job |
 | Coordination | `billing_maintenance_leases`, `briefing_stream_leases`, `api_rate_limit_buckets` | Short-lived distributed locks, stream caps, and shared request counters |
 
@@ -29,6 +30,7 @@ as permission by itself.
 | `transcripts` | `transcript_segments` | `transcript_id`, cascade on transcript deletion |
 | `transcripts` | `summaries` | `transcript_id`, cascade on transcript deletion |
 | `summaries` | `jobs` | `summary_id`, set null if the summary is deleted |
+| `jobs`, `summaries` | `briefing_publications` | Owner job and shared summary, cascade on deletion |
 | `jobs` | `job_events` | `job_id`, cascade with the job |
 | `jobs` | `usage_settlements` | Unique `job_id`, restrict deletion |
 | `jobs` | legacy `usage_ledger` rows | `job_id`, set null |
@@ -43,7 +45,7 @@ state.
 
 ## Browser RLS and server privileges
 
-All 17 application tables have RLS enabled. The final client boundary grants
+All 18 application tables have RLS enabled. The final client boundary grants
 the authenticated role `SELECT` on only:
 
 | Table | Final read rule |
@@ -56,6 +58,9 @@ application tables, no direct Storage access, and no direct reads of
 summaries, transcripts, plans, billing, billing-sync, usage, settlement,
 stream-lease, maintenance, or rate-limit data. The API reads those records with a service client only after
 authenticating the user and applying the corresponding ownership filter.
+Publication rows are also server-only. Later public
+endpoints must return an explicit safe response instead of exposing these rows
+through PostgREST.
 For a summary, that filter is a caller-owned `succeeded` or `deleted` job whose
 `summary_id` matches the requested briefing. This keeps global cache rows
 reusable without exposing their internal columns to browser queries.
@@ -78,6 +83,18 @@ grants live in `supabase/migrations/`; the Python CRUD modules call them.
 | Polar billing | `apply_polar_webhook_event`, `begin_pack_refund`, `reopen_pack_refund`, `refresh_billing_entitlement_snapshot`, `schedule_subscription_reconciliation` | Idempotent ordered events, refund/settlement locking, and rebuildable balance snapshot |
 | PDF | `prepare_summary_pdf`, `complete_summary_pdf`, `fail_summary_pdf` | One renderer per summary/cache version |
 | SSE/maintenance | `claim/renew/release_briefing_stream_lease`, `claim/renew/release_billing_maintenance_lease` | Bounded active streams and one recovery owner across replicas |
+
+Publication safety currently uses database triggers instead of public RPCs. A
+publication must point to its owner's completed job and that job's ready,
+non-empty summary. Users may publish link-only Unlisted pages; a separate
+Talven-only application operation sets the Listed state for Explore. The API
+authorizes it with the deployment operator allowlist described in
+[Security and data access](./security-and-data-access.md#explore-operator-access).
+Archiving or otherwise deactivating the owner job makes its publication private
+and removes it from Explore. Restoring the job does not republish it.
+The database allows only one clear Listed publication per normalized source.
+The first publication write uses an atomic upsert on the owner job, so a safe
+request retry cannot create two rows or fail after another copy succeeds.
 
 Most RPCs are executable only by `service_role`. Triggers create state-change
 events and `NOTIFY` queue wake-ups; callers do not write cursors or lease tokens
@@ -197,4 +214,6 @@ table or RPC. This is easier to remember than learning 17 tables in isolation.
 
 The [security page](./security-and-data-access.md) explains the trust boundary;
 the [system lifecycle](./system-and-job-lifecycle.md) explains when each table
-changes during a briefing.
+changes during a briefing. The
+[query performance and caching page](./query-performance-and-caching.md)
+records the current query shape and the accepted scaling path.

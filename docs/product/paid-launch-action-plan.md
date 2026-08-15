@@ -1,7 +1,7 @@
 # Paid launch action plan
 
 **Status:** Accepted execution plan
-**Last reviewed:** 2026-08-09
+**Last reviewed:** 2026-08-11
 
 This page turns the accepted launch scope into an order of work. It answers
 three practical questions:
@@ -71,6 +71,7 @@ built in order.
 
 ```text
 Copy Markdown
+  -> publication foundation
   -> publish and unpublish
   -> save to my library
   -> curated Explore
@@ -98,7 +99,7 @@ Minimum acceptance criteria:
 - Download Markdown continues to work unchanged.
 - Keyboard and mobile interaction remain accessible.
 
-Implementation status (2026-08-09): implemented locally. Copy and download
+Implementation status (2026-08-11): merged. Copy and download
 share the same export payload, clipboard failures point back to the `.md`
 download, and focused frontend tests cover content preservation, empty content,
 missing clipboard access, and browser rejection.
@@ -111,7 +112,7 @@ Sharing introduces one reusable visibility model:
 | --- | --- |
 | Private | Only the owner can open it. |
 | Unlisted | Anyone with an unguessable link can open it. |
-| Listed | It may also appear in Explore. |
+| Listed | Talven selected it for the curated Explore catalogue. |
 
 Product contract:
 
@@ -121,10 +122,16 @@ Product contract:
   attribution, never account email, billing data, private URLs, or internal
   processing fields.
 - An unlisted URL is unguessable and stable until the owner unpublishes.
+- Anyone with an Unlisted link can read the public page without an account.
+- Sign-in is required only to save it or create a briefing.
+- Users cannot add their own publications to Explore.
 - Unpublish removes public and Explore access without deleting the owner's
   private briefing.
-- Public pages offer Report, Create your own briefing, and later Save to my
-  library actions.
+- Talven never moves a user's Unlisted briefing into Explore without explicit
+  owner consent.
+- Public pages offer Create new briefing and Save to my library.
+- Structured reports remain deferred. The moderation state keeps a direct
+  takedown path available to Talven.
 - Pilot pages remain `noindex` until indexing is deliberately approved.
 
 Minimum acceptance criteria:
@@ -134,7 +141,16 @@ Minimum acceptance criteria:
 - Anonymous, signed-in, owner, non-owner, invalid-slug, and unpublished cases
   have deliberate responses.
 - Social metadata contains only approved public fields.
-- Reporting and takedown have an owner-visible operating path.
+- Talven can block a publication without deleting the underlying briefing.
+
+Implementation status (2026-08-12): implemented in the forward migration
+`20260811120000_add_publication_foundation.sql`. It adds one server-only
+publication record with stable unguessable slugs; Private, Unlisted, and Listed
+visibility; moderation state; and automatic unpublish on owner-job archive.
+There is no admin table, public Explore submission queue, or structured report
+table. The owner commands, anonymous read API, public page, atomic library save,
+curated Explore catalogue, and Listed-only source match are connected to this
+foundation. Referrals are not part of this implementation.
 
 ### 3. Save to my library
 
@@ -150,8 +166,13 @@ Product contract:
 - Ana and Bruno never share account, billing, archive, or library state.
 - Repeated saves are idempotent and do not create duplicates.
 - Bruno may archive or restore his entry without affecting Ana.
+- Archiving Bruno's saved entry removes it only from Bruno's active library;
+  Ana's publication and the public page remain available.
 - If Ana later unpublishes, the public route disappears; an already saved
   private library entry remains available to Bruno.
+- A legal, privacy, or safety takedown is different from normal unpublish. Its
+  removal scope must be decided before public launch and may include saved
+  copies.
 - Ask this episode uses Bruno's question allowance when he asks from his saved
   entry.
 
@@ -172,28 +193,50 @@ a feed of what users are currently processing.
 Product contract:
 
 - Show only ready briefings with Listed visibility.
-- Start with an owner-curated inventory of high-quality briefings.
-- Offer a small set of filters such as topic, language, and channel.
+- Start with a small Talven-curated inventory of high-quality briefings.
+- At launch, use briefings created by Talven. Do not promote a user's Unlisted
+  briefing without explicit owner consent.
+- Do not offer public Explore submissions or a review queue at launch.
+- Start with one controlled topic per briefing and visible topic filters. Add
+  language or channel only when the catalogue needs them.
 - Cards lead to the public briefing and its Save to my library action.
 - Optional attribution uses an explicitly chosen public display name, never an
   email address.
-- Owners can leave Explore while retaining an unlisted link or return fully to
-  Private.
+- Owners can remove their briefing from Explore by returning to Unlisted, or
+  remove all public access by returning to Private.
 - There are no comments, follows, likes, public profiles, or private activity.
 
 Minimum acceptance criteria:
 
 - Private, unlisted, failed, archived-only, and unpublished briefings cannot
   leak into Explore.
-- Curator and owner listing rules are explicit and authorization-protected.
+- Non-operator users cannot set Listed visibility. The backend operator
+  allowlist controls Explore access.
 - Filters are stable, accessible, and have useful empty states.
 - Save from Explore follows the same idempotent, no-minute contract.
-- Report, unlist, and takedown changes are reflected promptly.
+- Unlist and takedown changes are reflected promptly.
+
+When a user submits a source that already has a compatible Listed briefing,
+Talven should offer **Open briefing** and **Save to my library** before creating
+new work. Saving uses no minutes. An Unlisted publication must never be exposed
+through this source lookup because possession of its URL is its discovery
+boundary. This match is strict for launch: Talven does not offer a duplicate
+generation. Add **Create another version** only when users can choose a
+different prompt, format, or model.
+
+Each Listed briefing has one controlled topic: Business, Culture, Finance,
+Health, Life, Productivity, Psychology, Science, Self-improvement, Society, or
+Technology. One source can have only one active Listed publication.
 
 ### 5. Referrals
 
 Referrals attach acquisition to the sharing loop rather than rewarding raw
 signup volume.
+
+Sharing and referrals are separate. A normal public link works without a
+referral. Saving a briefing grants no referral reward. Referral attribution
+starts only when a valid referral code is present, and rewards still require a
+qualifying first paid subscription.
 
 Product contract:
 
@@ -326,10 +369,9 @@ has not occurred.
 
 ## Immediate next action
 
-After merging and manually checking **Copy Markdown**, design the shared
-visibility and ownership model once for publish, unpublish, Save to my library,
-Explore, and referrals. Build those behaviors as one connected sequence rather
-than five unrelated interfaces.
+Apply the forward migration in staging and complete authenticated browser checks
+for publish, unpublish, anonymous read, save, archive, Explore, and source match.
+Then implement referrals as the next connected slice.
 
 Ask this episode receives its own implementation plan and can proceed as a
 separate workstream after the connected ownership contract is stable.

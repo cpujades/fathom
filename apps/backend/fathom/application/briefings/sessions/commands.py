@@ -10,10 +10,11 @@ from fathom.application.briefings.contract import NormalizedSource, normalize_so
 from fathom.application.briefings.sessions.queries import build_session_snapshot, job_has_ready_summary
 from fathom.application.guards import validate_video_duration, validate_youtube_url
 from fathom.application.identity import AuthenticatedUser
+from fathom.application.publications import find_listed_publication_for_source
 from fathom.application.usage import ensure_usage_allowed, record_usage_for_job
 from fathom.core.config import Settings
 from fathom.core.constants import GROQ_TRANSCRIPT_PROVIDER_MODEL, SUMMARY_PROMPT_KEY_EVIDENCE
-from fathom.core.errors import NotFoundError, UsageSettlementError
+from fathom.core.errors import NotFoundError, PublicBriefingAvailableError, UsageSettlementError
 from fathom.core.logging import log_context
 from fathom.crud.supabase.job_events import record_job_event_best_effort
 from fathom.crud.supabase.jobs import (
@@ -121,6 +122,12 @@ async def _create_briefing_session(
                 source=source,
                 resolution_type="reused_ready",
             )
+
+        if await find_listed_publication_for_source(
+            admin_client,
+            source_key=source.source_identity_key,
+        ):
+            raise PublicBriefingAvailableError("This source already has a free briefing in Explore.")
 
         metadata = await fetch_video_metadata_with_deadline(
             source.canonical_url,

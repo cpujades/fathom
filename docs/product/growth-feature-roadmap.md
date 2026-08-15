@@ -49,6 +49,10 @@ OAuth, block conversion, retries, and revocation handling.
 
 ## Current launch-scope decision
 
+Implementation status (2026-08-12): Copy Markdown, Unlisted sharing, Save to my
+library, curated Explore, and Listed-only source matching are implemented in the
+working tree. Referrals and Ask this episode remain separate follow-up slices.
+
 The current candidates are connected, but they are not equal in effort:
 
 | Candidate | Smallest honest version | Main dependency or risk | Launch view |
@@ -162,7 +166,7 @@ phases. The accepted source direction is documented in
 Talven already downloads the generated Markdown. The MVP extends that existing
 path rather than adding an external integration.
 
-Current status (2026-08-09): Copy Markdown is implemented locally using the
+Current status (2026-08-11): Copy Markdown is merged and uses the
 same content as the existing `.md` download. The metadata envelope below
 remains a separate enhancement and is not required for the first clipboard
 slice.
@@ -222,17 +226,22 @@ https://talven.example/b/{public-slug}?ref={referral-code}
 
 - Briefing title, source channel, and source link.
 - Summary, takeaways, and bounded timestamped evidence.
-- “Create your own briefing.”
+- “Create new briefing.”
 - “Save this briefing to my library.”
 - Copy link and native device share.
 - Optional attribution using a user-chosen public display name, never email.
-- Explicit unpublish, report, and takedown actions.
+- Explicit unpublish and takedown actions. A structured reporting flow remains
+  deferred.
 - `noindex` during the pilot; index only after content/privacy review.
 
 “Save to my library” should attach the viewer to an already compatible cached
 briefing without spending minutes or re-running providers. If the cached
 artifact is incompatible with the current prompt/model/evidence contract,
 Talven must regenerate or explain why.
+
+If a submitted source already has a compatible Listed publication, offer the
+existing public briefing and free save before creating work. Never reveal an
+Unlisted publication through source lookup.
 
 ### Social presentation
 
@@ -370,15 +379,18 @@ The first discovery surface contains no comments or forum.
 
 ### Explore MVP
 
-- Only explicitly opted-in or Talven-curated public briefings appear.
-- Filter by source channel, topic, language, recency, and popularity.
+- Start with high-quality briefings created and selected by Talven.
+- Never move a user's unlisted briefing into Explore without explicit consent.
+- Launch with one controlled topic per briefing and visible topic filters. Add
+  channel, language, recency, and popularity filters only when inventory needs
+  them.
 - Show “This episode has already been briefed—read instantly or save it to
   your library.”
 - Reuse compatible cached artifacts without charging minutes.
-- Show optional “Shared by {public display name}” attribution.
-- Allow an owner to remove a briefing from Explore while keeping it unlisted,
-  or make it private again.
-- Include report/takedown and a small admin review queue.
+- Add optional “Shared by {public display name}” attribution only after an
+  explicit public identity choice exists.
+- Provide a simple report or takedown contact path. Add a review queue only if
+  the volume later requires one.
 
 Start with chronological and manually curated sections. Ranking, likes, and
 recommendation algorithms are unnecessary until enough public inventory and

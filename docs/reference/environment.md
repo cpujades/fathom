@@ -111,6 +111,7 @@ the DB connection work.
 | `RATE_LIMIT`             | Base requests per client IP per 60-second window. `0` disables the base limiter for local-only use; hosted modes reject zero. Some expensive operations have stricter limits, while Polar webhooks and `/meta/health` are exempt.                                                                                      |
 | `TRUST_PROXY_HEADERS`    | Whether the API trusts forwarded client-IP/protocol headers from an ingress or reverse proxy. Keep `false` when the API is reached directly.                                                                                                                                                                           |
 | `TRUSTED_PROXY_NETWORKS` | Comma-separated IPs/CIDR ranges of proxies allowed to supply those headers. It must be empty when proxy trust is off and non-empty when it is on.                                                                                                                                                                      |
+| `EXPLORE_OPERATOR_USER_IDS` | Backend-only Supabase Auth UUID allowlist for accounts that may add their own completed briefings to Explore. It accepts one UUID, comma-separated UUIDs, or a JSON string array. Restart the backend after changing it.                                                                                              |
 
 
 The rate limiter uses the client IP. Enabling proxy trust without restricting

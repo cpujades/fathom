@@ -177,7 +177,9 @@ async def fetch_jobs_by_ids(client: AsyncClient, job_ids: list[str]) -> list[dic
         return []
 
     try:
-        response = await client.table("jobs").select("id,summary_id,status").in_("id", job_ids).execute()
+        response = await (
+            client.table("jobs").select("id,summary_id,status,url,duration_seconds").in_("id", job_ids).execute()
+        )
     except APIError as exc:
         raise_for_postgrest_error(exc, "Failed to fetch jobs.")
 

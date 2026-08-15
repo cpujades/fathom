@@ -158,6 +158,126 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/explore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Explore */
+        get: operations["explore_explore_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/publications/source-match": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Match Publication Source */
+        get: operations["match_publication_source_publications_source_match_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/publications/library-entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Read Publication Library Entries */
+        post: operations["read_publication_library_entries_publications_library_entries_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/publications/{public_slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Publication */
+        get: operations["read_publication_publications__public_slug__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/publications/{public_slug}/library-entry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Publication Library Entry */
+        get: operations["read_publication_library_entry_publications__public_slug__library_entry_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/publications/{public_slug}/save": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Save Publication To Library */
+        post: operations["save_publication_to_library_publications__public_slug__save_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/briefing-sessions/{session_id}/publication": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Owner Publication */
+        get: operations["read_owner_publication_briefing_sessions__session_id__publication_get"];
+        put?: never;
+        /** Update Owner Publication */
+        post: operations["update_owner_publication_briefing_sessions__session_id__publication_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/billing/checkout": {
         parameters: {
             query?: never;
@@ -577,6 +697,55 @@ export interface components {
         ErrorResponse: {
             error: components["schemas"]["ErrorDetail"];
         };
+        /** ExploreBriefingItem */
+        ExploreBriefingItem: {
+            /** Public Slug */
+            public_slug: string;
+            /** Public Path */
+            public_path: string;
+            topic: components["schemas"]["ExploreTopic"];
+            /** Title */
+            title: string;
+            /** Author */
+            author?: string | null;
+            /** Source Url */
+            source_url: string;
+            /**
+             * Source Type
+             * @enum {string}
+             */
+            source_type: "youtube" | "url";
+            /** Source Duration Seconds */
+            source_duration_seconds?: number | null;
+            /** Source Thumbnail Url */
+            source_thumbnail_url?: string | null;
+            /**
+             * Listed At
+             * Format: date-time
+             */
+            listed_at: string;
+        };
+        /** ExploreBriefingResponse */
+        ExploreBriefingResponse: {
+            /** Items */
+            items: components["schemas"]["ExploreBriefingItem"][];
+            /** Total Count */
+            total_count: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Has More */
+            has_more: boolean;
+            topic?: components["schemas"]["ExploreTopic"] | null;
+            /** Available Topics */
+            available_topics: components["schemas"]["ExploreTopic"][];
+        };
+        /**
+         * ExploreTopic
+         * @enum {string}
+         */
+        ExploreTopic: "business" | "culture" | "finance" | "health" | "life" | "productivity" | "psychology" | "science" | "self-improvement" | "society" | "technology";
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -668,6 +837,102 @@ export interface components {
             pack_expiry_days: number | null;
             /** Is Active */
             is_active: boolean;
+        };
+        /** PublicBriefingResponse */
+        PublicBriefingResponse: {
+            /** Public Slug */
+            public_slug: string;
+            /** Public Path */
+            public_path: string;
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "unlisted" | "listed";
+            topic?: components["schemas"]["ExploreTopic"] | null;
+            /** Title */
+            title: string;
+            /** Author */
+            author?: string | null;
+            /** Source Url */
+            source_url: string;
+            /**
+             * Source Type
+             * @enum {string}
+             */
+            source_type: "youtube" | "url";
+            /** Source Duration Seconds */
+            source_duration_seconds?: number | null;
+            /** Source Thumbnail Url */
+            source_thumbnail_url?: string | null;
+            /** Markdown */
+            markdown: string;
+            /**
+             * Published At
+             * Format: date-time
+             */
+            published_at: string;
+            /** Listed At */
+            listed_at?: string | null;
+        };
+        /** PublicationLibraryEntriesRequest */
+        PublicationLibraryEntriesRequest: {
+            /** Public Slugs */
+            public_slugs: string[];
+        };
+        /** PublicationLibraryEntriesResponse */
+        PublicationLibraryEntriesResponse: {
+            /** Entries */
+            entries: {
+                [key: string]: components["schemas"]["PublicationLibraryEntryResponse"];
+            };
+        };
+        /** PublicationLibraryEntryResponse */
+        PublicationLibraryEntryResponse: {
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "not_saved" | "processing" | "saved";
+            /** Session Id */
+            session_id?: string | null;
+            /** Session Path */
+            session_path?: string | null;
+        };
+        /** PublicationSourceMatchResponse */
+        PublicationSourceMatchResponse: {
+            match?: components["schemas"]["ExploreBriefingItem"] | null;
+            library_entry?: components["schemas"]["PublicationLibraryEntryResponse"] | null;
+        };
+        /** PublicationStateResponse */
+        PublicationStateResponse: {
+            /** Public Slug */
+            public_slug?: string | null;
+            /** Public Path */
+            public_path?: string | null;
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "private" | "unlisted" | "listed";
+            topic?: components["schemas"]["ExploreTopic"] | null;
+            /** Published At */
+            published_at?: string | null;
+            /** Listed At */
+            listed_at?: string | null;
+            /** Can List */
+            can_list: boolean;
+            /** Available Topics */
+            available_topics: components["schemas"]["ExploreTopic"][];
+        };
+        /** PublicationUpdateRequest */
+        PublicationUpdateRequest: {
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "private" | "unlisted" | "listed";
+            topic?: components["schemas"]["ExploreTopic"] | null;
         };
         /** ReadyResponse */
         ReadyResponse: {
@@ -1278,6 +1543,541 @@ export interface operations {
             };
             /** @description Briefing not found. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Unexpected server error. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Upstream provider failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    explore_explore_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                topic?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExploreBriefingResponse"];
+                };
+            };
+            /** @description Invalid query parameters. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected server error. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Upstream provider failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    match_publication_source_publications_source_match_get: {
+        parameters: {
+            query: {
+                url: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationSourceMatchResponse"];
+                };
+            };
+            /** @description Invalid source URL. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or invalid auth token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Unexpected server error. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Upstream provider failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_publication_library_entries_publications_library_entries_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicationLibraryEntriesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationLibraryEntriesResponse"];
+                };
+            };
+            /** @description Missing or invalid auth token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Invalid public slugs. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected server error. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Upstream provider failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_publication_publications__public_slug__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                public_slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicBriefingResponse"];
+                };
+            };
+            /** @description Public briefing not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Unexpected server error. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Upstream provider failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_publication_library_entry_publications__public_slug__library_entry_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                public_slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationLibraryEntryResponse"];
+                };
+            };
+            /** @description Missing or invalid auth token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Public briefing not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Unexpected server error. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Upstream provider failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    save_publication_to_library_publications__public_slug__save_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                public_slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationLibraryEntryResponse"];
+                };
+            };
+            /** @description Missing or invalid auth token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Public briefing not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Unexpected server error. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Upstream provider failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_owner_publication_briefing_sessions__session_id__publication_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationStateResponse"];
+                };
+            };
+            /** @description Missing or invalid auth token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Briefing not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Unexpected server error. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Upstream provider failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_owner_publication_briefing_sessions__session_id__publication_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicationUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationStateResponse"];
+                };
+            };
+            /** @description Invalid publication state. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or invalid auth token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Publication action is not allowed. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Briefing not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The source is already listed in Explore. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

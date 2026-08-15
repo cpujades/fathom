@@ -75,7 +75,7 @@ class ReadinessTests(unittest.IsolatedAsyncioTestCase):
         selected_tables = [call.args[0] for call in admin_client.table.call_args_list]
         self.assertEqual(
             selected_tables,
-            ["jobs", "summaries", "job_events", "transcript_segments"],
+            ["jobs", "summaries", "job_events", "transcript_segments", "briefing_publications"],
         )
 
     async def test_readiness_fails_when_billing_is_not_configured(self) -> None:

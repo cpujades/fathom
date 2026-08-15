@@ -33,9 +33,9 @@ The browser never talks directly to Groq, OpenRouter, or Polar. It has limited
 read-only access to two RLS-protected database tables (`jobs` and
 `job_events`), but normal product requests still go through the API.
 
-## Why there are 17 application tables
+## Why there are 18 application tables
 
-The 17 tables are the final public application schema after migrations; the
+The 18 tables are the final public application schema after migrations; the
 old Stripe customer table is removed. They do not include Supabase's internal
 Auth or Storage tables. The schema separates records that have different
 owners, lifecycles, security rules, and audit requirements instead of putting
@@ -48,6 +48,7 @@ unrelated mutable data into one large row.
 | `transcript_segments` | Immutable timestamp ranges used as summary evidence |
 | `summaries` | Reusable briefing content and its pending/ready/failed generation ownership |
 | `job_events` | Durable progress history for disconnect and replay recovery |
+| `briefing_publications` | Server-only visibility, stable public slug, Talven-curated Explore listing, and moderation state for one owner job |
 | `plans` | Subscription and pack product definitions |
 | `entitlements` | Current per-user subscription, balance, debt, blocking snapshot, and next targeted provider-audit time |
 | `credit_lots` | Individual subscription-cycle and pack grants, consumption, expiry, and refund state |
