@@ -127,6 +127,7 @@ select has_index(
 );
 select index_is_unique(
   'public',
+  'briefing_publications',
   'briefing_publications_one_listed_source_idx',
   'only one clear Listed publication can represent a source'
 );
