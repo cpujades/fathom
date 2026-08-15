@@ -10,13 +10,13 @@ dependencies = [
   "fastapi==0.141.1",
   "uvicorn==0.52.1",
   "python-dotenv==1.2.2",
-  "openai==2.53.0",
+  "openai==2.54.0",
   "markdown==3.10.3",
   "weasyprint==69.0",
   "pydantic==2.13.4",
   "supabase==2.31.0",
   "pyjwt==2.13.0",
-  "pydantic-settings==2.14.2",
+  "pydantic-settings==2.15.0",
   "asyncpg==0.31.0",
   "typing-extensions==4.16.0",
   "groq>=1.6.0",
@@ -28,11 +28,11 @@ dev = [
   # Local debugging
   "debugpy==1.8.21",
   # Lint/format
-  "ruff==0.16.1",
+  "ruff==0.16.2",
   # Type-checking
   "ty==0.0.63",
   # Git hooks runner
-  "pre-commit==4.6.1",
+  "pre-commit==4.6.2",
   # Build backend: keep executable release build code in uv.lock.
   "hatchling==1.31.0",
   "editables==0.6",
