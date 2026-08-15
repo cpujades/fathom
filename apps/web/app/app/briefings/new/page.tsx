@@ -132,26 +132,6 @@ function BriefingCreatePageContent() {
       try {
         const requestScope = captureAuthenticatedRequestScope(userId);
         const api = createApiClient(accessToken);
-        const matchResponse = await api.GET("/publications/source-match", {
-          params: { query: { url: normalizedUrl } }
-        });
-        assertAuthenticatedRequestScopeCurrent(requestScope);
-        if (matchResponse.error) {
-          setPhase("error");
-          setCreateError({
-            code: getApiErrorCode(matchResponse.error),
-            details: getApiErrorDetails(matchResponse.error),
-            message: getApiErrorMessage(matchResponse.error, "Unable to check existing briefings.")
-          });
-          return;
-        }
-        if (matchResponse.data?.match) {
-          setMatchedPublication(matchResponse.data.match);
-          setMatchedLibraryEntry(matchResponse.data.library_entry ?? null);
-          setPhase("available");
-          return;
-        }
-
         setPhase("creating");
         const { data, error: apiError } = await api.POST("/briefing-sessions", {
           body: {
@@ -162,13 +142,13 @@ function BriefingCreatePageContent() {
 
         if (apiError) {
           if (getApiErrorCode(apiError) === "public_briefing_available") {
-            const retryMatch = await api.GET("/publications/source-match", {
+            const sourceMatch = await api.GET("/publications/source-match", {
               params: { query: { url: normalizedUrl } }
             });
             assertAuthenticatedRequestScopeCurrent(requestScope);
-            if (retryMatch.data?.match) {
-              setMatchedPublication(retryMatch.data.match);
-              setMatchedLibraryEntry(retryMatch.data.library_entry ?? null);
+            if (sourceMatch.data?.match) {
+              setMatchedPublication(sourceMatch.data.match);
+              setMatchedLibraryEntry(sourceMatch.data.library_entry ?? null);
               setPhase("available");
               return;
             }
