@@ -108,12 +108,17 @@ select lives_ok(
   $$,
   'an authenticated update is safely filtered by storage RLS'
 );
-select lives_ok(
-  $$
-    delete from storage.objects
-    where id = 'b1000000-0000-0000-0000-000000000001'
-  $$,
-  'an authenticated delete is safely filtered by storage RLS'
+select is(
+  (
+    select count(*)
+    from pg_catalog.pg_policies
+    where schemaname = 'storage'
+      and tablename = 'objects'
+      and cmd in ('ALL', 'DELETE')
+      and roles && array['public'::name, 'authenticated'::name]
+  ),
+  0::bigint,
+  'authenticated clients have no direct storage delete policy'
 );
 
 reset role;
