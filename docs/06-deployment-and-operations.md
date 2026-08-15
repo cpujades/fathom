@@ -67,8 +67,7 @@ into production.
 
 **Status:** Open. The leading candidate for the first hosted beta is:
 
-- Vercel for the Next.js web application;
-- Railway for the FastAPI API and continuous worker;
+- Railway for the Next.js web application, FastAPI API, and continuous worker;
 - Supabase for Auth, Postgres, and Storage;
 - Resend for transactional SMTP; and
 - Grafana Cloud for operational telemetry.
@@ -80,22 +79,22 @@ deployment and a dated cost estimate.
 
 | Topology | Benefit | Main cost or risk | Use when |
 | --- | --- | --- | --- |
-| Vercel web + Railway API/worker | Native Next.js operations plus one host for both Python processes | Two application hosts and two deployment paths | Default candidate for the beta |
-| Railway web/API/worker | Fewer providers and private networking between application services | Prove Next.js caching, image behavior, rollbacks, and total resource cost | Operational simplicity wins in staging |
+| Railway web/API/worker | One application host and private networking between application services | Prove Next.js caching, image behavior, rollbacks, and total resource cost | Default candidate for the beta |
 | Cloudflare web + Railway API/worker | Edge delivery and a broad global network | Next.js uses the OpenNext adapter; the Python worker still needs another host | Measured edge latency or egress justifies the extra model |
+| Vercel web + Railway API/worker | Specialized Next.js operations plus one host for both Python processes | Two application hosts and two deployment paths | Measured Next.js needs justify the extra host |
 
 Railway supports persistent services, separate build/start commands, private
 service networking, and resource limits. Its cost is usage-based on top of the
-selected plan. Vercel is a strong web host, but Talven's continuous Python
-worker must not depend on an HTTP function staying alive. Cloudflare supports
-Next.js through OpenNext; its documented compatibility gaps and runtime model
-must pass the complete staging journey before selection.
+selected plan. Run the web, API, and worker as three separate Railway services.
+Reconsider Vercel or Cloudflare only when staging evidence shows that their
+specialized Next.js or edge behavior justifies a second application host.
 
 Official decision sources:
 
 - [Railway pricing](https://docs.railway.com/pricing),
   [private networking](https://docs.railway.com/networking/private-networking),
-  and [build/start commands](https://docs.railway.com/builds/build-and-start-commands)
+  [build/start commands](https://docs.railway.com/builds/build-and-start-commands),
+  and [Next.js deployment](https://docs.railway.com/guides/nextjs)
 - [Vercel function duration](https://vercel.com/docs/functions/configuring-functions/duration)
 - [Cloudflare Next.js guide](https://developers.cloudflare.com/workers/framework-guides/web-apps/nextjs/)
 - [Supabase production checklist](https://supabase.com/docs/guides/deployment/going-into-prod),
