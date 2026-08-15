@@ -380,15 +380,15 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/billing/briefings": {
+    "/billing/usage-history": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Get Briefings */
-        get: operations["get_briefings_billing_briefings_get"];
+        /** Get Usage History Entries */
+        get: operations["get_usage_history_entries_billing_usage_history_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -971,21 +971,39 @@ export interface components {
         };
         /** UsageHistoryEntry */
         UsageHistoryEntry: {
-            /** Job Id */
-            job_id: string | null;
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
             /** Title */
             title?: string | null;
-            /** Seconds Used */
-            seconds_used: number;
-            /** Source */
-            source: string;
+            /** Duration Seconds */
+            duration_seconds: number;
+            /** Subscription Seconds */
+            subscription_seconds: number;
+            /** Pack Seconds */
+            pack_seconds: number;
+            /** Debt Incurred Seconds */
+            debt_incurred_seconds: number;
             /**
-             * Created At
+             * Settled At
              * Format: date-time
              */
-            created_at: string;
+            settled_at: string;
             /** Session Path */
             session_path?: string | null;
+        };
+        /** UsageHistoryResponse */
+        UsageHistoryResponse: {
+            /** Items */
+            items: components["schemas"]["UsageHistoryEntry"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Has More */
+            has_more: boolean;
         };
         /** UsageOverviewResponse */
         UsageOverviewResponse: {
@@ -1584,7 +1602,7 @@ export interface operations {
             query?: {
                 limit?: number;
                 offset?: number;
-                topic?: string | null;
+                topic?: components["schemas"]["ExploreTopic"] | null;
             };
             header?: never;
             path?: never;
@@ -2440,9 +2458,12 @@ export interface operations {
             };
         };
     };
-    get_briefings_billing_briefings_get: {
+    get_usage_history_entries_billing_usage_history_get: {
         parameters: {
-            query?: never;
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -2455,11 +2476,20 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["UsageHistoryEntry"][];
+                    "application/json": components["schemas"]["UsageHistoryResponse"];
                 };
             };
             /** @description Missing or invalid auth token. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Invalid query parameters. */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

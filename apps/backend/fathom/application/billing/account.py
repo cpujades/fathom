@@ -87,7 +87,7 @@ async def _get_billing_account(admin_client: Any, auth: AuthenticatedUser) -> Bi
         lot = pack_lots.get(polar_order_id)
         granted_seconds = int(lot.get("granted_seconds") or 0) if lot else 0
         consumed_seconds = int(lot.get("consumed_seconds") or 0) if lot else 0
-        expires_at = parse_dt(lot.get("pack_expires_at")) if lot else None
+        expires_at = parse_dt(lot.get("expires_at")) if lot else None
         remaining_seconds = 0
         if lot and (not expires_at or expires_at > now):
             remaining_seconds = remaining_seconds_from_lot(lot)

@@ -4,6 +4,14 @@ set local search_path = extensions, public, pg_catalog;
 
 select plan(49);
 
+insert into auth.users (id)
+values
+  ('d4000000-0000-0000-0000-000000000001'),
+  ('d4000000-0000-0000-0000-000000000002'),
+  ('d4000000-0000-0000-0000-000000000003'),
+  ('d4000000-0000-0000-0000-000000000004'),
+  ('d4000000-0000-0000-0000-000000000005');
+
 select has_table(
   'public',
   'briefing_publications',
@@ -153,7 +161,6 @@ insert into public.summaries (
   prompt_key,
   summary_model,
   summary_markdown,
-  user_id,
   status,
   status_updated_at,
   ready_at
@@ -165,7 +172,6 @@ values
     'publication-v1',
     'openrouter:test',
     '# Publication one',
-    'd4000000-0000-0000-0000-000000000001',
     'ready',
     pg_catalog.now(),
     pg_catalog.now()
@@ -176,7 +182,6 @@ values
     'publication-v2',
     'openrouter:test',
     '# Publication two',
-    'd4000000-0000-0000-0000-000000000001',
     'ready',
     pg_catalog.now(),
     pg_catalog.now()

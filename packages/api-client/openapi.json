@@ -789,9 +789,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 48
+                  "$ref": "#/components/schemas/ExploreTopic"
                 },
                 {
                   "type": "null"
@@ -1894,30 +1892,66 @@
         ]
       }
     },
-    "/billing/briefings": {
+    "/billing/usage-history": {
       "get": {
         "tags": [
           "billing"
         ],
-        "summary": "Get Briefings",
-        "operationId": "get_briefings_billing_briefings_get",
+        "summary": "Get Usage History Entries",
+        "operationId": "get_usage_history_entries_billing_usage_history_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 10,
+              "minimum": 1,
+              "default": 10,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/UsageHistoryEntry"
-                  },
-                  "type": "array",
-                  "title": "Response Get Briefings Billing Briefings Get"
+                  "$ref": "#/components/schemas/UsageHistoryResponse"
                 }
               }
             }
           },
           "401": {
             "description": "Missing or invalid auth token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid query parameters.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1936,12 +1970,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
+        }
       }
     },
     "/billing/account": {
@@ -3617,15 +3646,8 @@
       "UsageHistoryEntry": {
         "properties": {
           "job_id": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "uuid"
-              },
-              {
-                "type": "null"
-              }
-            ],
+            "type": "string",
+            "format": "uuid",
             "title": "Job Id"
           },
           "title": {
@@ -3639,18 +3661,26 @@
             ],
             "title": "Title"
           },
-          "seconds_used": {
+          "duration_seconds": {
             "type": "integer",
-            "title": "Seconds Used"
+            "title": "Duration Seconds"
           },
-          "source": {
-            "type": "string",
-            "title": "Source"
+          "subscription_seconds": {
+            "type": "integer",
+            "title": "Subscription Seconds"
           },
-          "created_at": {
+          "pack_seconds": {
+            "type": "integer",
+            "title": "Pack Seconds"
+          },
+          "debt_incurred_seconds": {
+            "type": "integer",
+            "title": "Debt Incurred Seconds"
+          },
+          "settled_at": {
             "type": "string",
             "format": "date-time",
-            "title": "Created At"
+            "title": "Settled At"
           },
           "session_path": {
             "anyOf": [
@@ -3667,11 +3697,44 @@
         "type": "object",
         "required": [
           "job_id",
-          "seconds_used",
-          "source",
-          "created_at"
+          "duration_seconds",
+          "subscription_seconds",
+          "pack_seconds",
+          "debt_incurred_seconds",
+          "settled_at"
         ],
         "title": "UsageHistoryEntry"
+      },
+      "UsageHistoryResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/UsageHistoryEntry"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          },
+          "has_more": {
+            "type": "boolean",
+            "title": "Has More"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "limit",
+          "offset",
+          "has_more"
+        ],
+        "title": "UsageHistoryResponse"
       },
       "UsageOverviewResponse": {
         "properties": {

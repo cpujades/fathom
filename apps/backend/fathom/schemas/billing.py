@@ -64,12 +64,21 @@ class UsageOverviewResponse(BaseModel):
 
 
 class UsageHistoryEntry(BaseModel):
-    job_id: UUID | None
+    job_id: UUID
     title: str | None = None
-    seconds_used: int
-    source: str
-    created_at: datetime
+    duration_seconds: int
+    subscription_seconds: int
+    pack_seconds: int
+    debt_incurred_seconds: int
+    settled_at: datetime
     session_path: str | None = None
+
+
+class UsageHistoryResponse(BaseModel):
+    items: list[UsageHistoryEntry]
+    limit: int
+    offset: int
+    has_more: bool
 
 
 class SubscriptionBillingState(BaseModel):

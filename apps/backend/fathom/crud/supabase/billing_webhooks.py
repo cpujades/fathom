@@ -18,8 +18,6 @@ async def upsert_polar_customer(
     user_id: str,
     external_customer_id: str,
     polar_customer_id: str | None = None,
-    email: str | None = None,
-    country: str | None = None,
 ) -> None:
     payload: dict[str, Any] = {
         "user_id": user_id,
@@ -27,10 +25,6 @@ async def upsert_polar_customer(
     }
     if polar_customer_id:
         payload["polar_customer_id"] = polar_customer_id
-    if email is not None:
-        payload["email"] = email
-    if country is not None:
-        payload["country"] = country
 
     try:
         await client.table("polar_customers").upsert(payload, on_conflict="user_id").execute()

@@ -1,7 +1,34 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { applyPendingRefundHold, getDisplayedPacks } from "./billingPresentation.ts";
+import {
+  applyPendingRefundHold,
+  getDisplayedPacks,
+  getUsageBreakdown,
+  mergeUsageHistoryEntries
+} from "./billingPresentation.ts";
+
+test("usage history shows the exact non-zero settlement sources", () => {
+  assert.deepEqual(
+    getUsageBreakdown({
+      subscription_seconds: 100,
+      pack_seconds: 80,
+      debt_incurred_seconds: 20
+    }),
+    [
+      { label: "Subscription", seconds: 100 },
+      { label: "Pack", seconds: 80 },
+      { label: "Debt", seconds: 20 }
+    ]
+  );
+});
+
+test("usage history pagination does not duplicate a settlement after a repeated page", () => {
+  const first = { job_id: "job-1", title: "First" };
+  const second = { job_id: "job-2", title: "Second" };
+
+  assert.deepEqual(mergeUsageHistoryEntries([first], [first, second]), [first, second]);
+});
 
 test("a pending refund immediately removes held pack time from the usable balance", () => {
   const usage = {

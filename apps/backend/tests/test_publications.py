@@ -6,8 +6,11 @@ from typing import cast
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 from uuid import UUID
 
+from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
 from postgrest import APIError
 
+from fathom.api.routers.publications import router as publications_router
 from fathom.application.identity import AuthenticatedUser
 from fathom.application.publications import (
     _uses_current_generation_contract,
@@ -20,7 +23,7 @@ from fathom.application.publications import (
     save_public_briefing,
     set_owner_publication,
 )
-from fathom.core.config import Settings
+from fathom.core.config import Settings, get_settings
 from fathom.core.constants import GROQ_TRANSCRIPT_PROVIDER_MODEL, SUMMARY_PROMPT_KEY_EVIDENCE
 from fathom.core.errors import ConflictError, ForbiddenError
 from fathom.crud.supabase.publications import create_publication
@@ -52,6 +55,16 @@ class PublicationTests(unittest.IsolatedAsyncioTestCase):
             PublicationUpdateRequest(visibility="listed", topic="anything")
         with self.assertRaises(ValueError):
             PublicationLibraryEntriesRequest(public_slugs=["not-a-slug"])
+
+    async def test_explore_rejects_an_unknown_topic(self) -> None:
+        app = FastAPI()
+        app.include_router(publications_router)
+        app.dependency_overrides[get_settings] = _settings
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://localhost") as client:
+            response = await client.get("/explore", params={"topic": "anything"})
+
+        self.assertEqual(response.status_code, 422)
 
     def test_current_generation_contract_requires_all_three_cache_keys(self) -> None:
         summary = {

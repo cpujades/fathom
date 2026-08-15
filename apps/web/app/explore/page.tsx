@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { createApiClient } from "@fathom/api-client";
+import { createApiClient, type ExploreTopic } from "@fathom/api-client";
 
 import { PublicHeader } from "../components/PublicHeader";
 import { formatExploreTopic } from "../lib/format";
 import { ExploreGrid } from "./ExploreGrid";
+import { isUnknownExploreTopicResponse } from "./exploreResponse";
 import styles from "./explore.module.css";
 
 export const dynamic = "force-dynamic";
@@ -23,12 +24,31 @@ type ExplorePageProps = {
 export default async function ExplorePage({ searchParams }: ExplorePageProps) {
   const params = await searchParams;
   const topicValue = Array.isArray(params.topic) ? params.topic[0] : params.topic;
-  const topic = topicValue?.trim() || undefined;
+  // This value is untrusted. The API validates it against ExploreTopic and
+  // returns 422 for unknown values.
+  const topic = (topicValue?.trim() || undefined) as ExploreTopic | undefined;
   const api = createApiClient();
-  const { data, error } = await api.GET("/explore", {
+  const { data, error, response } = await api.GET("/explore", {
     params: { query: { limit: 48, offset: 0, topic: topic ?? null } },
     cache: "no-store"
   });
+  if (isUnknownExploreTopicResponse(response.status, topic)) {
+    return (
+      <div className={styles.page}>
+        <PublicHeader />
+        <main id="main-content" className={styles.main}>
+          <header className={styles.hero}>
+            <p>Explore</p>
+            <h1>This topic does not exist.</h1>
+            <div className={styles.heroBottom}>
+              <span>The link may be outdated or misspelled. Open Explore to choose an available topic.</span>
+              <Link href="/explore">View all topics</Link>
+            </div>
+          </header>
+        </main>
+      </div>
+    );
+  }
   if (error || !data) throw new Error("Unable to load Explore.");
   const selectedTopic = data.topic;
 

@@ -4,6 +4,11 @@ set local search_path = extensions, public, pg_catalog;
 
 select plan(25);
 
+insert into auth.users (id)
+values
+  ('c3000000-0000-0000-0000-000000000001'),
+  ('c3000000-0000-0000-0000-000000000002');
+
 select is(
   (
     select pg_catalog.count(*)
@@ -17,7 +22,6 @@ select is(
         'transcripts',
         'plans',
         'entitlements',
-        'usage_ledger',
         'polar_customers',
         'billing_webhook_events',
         'billing_sync_operations',
@@ -33,7 +37,7 @@ select is(
       )
       and pg_class.relrowsecurity
   ),
-  18::bigint,
+  17::bigint,
   'every application table has row-level security enabled'
 );
 
@@ -47,7 +51,6 @@ select is(
         ('transcripts'),
         ('plans'),
         ('entitlements'),
-        ('usage_ledger'),
         ('polar_customers'),
         ('billing_webhook_events'),
         ('billing_sync_operations'),
@@ -102,7 +105,6 @@ select is(
         ('transcripts'),
         ('plans'),
         ('entitlements'),
-        ('usage_ledger'),
         ('polar_customers'),
         ('billing_webhook_events'),
         ('billing_sync_operations'),
@@ -134,7 +136,6 @@ select is(
         ('transcripts'),
         ('plans'),
         ('entitlements'),
-        ('usage_ledger'),
         ('polar_customers'),
         ('billing_webhook_events'),
         ('billing_sync_operations'),
@@ -280,7 +281,6 @@ insert into public.summaries (
   prompt_key,
   summary_model,
   summary_markdown,
-  user_id,
   status,
   status_updated_at,
   ready_at
@@ -291,7 +291,6 @@ values (
   'briefing-v6-evidence-links',
   'openrouter:test',
   '# Settled briefing',
-  'c3000000-0000-0000-0000-000000000001',
   'ready',
   pg_catalog.now(),
   pg_catalog.now()
@@ -339,7 +338,7 @@ select is(
 
 select throws_ok(
   $$
-    select id, user_id, transcript_id, summary_markdown,
+    select id, transcript_id, summary_markdown,
            pdf_object_key, pdf_cache_version, status_updated_at
     from public.summaries
     where id = 'c2000000-0000-0000-0000-000000000001'

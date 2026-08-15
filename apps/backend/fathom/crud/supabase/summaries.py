@@ -36,7 +36,7 @@ class PdfPreparation:
 def _summary_select_query(client: AsyncClient) -> Any:
     """Return the base summaries select query with the fields we need."""
     return client.table("summaries").select(
-        "id,user_id,transcript_id,summary_markdown,pdf_object_key,pdf_cache_version,"
+        "id,transcript_id,summary_markdown,pdf_object_key,pdf_cache_version,"
         "status,prompt_key,summary_model,status_updated_at,ready_at,failed_at"
     )
 

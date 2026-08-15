@@ -12,7 +12,7 @@ from supabase import AsyncClient
 
 LOT_SELECT_FIELDS = (
     "id,user_id,plan_id,lot_type,source_key,granted_seconds,consumed_seconds,revoked_seconds,"
-    "pack_expires_at,status,created_at,updated_at"
+    "expires_at,status,created_at,updated_at"
 )
 
 
@@ -49,7 +49,7 @@ async def upsert_credit_lot(
     lot_type: str,
     source_key: str,
     granted_seconds: int,
-    pack_expires_at: datetime | None,
+    expires_at: datetime | None,
     status: str = "active",
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
@@ -58,7 +58,7 @@ async def upsert_credit_lot(
         "lot_type": lot_type,
         "source_key": source_key,
         "granted_seconds": granted_seconds,
-        "pack_expires_at": pack_expires_at.isoformat() if pack_expires_at else None,
+        "expires_at": expires_at.isoformat() if expires_at else None,
         "status": status,
     }
 
@@ -181,7 +181,7 @@ async def consume_credit_lot_by_id(
         if not lot or str(lot.get("status") or "") != "active":
             return 0
 
-        expiry = _parse_timestamp(lot.get("pack_expires_at"))
+        expiry = _parse_timestamp(lot.get("expires_at"))
         if expiry and expiry <= now:
             consumed = int(lot.get("consumed_seconds") or 0)
             revoked = int(lot.get("revoked_seconds") or 0)
@@ -246,7 +246,7 @@ async def summarize_credit_lots(
             .eq("user_id", user_id)
             .eq("status", "active")
             .in_("lot_type", ["subscription_cycle", "pack_order"])
-            .order("pack_expires_at", desc=False)
+            .order("expires_at", desc=False)
             .order("created_at", desc=False)
             .execute()
         )
@@ -266,7 +266,7 @@ async def summarize_credit_lots(
     next_pack_expiry: datetime | None = None
 
     for row in rows:
-        expiry = _parse_timestamp(row.get("pack_expires_at"))
+        expiry = _parse_timestamp(row.get("expires_at"))
         if expiry and expiry <= now:
             await update_credit_lot(client, lot_id=str(row["id"]), values={"status": "expired"})
             continue

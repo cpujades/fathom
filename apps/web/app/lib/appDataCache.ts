@@ -2,6 +2,7 @@ import type {
   BillingAccountResponse,
   BriefingSessionResponse,
   PlanResponse,
+  UsageHistoryEntry,
   UsageOverviewResponse
 } from "@fathom/api-client";
 import { createApiClient } from "@fathom/api-client";
@@ -13,6 +14,7 @@ import {
   AuthenticatedDataScopeController,
   type AuthenticatedRequestScope
 } from "./authenticatedDataScope";
+import { loadOptionalUsageHistory } from "./optionalUsageHistory";
 
 export { AuthenticatedDataScopeChangedError } from "./authenticatedDataScope";
 export type { AuthenticatedRequestScope } from "./authenticatedDataScope";
@@ -20,8 +22,13 @@ export type { AuthenticatedRequestScope } from "./authenticatedDataScope";
 export type BillingSnapshot = {
   accountData: BillingAccountResponse | null;
   plansData: PlanResponse[];
+  usageHistoryData: UsageHistoryEntry[];
+  usageHistoryHasMore: boolean;
+  usageHistoryUnavailable: boolean;
   usageData: UsageOverviewResponse | null;
 };
+
+export const USAGE_HISTORY_PAGE_SIZE = 10;
 
 export type UsageSnapshot = {
   debtSeconds: number | null;
@@ -343,8 +350,18 @@ export async function loadBillingSnapshot(
       const [
         { data: plansData, error: plansError },
         { data: usageData, error: usageError },
-        { data: accountData, error: accountError }
-      ] = await Promise.all([api.GET("/billing/plans"), api.GET("/billing/usage"), api.GET("/billing/account")]);
+        { data: accountData, error: accountError },
+        usageHistory
+      ] = await Promise.all([
+        api.GET("/billing/plans"),
+        api.GET("/billing/usage"),
+        api.GET("/billing/account"),
+        loadOptionalUsageHistory(
+          api.GET("/billing/usage-history", {
+            params: { query: { limit: USAGE_HISTORY_PAGE_SIZE, offset: 0 } }
+          })
+        )
+      ]);
 
       assertAuthenticatedRequestScopeCurrent(scope);
       if (plansError) {
@@ -356,11 +373,13 @@ export async function loadBillingSnapshot(
       if (accountError) {
         throw accountError;
       }
-
       const snapshot = {
         plansData: plansData ?? [],
         usageData: usageData ?? null,
-        accountData: accountData ?? null
+        accountData: accountData ?? null,
+        usageHistoryData: usageHistory.data?.items ?? [],
+        usageHistoryHasMore: usageHistory.data?.has_more ?? false,
+        usageHistoryUnavailable: usageHistory.unavailable
       };
 
       billingCache = {

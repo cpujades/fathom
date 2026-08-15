@@ -4,6 +4,12 @@ set local search_path = extensions, public, pg_catalog;
 
 select plan(47);
 
+insert into auth.users (id)
+values
+  ('72000000-0000-0000-0000-000000000001'),
+  ('72000000-0000-0000-0000-000000000002'),
+  ('72000000-0000-0000-0000-000000000003');
+
 select is(
   case
     when pg_catalog.btrim(markdown) <> '' and has_completed_job then 'ready'
@@ -515,7 +521,6 @@ select throws_ok(
   $$
     insert into public.summaries (
       id,
-      user_id,
       transcript_id,
       prompt_key,
       summary_model,
@@ -526,7 +531,6 @@ select throws_ok(
     )
     values (
       '74000000-0000-0000-0000-000000000007',
-      '72000000-0000-0000-0000-000000000001',
       '70000000-0000-0000-0000-000000000003',
       'default',
       'test-model',

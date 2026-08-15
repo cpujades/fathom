@@ -22,6 +22,7 @@ from fathom.core.config import Settings, get_settings
 from fathom.schemas.errors import ErrorResponse
 from fathom.schemas.publications import (
     ExploreBriefingResponse,
+    ExploreTopic,
     PublicationLibraryEntriesRequest,
     PublicationLibraryEntriesResponse,
     PublicationLibraryEntryResponse,
@@ -49,7 +50,7 @@ async def explore(
     settings: Annotated[Settings, Depends(get_settings)],
     limit: Annotated[int, Query(ge=1, le=100)] = 24,
     offset: Annotated[int, Query(ge=0)] = 0,
-    topic: Annotated[str | None, Query(min_length=1, max_length=48)] = None,
+    topic: Annotated[ExploreTopic | None, Query()] = None,
 ) -> ExploreBriefingResponse:
     return await list_explore_briefings(
         settings=settings,

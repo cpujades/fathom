@@ -229,7 +229,6 @@ def serialize_job_timeline(timeline: JobTimeline) -> dict[str, Any]:
         job.pop("url", None)
     summary = snapshot.get("summary")
     if isinstance(summary, dict):
-        summary.pop("user_id", None)
         summary.pop("summary_markdown", None)
         summary.pop("pdf_object_key", None)
         summary["markdown_chars"] = timeline.summary.markdown_chars if timeline.summary else 0

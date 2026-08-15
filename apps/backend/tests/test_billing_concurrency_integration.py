@@ -26,6 +26,8 @@ class BillingConcurrencyIntegrationTests(unittest.IsolatedAsyncioTestCase):
         await self._cleanup()
         await self.connection.execute(
             f"""
+            insert into auth.users (id) values ('{USER_ID}');
+
             insert into public.transcripts (
               id, url_hash, video_id, transcript_text, provider_model
             )
@@ -38,12 +40,11 @@ class BillingConcurrencyIntegrationTests(unittest.IsolatedAsyncioTestCase):
             );
 
             insert into public.summaries (
-              id, user_id, transcript_id, prompt_key, summary_model,
+              id, transcript_id, prompt_key, summary_model,
               summary_markdown, status, status_updated_at, ready_at
             )
             values (
               '{SUMMARY_ID}',
-              '{USER_ID}',
               '{TRANSCRIPT_ID}',
               'billing-refund-concurrency',
               'test-model',
@@ -66,7 +67,7 @@ class BillingConcurrencyIntegrationTests(unittest.IsolatedAsyncioTestCase):
 
             insert into public.credit_lots (
               id, user_id, lot_type, source_key, granted_seconds,
-              pack_expires_at, status
+              expires_at, status
             )
             values (
               '{LOT_ID}',
@@ -111,7 +112,6 @@ class BillingConcurrencyIntegrationTests(unittest.IsolatedAsyncioTestCase):
             f"""
             delete from public.billing_maintenance_leases
             where lease_name = 'billing-concurrency-test';
-            delete from public.usage_ledger where job_id = '{JOB_ID}';
             delete from public.usage_settlements where job_id = '{JOB_ID}';
             delete from public.jobs where id = '{JOB_ID}';
             delete from public.credit_lots where id = '{LOT_ID}';
@@ -119,6 +119,7 @@ class BillingConcurrencyIntegrationTests(unittest.IsolatedAsyncioTestCase):
             delete from public.entitlements where user_id = '{USER_ID}';
             delete from public.summaries where id = '{SUMMARY_ID}';
             delete from public.transcripts where id = '{TRANSCRIPT_ID}';
+            delete from auth.users where id = '{USER_ID}';
             """
         )
 

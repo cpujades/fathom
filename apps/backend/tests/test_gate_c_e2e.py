@@ -281,9 +281,21 @@ class AuthenticatedGateCE2ETests(unittest.IsolatedAsyncioTestCase):
         plans = await api.get("/billing/plans")
         self.assertEqual(plans.status_code, 200)
         self.assertTrue(any(plan["polar_product_id"] == "internal_free" for plan in plans.json()))
-        usage_history = await api.get("/billing/briefings")
+        usage_history = await api.get("/billing/usage-history?limit=10&offset=0")
         self.assertEqual(usage_history.status_code, 200)
-        self.assertEqual(len(usage_history.json()), 2)
+        usage_history_page = usage_history.json()
+        self.assertEqual(len(usage_history_page["items"]), 2)
+        self.assertEqual(usage_history_page["limit"], 10)
+        self.assertEqual(usage_history_page["offset"], 0)
+        self.assertFalse(usage_history_page["has_more"])
+        self.assertTrue(all(entry["duration_seconds"] == 120 for entry in usage_history_page["items"]))
+        self.assertTrue(
+            all(
+                entry["subscription_seconds"] + entry["pack_seconds"] + entry["debt_incurred_seconds"]
+                == entry["duration_seconds"]
+                for entry in usage_history_page["items"]
+            )
+        )
 
         connection = self._connection()
         settlement_rows = await connection.fetch(
@@ -504,10 +516,11 @@ class AuthenticatedGateCE2ETests(unittest.IsolatedAsyncioTestCase):
             return
         rows = await self.connection.fetch(
             """
-            select pdf_object_key
-            from public.summaries
-            where user_id = $1
-              and pdf_object_key is not null
+            select distinct summaries.pdf_object_key
+            from public.jobs as jobs
+            join public.summaries as summaries on summaries.id = jobs.summary_id
+            where jobs.user_id = $1
+              and summaries.pdf_object_key is not null
             """,
             uuid.UUID(self.user_id) if self.user_id else uuid.UUID(int=0),
         )
@@ -520,13 +533,7 @@ class AuthenticatedGateCE2ETests(unittest.IsolatedAsyncioTestCase):
             return
         user_id = uuid.UUID(self.user_id) if self.user_id else uuid.UUID(int=0)
         statements: tuple[tuple[str, tuple[Any, ...]], ...] = (
-            ("delete from public.usage_ledger where user_id = $1", (user_id,)),
-            (
-                "delete from public.usage_settlements where user_id = $1",
-                (user_id,),
-            ),
             ("delete from public.jobs where user_id = $1", (user_id,)),
-            ("delete from public.summaries where user_id = $1", (user_id,)),
             (
                 "delete from public.transcripts where video_id = any($1::text[])",
                 (list(self.test_video_ids),),

@@ -25,6 +25,7 @@ type PublicationLibraryEntryResponse = components["schemas"]["PublicationLibrary
 type PlanResponse = components["schemas"]["PlanResponse"];
 type UsageOverviewResponse = components["schemas"]["UsageOverviewResponse"];
 type UsageHistoryEntry = components["schemas"]["UsageHistoryEntry"];
+type UsageHistoryResponse = components["schemas"]["UsageHistoryResponse"];
 type BillingAccountResponse = components["schemas"]["BillingAccountResponse"];
 type BillingOrderHistoryEntry = components["schemas"]["BillingOrderHistoryEntry"];
 type PackBillingState = components["schemas"]["PackBillingState"];
@@ -75,5 +76,6 @@ export type {
   PackBillingState,
   SubscriptionBillingState,
   UsageOverviewResponse,
-  UsageHistoryEntry
+  UsageHistoryEntry,
+  UsageHistoryResponse
 };

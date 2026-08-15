@@ -204,6 +204,7 @@ async def fetch_briefing_jobs_page(
             .eq("user_id", user_id)
             .in_("status", ["queued", "running", "succeeded", "failed"])
             .order("created_at", desc=sort_desc)
+            .order("id", desc=sort_desc)
             .range(offset, max(offset + limit - 1, offset))
             .execute()
         )

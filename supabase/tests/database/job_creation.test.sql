@@ -4,6 +4,13 @@ set local search_path = extensions, public, pg_catalog;
 
 select plan(48);
 
+insert into auth.users (id)
+values
+  ('40000000-0000-0000-0000-000000000001'),
+  ('40000000-0000-0000-0000-000000000002'),
+  ('40000000-0000-0000-0000-000000000003'),
+  ('40000000-0000-0000-0000-000000000004');
+
 select col_not_null(
   'public',
   'jobs',
@@ -182,7 +189,6 @@ values (
 
 insert into public.summaries (
   id,
-  user_id,
   transcript_id,
   prompt_key,
   summary_model,
@@ -193,7 +199,6 @@ insert into public.summaries (
 )
 values (
   '60000000-0000-0000-0000-000000000001',
-  '40000000-0000-0000-0000-000000000001',
   '50000000-0000-0000-0000-000000000001',
   'default',
   'test-model',
@@ -329,7 +334,6 @@ select throws_ok(
 
 insert into public.summaries (
   id,
-  user_id,
   transcript_id,
   prompt_key,
   summary_model,
@@ -340,7 +344,6 @@ insert into public.summaries (
 )
 values (
   '60000000-0000-0000-0000-000000000002',
-  '40000000-0000-0000-0000-000000000003',
   '50000000-0000-0000-0000-000000000001',
   'failed-test',
   'test-model',

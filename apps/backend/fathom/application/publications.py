@@ -125,15 +125,14 @@ async def list_explore_briefings(
     settings: Settings,
     limit: int,
     offset: int,
-    topic: str | None,
+    topic: ExploreTopic | None,
 ) -> ExploreBriefingResponse:
-    normalized_topic = _parse_explore_topic(topic)
     async with managed_supabase_client(await create_supabase_admin_client(settings)) as admin_client:
         publications, total_count = await fetch_listed_publications_page(
             admin_client,
             limit=limit,
             offset=offset,
-            topic=normalized_topic.value if normalized_topic else None,
+            topic=topic.value if topic else None,
         )
         items = await _build_explore_items(admin_client, publications)
     return ExploreBriefingResponse(
@@ -142,7 +141,7 @@ async def list_explore_briefings(
         limit=limit,
         offset=offset,
         has_more=offset + len(items) < total_count,
-        topic=normalized_topic,
+        topic=topic,
         available_topics=list(ExploreTopic),
     )
 
@@ -441,16 +440,6 @@ def _normalize_topic(topic: str | None) -> str | None:
         return None
     normalized = "-".join(topic.lower().split()).strip("-")
     return normalized or None
-
-
-def _parse_explore_topic(topic: str | None) -> ExploreTopic | None:
-    normalized = _normalize_topic(topic)
-    if normalized is None:
-        return None
-    try:
-        return ExploreTopic(normalized)
-    except ValueError:
-        return None
 
 
 def _library_entries_by_source(jobs: list[dict[str, Any]]) -> dict[str, PublicationLibraryEntryResponse]:

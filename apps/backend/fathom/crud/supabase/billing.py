@@ -42,7 +42,7 @@ from fathom.crud.supabase.billing_recovery import (
     renew_billing_maintenance_lease,
     reopen_pack_refund,
 )
-from fathom.crud.supabase.billing_usage import fetch_usage_history, settle_job_usage
+from fathom.crud.supabase.billing_usage import fetch_usage_settlements, settle_job_usage
 from fathom.crud.supabase.billing_webhooks import (
     apply_polar_webhook_transaction,
     reclaim_stale_webhook_processing,
@@ -66,7 +66,7 @@ __all__ = [
     "fetch_plan_by_product_id",
     "fetch_plan_names_by_ids",
     "fetch_polar_order_ids_refund_pending",
-    "fetch_usage_history",
+    "fetch_usage_settlements",
     "get_billing_webhook_diagnostics",
     "list_billing_orders_for_user",
     "list_refund_pending_pack_orders",

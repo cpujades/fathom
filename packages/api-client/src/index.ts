@@ -36,5 +36,6 @@ export type {
   PackBillingState,
   SubscriptionBillingState,
   UsageOverviewResponse,
-  UsageHistoryEntry
+  UsageHistoryEntry,
+  UsageHistoryResponse
 } from "./types";

@@ -222,7 +222,12 @@ async def fetch_listed_publications_page(
         )
         if topic:
             query = query.eq("topic", topic)
-        response = await query.order("listed_at", desc=True).range(offset, max(offset + limit - 1, offset)).execute()
+        response = (
+            await query.order("listed_at", desc=True)
+            .order("id", desc=True)
+            .range(offset, max(offset + limit - 1, offset))
+            .execute()
+        )
     except APIError as exc:
         raise_for_postgrest_error(exc, "Failed to fetch Explore briefings.")
 
