@@ -101,7 +101,6 @@ class JobTimelineFormattingTests(unittest.TestCase):
                 },
                 "summary": {
                     "id": "summary-3",
-                    "user_id": "user-private",
                     "summary_markdown": "private generated briefing",
                     "pdf_object_key": "private/object.pdf",
                 },
@@ -112,7 +111,6 @@ class JobTimelineFormattingTests(unittest.TestCase):
 
         self.assertNotIn("user_id", snapshot["job"])
         self.assertNotIn("url", snapshot["job"])
-        self.assertNotIn("user_id", snapshot["summary"])
         self.assertNotIn("summary_markdown", snapshot["summary"])
         self.assertNotIn("pdf_object_key", snapshot["summary"])
         self.assertEqual(snapshot["summary"]["markdown_chars"], 26)

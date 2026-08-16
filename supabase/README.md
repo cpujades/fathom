@@ -1,100 +1,81 @@
-## Supabase workflow
+# Supabase workflow
 
 This folder is the source of truth for database schema changes.
 
-For the application owner’s explanation of the resulting tables, foreign keys,
-RLS boundary, server RPCs, and Python CRUD modules, see
-`../docs/architecture/database-and-persistence.md`.
+Read:
 
-For the end-to-end explanation of local Supabase, disposable PR CI, hosted
-staging, controlled production promotion, connection modes, and backup scope,
-see `../docs/runbooks/supabase-environments-and-migrations.md`.
+- [Data model reference](../docs/reference/data-model.md) for tables, RLS, and
+  RPC ownership.
+- [Development](../docs/05-development.md) for the local workflow.
+- [Deployment and operations](../docs/06-deployment-and-operations.md) for
+  staging and production.
 
-### Migration guidelines
-- Migrations are immutable once pushed. If a change is needed later, create a new migration that updates the schema or policies.
-  - Why: editing applied migrations makes envs drift and breaks reproducibility.
+## Migration rule
 
-### Prerequisites
-- Install the Supabase CLI.
-- Run a Docker-compatible container runtime for local commands.
-- Link a project only for an intentional remote recovery operation. Normal
-  staging and production migration pushes run through GitHub Actions.
+Applied migrations are immutable. Add a new timestamped forward migration to
+change schema, data, RLS, grants, functions, or policies.
 
-Docs: https://supabase.com/docs/reference/cli/introduction
+    supabase migration new <name>
 
-### Create a migration
-```bash
-supabase migration new <name>
-```
+## Local workflow
 
-### Apply migrations locally
-```bash
-supabase start
-supabase db reset
-```
+    supabase start
+    supabase db reset
+    supabase test db supabase/tests/database
+    supabase db lint --local --fail-on warning
 
-### Local development with Colima (macOS)
-```bash
-colima start --cpu 4 --memory 8 --disk 40 --vm-type vz --vz-rosetta --mount-type virtiofs
-docker context use colima
-supabase start
-```
-Notes:
-- Ensure `DOCKER_HOST` is not set in your shell config. It overrides the Docker context.
-  - Why: Supabase uses Docker, and a stale `DOCKER_HOST` forces it to the wrong socket.
-- Increase the Colima disk if image extraction fails with "no space left on device".
+`db reset` rebuilds the local database from committed migrations. Never run a
+reset against staging or production.
 
-### Stop local Supabase cleanly
-```bash
-supabase stop
-colima stop
-```
-Why: this stops containers first, then shuts down the VM to avoid orphaned Docker state.
+Generate a reviewed diff when useful:
 
-### Diff and generate a migration
-Compare a target database against the shadow database built from local migrations.
-```bash
-supabase db diff -f <name>
-```
+    supabase db diff -f <name>
 
-### Exceptional remote reconciliation
+## macOS with Colima
 
-Before either command, confirm exactly which project is linked. Do not use
-these as the normal staging or production deployment path, do not make routine
-schema changes in the Dashboard, and never reset a linked production project.
+    colima start --cpu 4 --memory 8 --disk 40 \
+      --vm-type vz \
+      --vz-rosetta \
+      --mount-type virtiofs
+    docker context use colima
+    supabase start
 
-Pull an intentional or accidental remote schema change so it can be reviewed
-and converted into committed migration history:
+Remove a stale `DOCKER_HOST` override when it points Supabase at the wrong
+socket.
 
-```bash
-supabase db pull
-```
+Stop cleanly:
 
-Preview and push only when deliberately repairing a linked non-production
-environment outside the normal workflow:
+    supabase stop
+    colima stop
 
-```bash
-supabase db push --dry-run
-supabase db push
-```
+## Hosted environments
 
-### Storage buckets, folders, and auth config
-- Buckets: recommended to manage via SQL migrations for consistency across environments.
-  - Example:
-    ```sql
-    insert into storage.buckets (id, name, public)
-    values ('fathom', 'fathom', false)
-    on conflict (id) do nothing;
-    ```
-  - Why: buckets are data, not schema, but you still want them to exist everywhere.
-- Folders: no need to pre-create; they are implicit in object paths (e.g. `user_id/file.pdf`).
-- Auth providers/settings:
-  - Local: `supabase/config.toml` controls local auth behavior.
-  - Staging/Prod: configure providers and email/SMS settings in the Supabase dashboard.
-  - Why: most auth settings are not expressed as SQL migrations.
+Normal staging and production migration deployment runs through GitHub Actions
+from an exact release tag.
 
-### Troubleshooting
-- "Cannot connect to the Docker daemon": ensure `docker context use colima` and remove any `DOCKER_HOST` overrides from shell config.
-- "no space left on device": increase Colima disk size or prune Docker images/volumes.
-- "address already in use": update ports in `supabase/config.toml`.
-- Storage policy role errors: run storage changes as a role that can `set role supabase_storage_admin` (prod uses `postgres`).
+Direct remote commands are exceptional:
+
+    supabase db pull
+    supabase db push --dry-run
+    supabase db push
+
+Before using them:
+
+1. confirm the linked project;
+2. confirm the environment is not production unless the approved production
+   procedure requires it;
+3. preview the change;
+4. preserve committed migration history; and
+5. record the result.
+
+Do not make routine schema changes in the Supabase Dashboard.
+
+## Storage and Auth
+
+- Create private Storage buckets through reviewed migrations.
+- Object folders are implicit in object paths.
+- `supabase/config.toml` controls local Auth.
+- Hosted Auth providers, SMTP, callback URLs, and most Auth settings must be
+  configured separately in each Supabase project.
+
+Database backups do not automatically prove recovery of Storage objects.

@@ -24,12 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 def _extract_user_id(user: Any) -> str | None:
-    """
-    Extract user ID from Supabase auth response.
-
-    Supabase SDK returns either a User object directly or a UserResponse wrapper
-    depending on the SDK version and method used. This handles both cases.
-    """
+    """Extract a user ID from a direct Supabase user or a wrapped response."""
     if hasattr(user, "id") and user.id:
         return str(user.id)
     if hasattr(user, "user") and hasattr(user.user, "id") and user.user.id:

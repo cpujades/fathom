@@ -751,6 +751,733 @@
         }
       }
     },
+    "/explore": {
+      "get": {
+        "tags": [
+          "publications"
+        ],
+        "summary": "Explore",
+        "operationId": "explore_explore_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 24,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "topic",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ExploreTopic"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Topic"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExploreBriefingResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid query parameters.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream provider failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/publications/source-match": {
+      "get": {
+        "tags": [
+          "publications"
+        ],
+        "summary": "Match Publication Source",
+        "operationId": "match_publication_source_publications_source_match_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "url",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uri",
+              "minLength": 1,
+              "maxLength": 2083,
+              "title": "Url"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicationSourceMatchResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid source URL.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid auth token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream provider failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/publications/library-entries": {
+      "post": {
+        "tags": [
+          "publications"
+        ],
+        "summary": "Read Publication Library Entries",
+        "operationId": "read_publication_library_entries_publications_library_entries_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicationLibraryEntriesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicationLibraryEntriesResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid auth token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid public slugs.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream provider failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/publications/{public_slug}": {
+      "get": {
+        "tags": [
+          "publications"
+        ],
+        "summary": "Read Publication",
+        "operationId": "read_publication_publications__public_slug__get",
+        "parameters": [
+          {
+            "name": "public_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 32,
+              "maxLength": 32,
+              "pattern": "^[0-9a-f]{32}$",
+              "title": "Public Slug"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicBriefingResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Public briefing not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream provider failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/publications/{public_slug}/library-entry": {
+      "get": {
+        "tags": [
+          "publications"
+        ],
+        "summary": "Read Publication Library Entry",
+        "operationId": "read_publication_library_entry_publications__public_slug__library_entry_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "public_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 32,
+              "maxLength": 32,
+              "pattern": "^[0-9a-f]{32}$",
+              "title": "Public Slug"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicationLibraryEntryResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid auth token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Public briefing not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream provider failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/publications/{public_slug}/save": {
+      "post": {
+        "tags": [
+          "publications"
+        ],
+        "summary": "Save Publication To Library",
+        "operationId": "save_publication_to_library_publications__public_slug__save_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "public_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 32,
+              "maxLength": 32,
+              "pattern": "^[0-9a-f]{32}$",
+              "title": "Public Slug"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicationLibraryEntryResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid auth token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Public briefing not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream provider failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/briefing-sessions/{session_id}/publication": {
+      "get": {
+        "tags": [
+          "publications"
+        ],
+        "summary": "Read Owner Publication",
+        "operationId": "read_owner_publication_briefing_sessions__session_id__publication_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicationStateResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid auth token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Briefing not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream provider failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "publications"
+        ],
+        "summary": "Update Owner Publication",
+        "operationId": "update_owner_publication_briefing_sessions__session_id__publication_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicationUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicationStateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid publication state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid auth token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Publication action is not allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The source is already listed in Explore.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Briefing not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream provider failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/billing/checkout": {
       "post": {
         "tags": [
@@ -1165,30 +1892,66 @@
         ]
       }
     },
-    "/billing/briefings": {
+    "/billing/usage-history": {
       "get": {
         "tags": [
           "billing"
         ],
-        "summary": "Get Briefings",
-        "operationId": "get_briefings_billing_briefings_get",
+        "summary": "Get Usage History Entries",
+        "operationId": "get_usage_history_entries_billing_usage_history_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 10,
+              "minimum": 1,
+              "default": 10,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/UsageHistoryEntry"
-                  },
-                  "type": "array",
-                  "title": "Response Get Briefings Billing Briefings Get"
+                  "$ref": "#/components/schemas/UsageHistoryResponse"
                 }
               }
             }
           },
           "401": {
             "description": "Missing or invalid auth token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid query parameters.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1207,12 +1970,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
+        }
       }
     },
     "/billing/account": {
@@ -2012,6 +2770,157 @@
         ],
         "title": "ErrorResponse"
       },
+      "ExploreBriefingItem": {
+        "properties": {
+          "public_slug": {
+            "type": "string",
+            "title": "Public Slug"
+          },
+          "public_path": {
+            "type": "string",
+            "title": "Public Path"
+          },
+          "topic": {
+            "$ref": "#/components/schemas/ExploreTopic"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "author": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author"
+          },
+          "source_url": {
+            "type": "string",
+            "title": "Source Url"
+          },
+          "source_type": {
+            "type": "string",
+            "enum": [
+              "youtube",
+              "url"
+            ],
+            "title": "Source Type"
+          },
+          "source_duration_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Duration Seconds"
+          },
+          "source_thumbnail_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Thumbnail Url"
+          },
+          "listed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Listed At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "public_slug",
+          "public_path",
+          "topic",
+          "title",
+          "source_url",
+          "source_type",
+          "listed_at"
+        ],
+        "title": "ExploreBriefingItem"
+      },
+      "ExploreBriefingResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ExploreBriefingItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total_count": {
+            "type": "integer",
+            "title": "Total Count"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          },
+          "has_more": {
+            "type": "boolean",
+            "title": "Has More"
+          },
+          "topic": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExploreTopic"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "available_topics": {
+            "items": {
+              "$ref": "#/components/schemas/ExploreTopic"
+            },
+            "type": "array",
+            "title": "Available Topics"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total_count",
+          "limit",
+          "offset",
+          "has_more",
+          "available_topics"
+        ],
+        "title": "ExploreBriefingResponse"
+      },
+      "ExploreTopic": {
+        "type": "string",
+        "enum": [
+          "business",
+          "culture",
+          "finance",
+          "health",
+          "life",
+          "productivity",
+          "psychology",
+          "science",
+          "self-improvement",
+          "society",
+          "technology"
+        ],
+        "title": "ExploreTopic"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -2282,6 +3191,334 @@
         ],
         "title": "PlanResponse"
       },
+      "PublicBriefingResponse": {
+        "properties": {
+          "public_slug": {
+            "type": "string",
+            "title": "Public Slug"
+          },
+          "public_path": {
+            "type": "string",
+            "title": "Public Path"
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "unlisted",
+              "listed"
+            ],
+            "title": "Visibility"
+          },
+          "topic": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExploreTopic"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "author": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author"
+          },
+          "source_url": {
+            "type": "string",
+            "title": "Source Url"
+          },
+          "source_type": {
+            "type": "string",
+            "enum": [
+              "youtube",
+              "url"
+            ],
+            "title": "Source Type"
+          },
+          "source_duration_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Duration Seconds"
+          },
+          "source_thumbnail_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Thumbnail Url"
+          },
+          "markdown": {
+            "type": "string",
+            "title": "Markdown"
+          },
+          "published_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Published At"
+          },
+          "listed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Listed At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "public_slug",
+          "public_path",
+          "visibility",
+          "title",
+          "source_url",
+          "source_type",
+          "markdown",
+          "published_at"
+        ],
+        "title": "PublicBriefingResponse"
+      },
+      "PublicationLibraryEntriesRequest": {
+        "properties": {
+          "public_slugs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Public Slugs"
+          }
+        },
+        "type": "object",
+        "required": [
+          "public_slugs"
+        ],
+        "title": "PublicationLibraryEntriesRequest"
+      },
+      "PublicationLibraryEntriesResponse": {
+        "properties": {
+          "entries": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/PublicationLibraryEntryResponse"
+            },
+            "type": "object",
+            "title": "Entries"
+          }
+        },
+        "type": "object",
+        "required": [
+          "entries"
+        ],
+        "title": "PublicationLibraryEntriesResponse"
+      },
+      "PublicationLibraryEntryResponse": {
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "not_saved",
+              "processing",
+              "saved"
+            ],
+            "title": "State"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "session_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Path"
+          }
+        },
+        "type": "object",
+        "required": [
+          "state"
+        ],
+        "title": "PublicationLibraryEntryResponse"
+      },
+      "PublicationSourceMatchResponse": {
+        "properties": {
+          "match": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExploreBriefingItem"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "library_entry": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublicationLibraryEntryResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "PublicationSourceMatchResponse"
+      },
+      "PublicationStateResponse": {
+        "properties": {
+          "public_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Slug"
+          },
+          "public_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Path"
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "private",
+              "unlisted",
+              "listed"
+            ],
+            "title": "Visibility"
+          },
+          "topic": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExploreTopic"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "listed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Listed At"
+          },
+          "can_list": {
+            "type": "boolean",
+            "title": "Can List"
+          },
+          "available_topics": {
+            "items": {
+              "$ref": "#/components/schemas/ExploreTopic"
+            },
+            "type": "array",
+            "title": "Available Topics"
+          }
+        },
+        "type": "object",
+        "required": [
+          "visibility",
+          "can_list",
+          "available_topics"
+        ],
+        "title": "PublicationStateResponse"
+      },
+      "PublicationUpdateRequest": {
+        "properties": {
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "private",
+              "unlisted",
+              "listed"
+            ],
+            "title": "Visibility"
+          },
+          "topic": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExploreTopic"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "visibility"
+        ],
+        "title": "PublicationUpdateRequest"
+      },
       "ReadyResponse": {
         "properties": {
           "status": {
@@ -2409,15 +3646,8 @@
       "UsageHistoryEntry": {
         "properties": {
           "job_id": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "uuid"
-              },
-              {
-                "type": "null"
-              }
-            ],
+            "type": "string",
+            "format": "uuid",
             "title": "Job Id"
           },
           "title": {
@@ -2431,18 +3661,26 @@
             ],
             "title": "Title"
           },
-          "seconds_used": {
+          "duration_seconds": {
             "type": "integer",
-            "title": "Seconds Used"
+            "title": "Duration Seconds"
           },
-          "source": {
-            "type": "string",
-            "title": "Source"
+          "subscription_seconds": {
+            "type": "integer",
+            "title": "Subscription Seconds"
           },
-          "created_at": {
+          "pack_seconds": {
+            "type": "integer",
+            "title": "Pack Seconds"
+          },
+          "debt_incurred_seconds": {
+            "type": "integer",
+            "title": "Debt Incurred Seconds"
+          },
+          "settled_at": {
             "type": "string",
             "format": "date-time",
-            "title": "Created At"
+            "title": "Settled At"
           },
           "session_path": {
             "anyOf": [
@@ -2459,11 +3697,44 @@
         "type": "object",
         "required": [
           "job_id",
-          "seconds_used",
-          "source",
-          "created_at"
+          "duration_seconds",
+          "subscription_seconds",
+          "pack_seconds",
+          "debt_incurred_seconds",
+          "settled_at"
         ],
         "title": "UsageHistoryEntry"
+      },
+      "UsageHistoryResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/UsageHistoryEntry"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          },
+          "has_more": {
+            "type": "boolean",
+            "title": "Has More"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "limit",
+          "offset",
+          "has_more"
+        ],
+        "title": "UsageHistoryResponse"
       },
       "UsageOverviewResponse": {
         "properties": {

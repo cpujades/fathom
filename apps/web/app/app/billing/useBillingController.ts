@@ -8,6 +8,7 @@ import type {
   BillingSyncOperationResponse,
   PackBillingState,
   PlanResponse,
+  UsageHistoryEntry,
   UsageOverviewResponse
 } from "@fathom/api-client";
 import { createApiClient } from "@fathom/api-client";
@@ -19,7 +20,9 @@ import {
   captureAuthenticatedRequestScope,
   getCachedBillingSnapshot,
   hasFreshBillingCache,
-  loadBillingSnapshot
+  isAuthenticatedDataScopeChangedError,
+  loadBillingSnapshot,
+  USAGE_HISTORY_PAGE_SIZE
 } from "../../lib/appDataCache";
 import { formatDate } from "../../lib/format";
 import {
@@ -38,13 +41,16 @@ import {
   pollBillingOperationAndRefreshSnapshot,
   setBillingOperationInUrl
 } from "./billingOperationSync";
-import { applyPendingRefundHold, getDisplayedPacks } from "./billingPresentation";
+import { applyPendingRefundHold, getDisplayedPacks, mergeUsageHistoryEntries } from "./billingPresentation";
 
 type BillingSyncTarget = {
   operationId: string;
   expectedType: "checkout" | "refund" | null;
   orderLabel: string | null;
 };
+
+const USAGE_HISTORY_UNAVAILABLE_MESSAGE =
+  "Usage history is temporarily unavailable. Your plans and balance are still available.";
 
 export function useBillingController() {
   const searchParams = useSearchParams();
@@ -59,6 +65,12 @@ export function useBillingController() {
 
   const [plans, setPlans] = useState<PlanResponse[]>(cachedSnapshot?.plansData ?? []);
   const [usage, setUsage] = useState<UsageOverviewResponse | null>(cachedSnapshot?.usageData ?? null);
+  const [usageHistory, setUsageHistory] = useState<UsageHistoryEntry[]>(cachedSnapshot?.usageHistoryData ?? []);
+  const [usageHistoryHasMore, setUsageHistoryHasMore] = useState(cachedSnapshot?.usageHistoryHasMore ?? false);
+  const [usageHistoryLoadingMore, setUsageHistoryLoadingMore] = useState(false);
+  const [usageHistoryError, setUsageHistoryError] = useState<string | null>(
+    cachedSnapshot?.usageHistoryUnavailable ? USAGE_HISTORY_UNAVAILABLE_MESSAGE : null
+  );
   const [account, setAccount] = useState<BillingAccountResponse | null>(cachedSnapshot?.accountData ?? null);
   const [loading, setLoading] = useState(() => cachedSnapshot === null);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
@@ -84,6 +96,11 @@ export function useBillingController() {
       const snapshot = await loadBillingSnapshot(userId, accessToken, { refreshAfterInFlight });
       setPlans(snapshot.plansData);
       setUsage(snapshot.usageData);
+      setUsageHistory(snapshot.usageHistoryData);
+      setUsageHistoryHasMore(snapshot.usageHistoryHasMore);
+      setUsageHistoryError(
+        snapshot.usageHistoryUnavailable ? USAGE_HISTORY_UNAVAILABLE_MESSAGE : null
+      );
       setAccount(snapshot.accountData);
       setRemainingSeconds(
         userId,
@@ -255,6 +272,11 @@ export function useBillingController() {
       const nextSnapshot = getCachedBillingSnapshot(userId);
       setPlans(nextSnapshot?.plansData ?? []);
       setUsage(nextSnapshot?.usageData ?? null);
+      setUsageHistory(nextSnapshot?.usageHistoryData ?? []);
+      setUsageHistoryHasMore(nextSnapshot?.usageHistoryHasMore ?? false);
+      setUsageHistoryError(
+        nextSnapshot?.usageHistoryUnavailable ? USAGE_HISTORY_UNAVAILABLE_MESSAGE : null
+      );
       setAccount(nextSnapshot?.accountData ?? null);
       setLoading(false);
       setError(null);
@@ -477,6 +499,35 @@ export function useBillingController() {
     if (refundTarget && await handleRefund(refundTarget.polar_order_id)) setRefundTarget(null);
   };
 
+  const handleLoadMoreUsageHistory = async () => {
+    if (!accessToken || !userId || usageHistoryLoadingMore || !usageHistoryHasMore) return;
+
+    setUsageHistoryLoadingMore(true);
+    try {
+      const scope = captureAuthenticatedRequestScope(userId);
+      const { data, error: apiError } = await createApiClient(accessToken).GET("/billing/usage-history", {
+        params: {
+          query: {
+            limit: USAGE_HISTORY_PAGE_SIZE,
+            offset: usageHistory.length
+          }
+        }
+      });
+      assertAuthenticatedRequestScopeCurrent(scope);
+      if (apiError) throw apiError;
+      if (!data) throw new Error("The usage history response was empty.");
+
+      setUsageHistory((current) => mergeUsageHistoryEntries(current, data.items));
+      setUsageHistoryHasMore(data.has_more);
+      setUsageHistoryError(null);
+    } catch (historyError) {
+      if (isAuthenticatedDataScopeChangedError(historyError)) return;
+      setUsageHistoryError(getApiErrorMessage(historyError, "Unable to load more usage history."));
+    } finally {
+      setUsageHistoryLoadingMore(false);
+    }
+  };
+
   const handleRefreshSyncStatus = useCallback(async () => {
     if (syncRefreshLoading) return;
     setSyncRefreshLoading(true);
@@ -505,9 +556,11 @@ export function useBillingController() {
 
   return {
     accessNote, account, activePackCount, canManageBilling, checkoutLoading, closeRefundDialog, displayedPacks,
-    error, handleCheckout, handleConfirmRefund, handlePortal, handleRefreshSyncStatus, loading, offerMode,
+    error, handleCheckout, handleConfirmRefund, handleLoadMoreUsageHistory, handlePortal, handleRefreshSyncStatus,
+    loading, offerMode,
     portalLoading, purchaseSync, quotaAvailablePercent, quotaCapacitySeconds, refundLoading, refundSync,
     refundTarget, remainingSeconds, requestedPlan, selectRefundTarget, setOfferMode, shellLoading, signOut,
-    subscriptionStatusText, syncRefreshLoading, usage, user, visiblePlanGroup
+    subscriptionStatusText, syncRefreshLoading, usage, usageHistory, usageHistoryError, usageHistoryHasMore,
+    usageHistoryLoadingMore, user, visiblePlanGroup
   };
 }

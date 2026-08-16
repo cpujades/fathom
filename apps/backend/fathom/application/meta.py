@@ -30,7 +30,9 @@ _REQUIRED_DATABASE_OBJECTS = (
     "billing_sync_operations_table",
     "billing_maintenance_leases_table",
     "briefing_stream_leases_table",
+    "briefing_publications_table",
     "create_or_reuse_settled_job_function",
+    "save_briefing_publication_function",
     "claim_next_settled_job_function",
     "next_queued_job_delay_seconds_function",
     "renew_job_lease_function",
@@ -66,10 +68,15 @@ select
   to_regclass('public.billing_sync_operations') is not null as billing_sync_operations_table,
   to_regclass('public.billing_maintenance_leases') is not null as billing_maintenance_leases_table,
   to_regclass('public.briefing_stream_leases') is not null as briefing_stream_leases_table,
+  to_regclass('public.briefing_publications') is not null as briefing_publications_table,
   exists (
     select 1 from pg_proc join pg_namespace on pg_namespace.oid = pg_proc.pronamespace
     where pg_namespace.nspname = 'public' and pg_proc.proname = 'create_or_reuse_settled_job'
   ) as create_or_reuse_settled_job_function,
+  exists (
+    select 1 from pg_proc join pg_namespace on pg_namespace.oid = pg_proc.pronamespace
+    where pg_namespace.nspname = 'public' and pg_proc.proname = 'save_briefing_publication'
+  ) as save_briefing_publication_function,
   exists (
     select 1 from pg_proc join pg_namespace on pg_namespace.oid = pg_proc.pronamespace
     where pg_namespace.nspname = 'public' and pg_proc.proname = 'claim_next_settled_job'
@@ -216,6 +223,12 @@ async def _check_postgrest(settings: Settings) -> None:
             await (
                 client.table("transcript_segments")
                 .select("transcript_id,segment_index,start_seconds,end_seconds")
+                .limit(1)
+                .execute()
+            )
+            await (
+                client.table("briefing_publications")
+                .select("id,owner_job_id,summary_id,source_key,public_slug,visibility,moderation_status")
                 .limit(1)
                 .execute()
             )

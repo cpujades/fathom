@@ -1,0 +1,156 @@
+.card {
+  display: grid;
+  gap: 0.8rem;
+  width: min(1180px, 100%);
+  margin: 0 auto 1rem;
+  border: 1px solid rgba(36, 58, 47, 0.1);
+  border-radius: 20px;
+  padding: 0.9rem 1rem;
+  color: #24332c;
+  background: rgba(248, 244, 236, 0.58);
+}
+
+.card > p {
+  margin: 0;
+}
+
+.heading,
+.actions,
+.exploreForm,
+.exploreForm label {
+  display: flex;
+  align-items: center;
+}
+
+.heading {
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.heading h2,
+.kicker {
+  margin: 0;
+}
+
+.heading h2 {
+  font-size: 1rem;
+  font-family: var(--font-body), sans-serif;
+  font-weight: 780;
+}
+
+.kicker {
+  color: #667267;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.heading > span {
+  border-radius: 999px;
+  padding: 0.28rem 0.52rem;
+  color: #285b45;
+  background: rgba(40, 92, 70, 0.08);
+  font-size: 0.7rem;
+  font-weight: 760;
+}
+
+.actions {
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.actions button,
+.actions a,
+.exploreForm button {
+  min-height: 38px;
+  border: 1px solid rgba(36, 58, 47, 0.18);
+  border-radius: 999px;
+  padding: 0.52rem 0.72rem;
+  color: #285b45;
+  background: rgba(255, 255, 255, 0.48);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 760;
+}
+
+.actions .primaryAction {
+  border-color: #17382b;
+  color: #f7f4eb;
+  background: #17382b;
+}
+
+.actions .dangerAction {
+  color: #8d312f;
+}
+
+.actions button:disabled,
+.exploreForm button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.actions p {
+  margin: 0;
+  color: #667267;
+  font-size: 0.78rem;
+}
+
+.exploreForm {
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  border-top: 1px solid rgba(36, 58, 47, 0.1);
+  padding-top: 0.8rem;
+}
+
+.exploreForm label {
+  flex: 1 1 260px;
+  gap: 0.5rem;
+  color: #526158;
+  font-size: 0.76rem;
+  font-weight: 720;
+}
+
+.exploreForm select {
+  min-width: 0;
+  flex: 1;
+  border: 1px solid rgba(36, 58, 47, 0.16);
+  border-radius: 12px;
+  padding: 0.58rem 0.68rem;
+  color: #18211d;
+  background: rgba(255, 255, 255, 0.58);
+  font: inherit;
+}
+
+.notice,
+.error {
+  margin: 0;
+  font-size: 0.76rem;
+}
+
+.notice {
+  color: #285b45;
+}
+
+.error {
+  color: #8d312f;
+}
+
+@media (max-width: 620px) {
+  .heading {
+    align-items: flex-start;
+  }
+
+  .actions,
+  .exploreForm {
+    align-items: stretch;
+  }
+
+  .actions button,
+  .actions a,
+  .exploreForm button {
+    justify-content: center;
+    text-align: center;
+  }
+}

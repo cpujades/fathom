@@ -10,19 +10,21 @@ from fathom.services.supabase.helpers import raise_for_postgrest_error
 from supabase import AsyncClient
 
 
-async def fetch_usage_history(
+async def fetch_usage_settlements(
     client: AsyncClient,
     *,
     user_id: str,
     limit: int = 50,
+    offset: int = 0,
 ) -> list[dict[str, Any]]:
     try:
         response = (
-            await client.table("usage_ledger")
-            .select("job_id,seconds_used,source,created_at")
+            await client.table("usage_settlements")
+            .select("job_id,duration_seconds,subscription_seconds,pack_seconds,debt_incurred_seconds,settled_at")
             .eq("user_id", user_id)
-            .order("created_at", desc=True)
-            .limit(limit)
+            .order("settled_at", desc=True)
+            .order("job_id", desc=True)
+            .range(offset, offset + limit - 1)
             .execute()
         )
     except APIError as exc:

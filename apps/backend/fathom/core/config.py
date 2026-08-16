@@ -7,6 +7,7 @@ from functools import lru_cache
 from ipaddress import ip_address, ip_network
 from typing import Annotated, Literal, Self
 from urllib.parse import urlsplit
+from uuid import UUID
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
@@ -78,6 +79,10 @@ class Settings(BaseSettings):
         default_factory=list,
         validation_alias="TRUSTED_PROXY_NETWORKS",
     )
+    explore_operator_user_ids: Annotated[list[str], NoDecode] = Field(
+        default_factory=list,
+        validation_alias="EXPLORE_OPERATOR_USER_IDS",
+    )
     polar_access_token: str | None = Field(default=None, validation_alias="POLAR_ACCESS_TOKEN")
     polar_webhook_secret: str | None = Field(default=None, validation_alias="POLAR_WEBHOOK_SECRET")
     polar_success_url: str | None = Field(default=None, validation_alias="POLAR_SUCCESS_URL")
@@ -116,7 +121,12 @@ class Settings(BaseSettings):
             return value.strip()
         return value
 
-    @field_validator("cors_allow_origins", "trusted_proxy_networks", mode="before")
+    @field_validator(
+        "cors_allow_origins",
+        "trusted_proxy_networks",
+        "explore_operator_user_ids",
+        mode="before",
+    )
     @classmethod
     def _parse_list(cls, value: object) -> object:
         if value is None:
@@ -171,6 +181,19 @@ class Settings(BaseSettings):
             normalized_network = str(parsed)
             if normalized_network not in normalized:
                 normalized.append(normalized_network)
+        return normalized
+
+    @field_validator("explore_operator_user_ids")
+    @classmethod
+    def _validate_explore_operator_user_ids(cls, user_ids: list[str]) -> list[str]:
+        normalized: list[str] = []
+        for user_id in user_ids:
+            try:
+                normalized_user_id = str(UUID(user_id))
+            except ValueError as exc:
+                raise ValueError("EXPLORE_OPERATOR_USER_IDS entries must be UUIDs.") from exc
+            if normalized_user_id not in normalized:
+                normalized.append(normalized_user_id)
         return normalized
 
     @model_validator(mode="after")

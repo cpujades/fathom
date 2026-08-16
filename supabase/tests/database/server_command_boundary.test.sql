@@ -2,7 +2,7 @@ begin;
 
 set local search_path = extensions, public, pg_catalog;
 
-select plan(28);
+select plan(24);
 
 select ok(
   not has_function_privilege('anon', 'public.claim_next_job(interval)', 'execute'),
@@ -62,19 +62,6 @@ select ok(
 select ok(
   has_function_privilege('service_role', 'public.requeue_stale_jobs(interval)', 'execute'),
   'service role can requeue jobs'
-);
-
-select ok(
-  not has_function_privilege('anon', 'public.prune_usage_ledger(integer)', 'execute'),
-  'anon cannot prune usage records'
-);
-select ok(
-  not has_function_privilege('authenticated', 'public.prune_usage_ledger(integer)', 'execute'),
-  'authenticated users cannot prune usage records'
-);
-select ok(
-  has_function_privilege('service_role', 'public.prune_usage_ledger(integer)', 'execute'),
-  'service role can prune usage records'
 );
 
 select ok(
@@ -145,16 +132,6 @@ select is(
   ),
   array['search_path=pg_catalog']::text[],
   'requeue function has an immutable search path'
-);
-
-select is(
-  (
-    select proconfig
-    from pg_catalog.pg_proc
-    where oid = 'public.prune_usage_ledger(integer)'::regprocedure
-  ),
-  array['search_path=pg_catalog']::text[],
-  'maintenance function has an immutable search path'
 );
 
 select * from finish();

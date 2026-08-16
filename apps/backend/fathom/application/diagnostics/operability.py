@@ -74,16 +74,10 @@ settlement_mismatches as (
   select settlements.id, settlements.job_id
   from public.usage_settlements as settlements
   join public.jobs as jobs on jobs.id = settlements.job_id
-  left join lateral (
-    select coalesce(sum(ledger.seconds_used), 0)::integer as ledger_seconds
-    from public.usage_ledger as ledger
-    where ledger.settlement_id = settlements.id
-  ) as ledger_totals on true
   where settlements.subscription_seconds
       + settlements.pack_seconds
       + settlements.debt_incurred_seconds <> settlements.duration_seconds
     or settlements.duration_seconds <> greatest(coalesce(jobs.duration_seconds, 0), 0)
-    or ledger_totals.ledger_seconds <> settlements.duration_seconds
 ),
 unresolved_webhooks as (
   select events.event_id, events.status, events.received_at

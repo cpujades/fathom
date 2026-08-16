@@ -1,283 +1,137 @@
-# Talven (repository: Fathom)
+# Talven
 
-Talven turns long-form YouTube audio/video into structured, source-linked briefings with streaming progress, usage-aware billing, and reusable transcript/summary caching. The repository and Python/package namespace remain `fathom`.
+Talven turns public YouTube videos into private, evidence-backed written
+briefings with timestamp links to the source.
+
+The repository and package namespace remains `fathom`.
 
 ## Stack
 
-- Backend: FastAPI, Supabase, Polar, Groq, OpenRouter
-- Frontend: Next.js 16, React 19, Supabase Auth
-- Worker: separate Python process for download, transcription, summarization, and job progress updates
+- FastAPI API and Python worker
+- Next.js web application
+- Supabase Auth, Postgres, and Storage
+- Groq transcription
+- OpenRouter briefing generation
+- Polar billing
 
-## Repo Layout
+## Repository
 
-- `apps/backend/fathom`: deployable FastAPI API and worker code
-- `apps/web`: deployable Next.js frontend
-- `packages/api-client`: generated REST contract shared across the app boundary
-- `scripts`: repository-wide generation and provider administration
-- `supabase`: database migrations, tests, seed, and local infrastructure
-- `docs`: architecture, product decisions, and operational runbooks
+| Path | Purpose |
+| --- | --- |
+| `apps/backend` | API, worker, provider adapters, and backend tests |
+| `apps/web` | Product and public web application |
+| `packages/api-client` | Generated OpenAPI TypeScript client |
+| `supabase` | Migrations, database tests, and local configuration |
+| `scripts` | Generation and operator commands |
+| `docs` | Owner and developer documentation |
 
-This is intentionally one monorepo: backend contracts, the generated client,
-the web application, and database migrations are reviewed and tested together.
-See the [repository and code map](./docs/architecture/repository-and-code-map.md)
-for the rationale, root-file responsibilities, and placement rules.
+## Documentation
 
-## Current Product Flow
+Start with [Talven documentation](./docs/00-reading-guide.md).
 
-1. User signs in with Supabase Auth.
-2. Frontend creates a briefing session via `POST /briefing-sessions`.
-3. Backend reuses existing work when possible, or queues a new job.
-4. Worker downloads the source, transcribes it with Groq, summarizes it with OpenRouter, and streams progress through job updates.
-5. Frontend subscribes to session events and renders the evolving briefing.
-6. Billing uses Polar checkout, portal sessions, refunds, and webhooks.
+Recommended owner path:
 
-See [frontend, authentication, and user flows](./docs/architecture/frontend-auth-and-user-flows.md)
-for the browser route map, safe redirect rules, account-scoped caches, and each
-end-to-end user journey.
+1. [Product](./docs/01-product.md)
+2. [Architecture](./docs/02-architecture.md)
+3. [Data model reference](./docs/reference/data-model.md)
+4. [Processing and providers](./docs/03-processing-and-providers.md)
+5. [Billing and money](./docs/04-billing-and-money.md)
+6. [Performance reference](./docs/reference/performance.md)
+7. [Deployment and operations](./docs/06-deployment-and-operations.md)
+8. [Launch plan](./docs/07-launch-plan.md)
+9. [Roadmap](./docs/08-roadmap.md)
 
-## Local Setup
+Developer entry points:
 
-### Requirements
+- [Architecture](./docs/02-architecture.md)
+- [Processing and providers](./docs/03-processing-and-providers.md)
+- [Development](./docs/05-development.md)
+- [API reference](./docs/reference/api.md)
+- [Configuration reference](./docs/reference/configuration.md)
+- [Data model reference](./docs/reference/data-model.md)
+- [Performance reference](./docs/reference/performance.md)
 
-- Python 3.11-3.13
-- Node 24+
+## Local setup
+
+Requirements:
+
+- Python 3.11–3.13
+- `uv`
+- Node.js 24
 - `pnpm`
-- `ffmpeg`
-- WeasyPrint system dependencies
+- Supabase CLI
+- Docker Desktop or a Docker-compatible runtime
 
-### Install backend dependencies
+Install:
 
-```bash
-uv venv
-source .venv/bin/activate
-uv sync
-```
+    uv venv
+    uv sync --group dev
+    pnpm install
+    supabase start
+    supabase db reset
 
-### Install frontend dependencies
+The clean database still needs the internal plan catalogue before free or paid
+briefing admission works. See [Development](./docs/05-development.md#local-billing).
 
-```bash
-pnpm install
-```
+Create local configuration:
 
-## Environment
+    cp env.example .env
+    cp apps/web/env.example apps/web/.env.local
 
-### Backend
+Run three processes.
 
-Copy the backend example file:
+API:
 
-```bash
-cp env.example .env
-```
+    uvicorn --app-dir apps/backend fathom.api.app:app \
+      --host localhost \
+      --port 8080 \
+      --reload
 
-Root `.env` is for the FastAPI API and the worker only.
+Worker:
 
-Required backend variables are defined in [env.example](./env.example). The main ones are:
+    PYTHONPATH=apps/backend python -m fathom.orchestration.runner
 
-- `OPENROUTER_API_KEY`
-- `GROQ_API_KEY`
-- `POLAR_ACCESS_TOKEN`
-- `POLAR_WEBHOOK_SECRET`
-- `POLAR_SUCCESS_URL`
-- `POLAR_PORTAL_RETURN_URL`
-- `SUPABASE_URL`
-- `SUPABASE_PUBLISHABLE_KEY`
-- `SUPABASE_SECRET_KEY`
-- `SUPABASE_DB_PASSWORD`
-- `SUPABASE_DB_USER`
-- `SUPABASE_DB_NAME`
-- `SUPABASE_DB_HOST`
+Web:
 
-Optional backend runtime variables:
+    pnpm --filter @fathom/web dev
 
-- `APP_ENV`
-- `CORS_ALLOW_ORIGINS`
-- `RATE_LIMIT`
-- `TRUST_PROXY_HEADERS`
-- `TRUSTED_PROXY_NETWORKS`
-- `SUPABASE_DB_PORT`
-- `POLAR_CHECKOUT_RETURN_URL`
-- `POLAR_SERVER`
-- `WORKER_MAX_CONCURRENT_JOBS`
+Open `http://localhost:3000`.
 
-`APP_ENV` accepts `local`, `test`, `staging`, or `production` and defaults to
-`local`. Hosted modes fail closed unless rate limiting and exact HTTPS CORS
-origins are configured. If proxy headers are enabled, set
-`TRUSTED_PROXY_NETWORKS` to the ingress IPs or CIDR ranges; forwarded client
-addresses are ignored for every other peer.
+See [Development](./docs/05-development.md) for Supabase values, billing
+sandbox setup, migrations, API generation, and troubleshooting.
 
-Backend logs use readable console output in `local` and `test`, and structured
-JSON output in `staging` and `production`, based on `APP_ENV`.
+## Checks
 
-### Frontend
+Backend:
 
-Copy the frontend example file:
+    uv run ruff check .
+    uv run ruff format --check .
+    uv run ty check apps/backend/fathom
+    PYTHONPATH=apps/backend ./.venv/bin/python \
+      -m unittest discover -s apps/backend/tests
 
-```bash
-cp apps/web/env.example apps/web/.env.local
-```
+Frontend:
 
-For local Supabase, run `supabase start`, then use `supabase status -o env` to
-copy its URL and public publishable key into `.env.local`. The tracked example
-uses `localhost` consistently with the browser/Auth redirect configuration.
+    pnpm --filter @fathom/web lint
+    pnpm --filter @fathom/web test
+    pnpm --filter @fathom/web typecheck
+    pnpm --filter @fathom/web build
 
-For the meaning of each backend and frontend variable, and the distinction
-between local Supabase, hosted staging, and production targets, see
-[Environment configuration](./docs/reference/environment.md).
+Generated API contract:
 
-For a literal first-run sequence—including database reset safety, backend key
-mapping, the local database port, plan provisioning, email confirmation,
-readiness checks, and the first briefing—follow [local development from a fresh
-clone](./docs/getting-started/local-development.md).
+    pnpm check:api-contract
 
-### Billing catalog
+Database:
 
-`scripts/polar/plan_contract.json` is the tracked, non-secret source of truth
-for public plan codes, prices, quotas, and expiry rules. Frontend contract tests
-read this file in local and CI environments.
+    supabase db reset
+    supabase test db supabase/tests/database
+    supabase db lint --local --fail-on warning
 
-`scripts/polar/plans.json` remains ignored and optional. It may contain only
-environment-specific `polar_product_id` overrides for the same plan code and
-version. The Polar sync script rejects attempts to redefine public plan fields
-through that private file, preventing local provider identifiers from becoming
-a second pricing source of truth.
+## Production state
 
-See [Polar environments and testing](./docs/runbooks/polar-environments-and-testing.md#talven-plans-and-polar-products)
-for an exact override example, script modes, create/reuse behavior, recovery
-after a partial provider sync, and the production-safe procedure.
+The application is not currently deployed. Database release workflows exist,
+but web, API, and worker hosting is still an owner decision.
 
-Required frontend public variables:
-
-- `NEXT_PUBLIC_API_BASE_URL`
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
-
-Recommended frontend public variable:
-
-- `NEXT_PUBLIC_SITE_URL`
-
-## Run Locally
-
-### API
-
-```bash
-uvicorn --app-dir apps/backend fathom.api.app:app --host localhost --port 8080 --reload
-```
-
-### Worker
-
-Run the worker in a separate shell:
-
-```bash
-PYTHONPATH=apps/backend python -m fathom.orchestration.runner
-```
-
-### Frontend
-
-```bash
-pnpm --filter @fathom/web dev
-```
-
-## Main API Routes
-
-The [HTTP API reference](./docs/reference/http-api.md) documents authentication,
-inputs, results, errors, rate-limit pointers, and example requests. The list
-below is the compact route inventory.
-
-### Meta
-
-- `GET /meta/health`
-- `GET /meta/ready`
-- `GET /meta/status`
-
-### Briefing sessions
-
-- `POST /briefing-sessions`
-- `GET /briefing-sessions/{session_id}`
-- `GET /briefing-sessions/{session_id}/events`
-- `DELETE /briefing-sessions/{session_id}`
-
-### Briefings
-
-- `GET /briefings`
-- `GET /briefings/{briefing_id}`
-- `POST /briefings/{briefing_id}/pdf`
-
-### Billing
-
-- `POST /billing/checkout`
-- `POST /billing/portal`
-- `POST /billing/packs/{polar_order_id}/refund`
-- `GET /billing/plans`
-- `GET /billing/usage`
-- `GET /billing/briefings`
-- `GET /billing/account`
-
-### Webhooks
-
-- `POST /webhooks/polar`
-
-## Quality Checks
-
-### Backend
-
-```bash
-uv sync --group dev
-uv run ruff check .
-uv run ruff format --check .
-uv run ty check apps/backend/fathom
-PYTHONPATH=apps/backend ./.venv/bin/python -m unittest discover -s apps/backend/tests
-```
-
-The backend suite includes deterministic, offline briefing-quality fixtures. See
-[Briefing quality evaluation](./docs/quality/briefing-evaluation.md) for the checks and fixture rules.
-
-For a durable product and architecture map, start with the
-[Talven documentation index](./docs/README.md).
-
-### Frontend
-
-```bash
-pnpm --filter @fathom/web lint
-pnpm --filter @fathom/web typecheck
-pnpm --filter @fathom/web test
-pnpm --filter @fathom/web build
-```
-
-### API contract
-
-After changing FastAPI routes or Pydantic request/response models, regenerate
-the committed OpenAPI contract and TypeScript client:
-
-```bash
-pnpm generate:api-client
-pnpm check:api-contract
-```
-
-See [API contract and client generation](./docs/architecture/api-contract.md)
-for ownership rules and the separate SSE runtime contract.
-
-## Production Notes
-
-- The API and worker should run as separate processes in every environment.
-- The worker should be configured to restart automatically on failure.
-- The frontend must set `NEXT_PUBLIC_API_BASE_URL`. It no longer falls back to localhost.
-- Hosted frontend builds must set the exact `NEXT_PUBLIC_SITE_URL`; missing it fails the build instead of generating localhost Auth links.
-- Rate limiting uses shared Postgres buckets keyed by client IP. Only enable `TRUST_PROXY_HEADERS=true` when the app is behind a trusted ingress/proxy that normalizes forwarded headers.
-- Polar webhooks and `/meta/health` bypass ordinary request throttling. SSE opens and readiness checks are rate-limited; active SSE connections also use expiring database leases with per-user/IP caps and a hard lifetime.
-- Staging and production require HTTPS Supabase/Polar URLs, a non-loopback database host, certificate-verified Postgres TLS, and exact HTTPS CORS origins. Production additionally requires `POLAR_SERVER=production`; staging may use the Polar sandbox.
-- `supabase/config.toml` configures the local Auth stack; hosted Supabase Auth settings and SMTP must be mirrored and verified in the Dashboard because database migrations do not deploy them.
-- Polar webhooks should target your public backend URL at `/webhooks/polar`.
-- Supabase migrations are managed from `supabase/` and deployed through GitHub Actions.
-- Incident notes live in [docs/runbooks/worker-and-billing-incidents.md](./docs/runbooks/worker-and-billing-incidents.md).
-- The bounded, no-provider recovery rehearsal lives in
-  [docs/runbooks/local-recovery-rehearsal.md](./docs/runbooks/local-recovery-rehearsal.md).
-- Plain-language explanations of leases, stream limits, billing recovery,
-  refund concurrency, and Auth configuration live in
-  [docs/architecture/runtime-safety-explained.md](./docs/architecture/runtime-safety-explained.md).
-- Hosted Supabase Auth, SMTP, health/readiness probes, and rate-limit setup are
-  configured with [the hosted-operations runbook](./docs/runbooks/hosted-auth-and-service-probes.md).
-- The future host topology, public-signup controls, observability, retention,
-  backups, ingress/WAF, and storage-provider decision are tracked in the
-  [first deployment checklist](./docs/runbooks/first-deployment-checklist.md).
-- Release credential rotation and protected-branch behavior are documented in
-  [the release automation runbook](./docs/runbooks/release-automation.md).
+Do not call the product launch-ready from local or CI checks alone. Follow the
+[Launch plan](./docs/07-launch-plan.md) and
+[Deployment and operations](./docs/06-deployment-and-operations.md).

@@ -4,6 +4,9 @@ set local search_path = extensions, public, pg_catalog;
 
 select plan(56);
 
+insert into auth.users (id)
+values ('12000000-0000-0000-0000-000000000001');
+
 select has_column(
   'public',
   'entitlements',
@@ -320,7 +323,7 @@ insert into public.credit_lots (
   source_key,
   granted_seconds,
   consumed_seconds,
-  pack_expires_at,
+  expires_at,
   status
 )
 values (
@@ -491,7 +494,7 @@ insert into public.credit_lots (
   lot_type,
   source_key,
   granted_seconds,
-  pack_expires_at,
+  expires_at,
   status
 )
 values (

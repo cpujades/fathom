@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { createApiClient } from "@fathom/api-client";
+import type { ExploreBriefingItem, PublicationLibraryEntryResponse } from "@fathom/api-client";
 
 import { AppShellHeader } from "../../../components/AppShellHeader";
 import { useAppShell } from "../../../components/AppShellProvider";
@@ -16,6 +17,7 @@ import {
   type ApiErrorDetails
 } from "../../../lib/apiErrors";
 import { getAccountLabel } from "../../../lib/accountLabel";
+import { formatExploreTopic } from "../../../lib/format";
 import {
   assertAuthenticatedRequestScopeCurrent,
   cacheSessionSnapshot,
@@ -26,7 +28,7 @@ import { buildSignInPath } from "../../../lib/url";
 import { getAdmissionFailurePresentation } from "../admissionPresentation";
 import styles from "../session-create.module.css";
 
-type CreatePhase = "idle" | "checking" | "creating" | "opening" | "error";
+type CreatePhase = "idle" | "checking" | "available" | "creating" | "opening" | "error";
 
 type CreateError = {
   code: string | null;
@@ -44,6 +46,11 @@ const PHASE_COPY: Record<CreatePhase, { description: string; status: string; tit
     title: "Finding the source",
     description: "A clean briefing starts with a clean source.",
     status: "Checking"
+  },
+  available: {
+    title: "A briefing is already ready",
+    description: "Read it now or save it to your library without using video time.",
+    status: "Available"
   },
   creating: {
     title: "Preparing your briefing",
@@ -81,6 +88,8 @@ function BriefingCreatePageContent() {
   const confirmSameSourceRetry = searchParams.get("confirm") === "retry";
   const [draftUrl, setDraftUrl] = useState(initialUrl);
   const [createError, setCreateError] = useState<CreateError | null>(null);
+  const [matchedPublication, setMatchedPublication] = useState<ExploreBriefingItem | null>(null);
+  const [matchedLibraryEntry, setMatchedLibraryEntry] = useState<PublicationLibraryEntryResponse | null>(null);
   const [phase, setPhase] = useState<CreatePhase>(
     initialUrl && !confirmSameSourceRetry ? "checking" : "idle"
   );
@@ -116,11 +125,14 @@ function BriefingCreatePageContent() {
 
       setSubmitting(true);
       setCreateError(null);
-      setPhase("creating");
+      setMatchedPublication(null);
+      setMatchedLibraryEntry(null);
+      setPhase("checking");
 
       try {
         const requestScope = captureAuthenticatedRequestScope(userId);
         const api = createApiClient(accessToken);
+        setPhase("creating");
         const { data, error: apiError } = await api.POST("/briefing-sessions", {
           body: {
             url: normalizedUrl
@@ -129,6 +141,18 @@ function BriefingCreatePageContent() {
         assertAuthenticatedRequestScopeCurrent(requestScope);
 
         if (apiError) {
+          if (getApiErrorCode(apiError) === "public_briefing_available") {
+            const sourceMatch = await api.GET("/publications/source-match", {
+              params: { query: { url: normalizedUrl } }
+            });
+            assertAuthenticatedRequestScopeCurrent(requestScope);
+            if (sourceMatch.data?.match) {
+              setMatchedPublication(sourceMatch.data.match);
+              setMatchedLibraryEntry(sourceMatch.data.library_entry ?? null);
+              setPhase("available");
+              return;
+            }
+          }
           setPhase("error");
           setCreateError({
             code: getApiErrorCode(apiError),
@@ -209,6 +233,41 @@ function BriefingCreatePageContent() {
     await startSession(nextUrl);
   };
 
+  const saveMatchedPublication = async () => {
+    if (!matchedPublication || !accessToken || !userId || submitting) return;
+    setSubmitting(true);
+    setCreateError(null);
+    try {
+      const requestScope = captureAuthenticatedRequestScope(userId);
+      const api = createApiClient(accessToken);
+      const { data, error: apiError } = await api.POST("/publications/{public_slug}/save", {
+        params: { path: { public_slug: matchedPublication.public_slug } }
+      });
+      assertAuthenticatedRequestScopeCurrent(requestScope);
+      if (apiError || !data?.session_path) {
+        setCreateError({
+          code: apiError ? getApiErrorCode(apiError) : null,
+          details: apiError ? getApiErrorDetails(apiError) : null,
+          message: apiError
+            ? getApiErrorMessage(apiError, "Unable to save this briefing.")
+            : "The briefing was saved without a library link."
+        });
+        return;
+      }
+      invalidateBriefingsCache(userId);
+      setPhase("opening");
+      router.replace(data.session_path);
+    } catch (saveError) {
+      setCreateError({
+        code: null,
+        details: null,
+        message: saveError instanceof Error ? saveError.message : "Unable to save this briefing."
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const admissionFailure = createError
     ? getAdmissionFailurePresentation(
         createError.code,
@@ -232,7 +291,7 @@ function BriefingCreatePageContent() {
       : PHASE_COPY[phase];
   const sourceHost = getSourceHost(draftUrl);
   const activeStepIndex = getActiveCreateStepIndex(phase);
-  const showSourceForm = Boolean(createError) || (confirmSameSourceRetry && phase === "idle");
+  const showSourceForm = (Boolean(createError) && phase !== "available") || (confirmSameSourceRetry && phase === "idle");
 
   return (
     <div className={chrome.pageFrame}>
@@ -269,7 +328,7 @@ function BriefingCreatePageContent() {
                     <p>{getCreateStepLabel(stepKey)}</p>
                     <small>
                       {getCreateStepHint(stepKey, sourceHost, phase)}
-                      {index === activeStepIndex && phase !== "idle" && phase !== "error" ? (
+                      {index === activeStepIndex && !["idle", "available", "error"].includes(phase) ? (
                         <span className={styles.lifecycleEllipsis} aria-hidden="true" />
                       ) : null}
                     </small>
@@ -277,6 +336,39 @@ function BriefingCreatePageContent() {
                 </div>
               ))}
             </div>
+
+            {phase === "available" && matchedPublication ? (
+              <div className={styles.availableCard}>
+                <div>
+                  <p className={styles.availableTopic}>{formatExploreTopic(matchedPublication.topic)}</p>
+                  <h2>{matchedPublication.title}</h2>
+                  {matchedPublication.author ? <p>By {matchedPublication.author}</p> : null}
+                </div>
+                <div className={chrome.actionRow}>
+                  <Link className={chrome.primaryButton} href={matchedPublication.public_path}>Open free briefing</Link>
+                  {matchedLibraryEntry?.session_path ? (
+                    <Link className={chrome.secondaryButton} href={matchedLibraryEntry.session_path}>
+                      {matchedLibraryEntry.state === "processing" ? "Open current briefing" : "Open in library"}
+                    </Link>
+                  ) : (
+                    <button
+                      className={chrome.secondaryButton}
+                      type="button"
+                      onClick={() => void saveMatchedPublication()}
+                      disabled={submitting}
+                    >
+                      {submitting ? "Saving…" : "Save to library"}
+                    </button>
+                  )}
+                </div>
+                {createError ? <p className={styles.availableError} role="alert">{createError.message}</p> : null}
+                <p className={styles.availableNote}>
+                  {matchedLibraryEntry?.session_path
+                    ? "Already in your library. Opening it uses no video time."
+                    : "Saving reuses the ready briefing and uses no video time."}
+                </p>
+              </div>
+            ) : null}
 
             {showSourceForm ? (
               <form
@@ -358,7 +450,7 @@ export default function BriefingCreatePage() {
 }
 
 function getActiveCreateStepIndex(phase: CreatePhase): number {
-  return phase === "opening" ? CREATE_STEP_KEYS.length - 1 : 0;
+  return phase === "available" || phase === "opening" ? CREATE_STEP_KEYS.length - 1 : 0;
 }
 
 function getCreateStepLabel(stepKey: (typeof CREATE_STEP_KEYS)[number]): string {
@@ -376,16 +468,19 @@ function getCreateStepLabel(stepKey: (typeof CREATE_STEP_KEYS)[number]): string 
 
 function getCreateStepHint(stepKey: (typeof CREATE_STEP_KEYS)[number], sourceHost: string | null, phase: CreatePhase): string {
   if (stepKey === "source") {
-    if (phase === "opening") {
+    if (phase === "available" || phase === "opening") {
       return "Source ready.";
     }
     return sourceHost ? sourceHost : "Source";
   }
   if (stepKey === "transcribe") {
-    return "Waiting for source.";
+    return phase === "available" ? "Transcript ready." : "Waiting for source.";
   }
   if (stepKey === "write") {
-    return "Waiting for transcript.";
+    return phase === "available" ? "Briefing ready." : "Waiting for transcript.";
+  }
+  if (phase === "available") {
+    return "Available now.";
   }
   return phase === "opening" ? "Opening reader." : "Waiting for briefing.";
 }
