@@ -28,6 +28,7 @@ from fathom.orchestration.observability import (
     elapsed_ms,
     extract_job_error,
 )
+from fathom.services.downloader import AudioTooLargeError
 from fathom.services.provider_resilience import (
     BackoffPolicy,
     ProviderOperationError,
@@ -76,6 +77,8 @@ def _compute_backoff_seconds(
 
 def _should_retry_failure(exc: Exception, *, attempt_count: int) -> bool:
     if attempt_count >= WORKER_MAX_ATTEMPTS:
+        return False
+    if isinstance(exc, AudioTooLargeError):
         return False
     return not isinstance(exc, ProviderOperationError)
 

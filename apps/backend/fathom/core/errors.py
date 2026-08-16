@@ -79,6 +79,24 @@ class PublicBriefingAvailableError(ConflictError):
     code = "public_briefing_available"
 
 
+class ActiveJobLimitError(ConflictError):
+    """The account already has the maximum number of billable jobs in progress."""
+
+    code = "active_job_limit_reached"
+
+
+class VideoTimeCommittedError(ConflictError):
+    """Unsettled jobs leave too little spendable time for the requested source."""
+
+    code = "video_time_committed"
+
+
+class ActiveBriefingsRefundError(ConflictError):
+    """A pack refund must wait for the account's active billable jobs."""
+
+    code = "active_briefings_refund_blocked"
+
+
 class NotFoundError(AppError):
     """Requested resource does not exist (404)."""
 

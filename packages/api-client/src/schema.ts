@@ -692,6 +692,12 @@ export interface components {
             debt_seconds?: number | null;
             /** Maximum Seconds */
             maximum_seconds?: number | null;
+            /** Pending Seconds */
+            pending_seconds?: number | null;
+            /** Active Job Count */
+            active_job_count?: number | null;
+            /** Maximum Active Jobs */
+            maximum_active_jobs?: number | null;
         };
         /** ErrorResponse */
         ErrorResponse: {
@@ -1139,6 +1145,15 @@ export interface operations {
             };
             /** @description Missing or invalid auth token. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Current jobs or committed video time prevent admission. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2279,6 +2294,15 @@ export interface operations {
             };
             /** @description Missing or invalid auth token. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Active briefings block the refund. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

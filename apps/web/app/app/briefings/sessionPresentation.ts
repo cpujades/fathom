@@ -95,6 +95,16 @@ export function getFailurePresentation(
     };
   }
 
+  if (code === "source_audio_too_large") {
+    return {
+      actionHref: "/app",
+      actionLabel: "Try another source",
+      title: "Audio is too large",
+      description: "Talven supports source audio up to 100 MB.",
+      detail: "No video time was charged. Try a shorter public YouTube video."
+    };
+  }
+
   if (
     code === "invalid_request" ||
     code === "source_duration_unknown" ||

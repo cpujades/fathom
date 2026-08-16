@@ -1,9 +1,12 @@
 import type { ApiErrorBody } from "@fathom/api-client";
 
 export type ApiErrorDetails = {
+  active_job_count?: number;
   available_seconds?: number;
   debt_seconds?: number;
   maximum_seconds?: number;
+  maximum_active_jobs?: number;
+  pending_seconds?: number;
   required_seconds?: number;
 };
 
@@ -54,7 +57,15 @@ const getApiErrorDetails = (error: ApiErrorBody | unknown): ApiErrorDetails | nu
 
   const raw = value as Record<string, unknown>;
   const details: ApiErrorDetails = {};
-  for (const key of ["available_seconds", "debt_seconds", "maximum_seconds", "required_seconds"] as const) {
+  for (const key of [
+    "active_job_count",
+    "available_seconds",
+    "debt_seconds",
+    "maximum_seconds",
+    "maximum_active_jobs",
+    "pending_seconds",
+    "required_seconds"
+  ] as const) {
     const item = raw[key];
     if (typeof item === "number" && Number.isFinite(item) && item >= 0) {
       details[key] = Math.floor(item);

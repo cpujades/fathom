@@ -28,6 +28,7 @@ router = APIRouter(prefix="/briefing-sessions", tags=["briefing sessions"])
     responses={
         401: {"model": ErrorResponse, "description": "Missing or invalid auth token."},
         400: {"model": ErrorResponse, "description": "Invalid input (e.g., malformed URL)."},
+        409: {"model": ErrorResponse, "description": "Current jobs or committed video time prevent admission."},
         500: {"model": ErrorResponse, "description": "Unexpected server error."},
         502: {"model": ErrorResponse, "description": "Upstream provider failed."},
     },

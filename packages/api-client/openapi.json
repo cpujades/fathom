@@ -117,6 +117,16 @@
               }
             }
           },
+          "409": {
+            "description": "Current jobs or committed video time prevent admission.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "500": {
             "description": "Unexpected server error.",
             "content": {
@@ -1675,6 +1685,16 @@
               }
             }
           },
+          "409": {
+            "description": "Active briefings block the refund.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "500": {
             "description": "Unexpected server error.",
             "content": {
@@ -2753,6 +2773,42 @@
               }
             ],
             "title": "Maximum Seconds"
+          },
+          "pending_seconds": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending Seconds"
+          },
+          "active_job_count": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Job Count"
+          },
+          "maximum_active_jobs": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maximum Active Jobs"
           }
         },
         "type": "object",
