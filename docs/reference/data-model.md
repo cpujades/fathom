@@ -1,13 +1,9 @@
 # Data model reference
 
-**Authority:** all committed `supabase/migrations/*.sql` files applied in
-filename order.
+**Authority:** `supabase/migrations/*.sql` applied in filename order.
 
-**Working-tree note:** the current branch adds
-`20260815120000_remove_usage_ledger.sql` and
-`20260815130000_reset_and_harden_schema.sql`. After these migrations, the
-application schema has 17 tables and `usage_settlements` owns immutable usage
-history.
+The application schema has 17 tables. `usage_settlements` owns immutable usage
+history; there is no separate usage-ledger table.
 
 Supabase Postgres stores durable application state and acts as the worker queue.
 There is no separate ORM schema.
@@ -20,7 +16,7 @@ There is no separate ORM schema.
 - [Important command families](#important-command-families)
 - [Publication invariants](#publication-invariants)
 - [Settlement invariants](#settlement-invariants)
-- [Current hardening migration](#current-hardening-migration)
+- [Pre-launch hardening reset](#pre-launch-hardening-reset)
 - [CRUD map](#crud-map)
 - [Safe schema inspection](#safe-schema-inspection)
 - [Schema change checklist](#schema-change-checklist)
@@ -100,7 +96,7 @@ Exact signatures and grants remain in migrations.
 
 | Concern | Main commands | Protected invariant |
 | --- | --- | --- |
-| Jobs | `create_or_reuse_settled_job`, `claim_next_settled_job`, `renew_job_lease`, `update_job_with_valid_lease`, requeue commands | User/source convergence, atomic claim, lease fencing, recovery |
+| Jobs | `create_or_reuse_settled_job`, `claim_next_settled_job`, `renew_job_lease`, `update_job_with_valid_lease`, requeue commands | User/source convergence, atomic pending-usage admission, claim, lease fencing, recovery |
 | Queue delay | `next_queued_job_delay_seconds` | Event-driven delayed retry timing |
 | Transcript | `create_transcript_with_segments` | Compatible transcript and contiguous validated segments |
 | Summary | `prepare_summary`, update, complete, and fail commands | One producer, safe takeover, ready-only reuse |
@@ -130,6 +126,11 @@ Restoring the job does not republish it.
 
 ## Settlement invariants
 
+Admission locks the user's billing boundary before queueing new billable work.
+At most three billable jobs can be queued or running. Their combined unsettled
+durations cannot exceed the current spendable entitlement. Same-source reuse
+is resolved before this limit and does not create another job.
+
 `usage_settlements.job_id` is its primary key. One job can have zero or one
 settlement.
 
@@ -153,7 +154,7 @@ Direct Auth user deletion is not an approved account-deletion workflow. A
 future workflow must first resolve Polar subscriptions, refunds, retained
 commerce evidence, shared cache rows, Storage objects, and provider data.
 
-## Current hardening migration
+## Pre-launch hardening reset
 
 `20260815130000_reset_and_harden_schema.sql` starts by truncating mutable
 application tables. It is a one-time pre-user reset, not a reusable deployment
@@ -166,7 +167,7 @@ before external users exist.
 
 The migration does not delete Auth users, Storage objects, or Polar customers.
 Its comment mentions a guarded reset script, but that script is not present in
-the working tree. Confirm the target and perform provider cleanup separately
+the repository. Confirm the target and perform provider cleanup separately
 before applying it.
 
 After external data exists, use forward schema and data migrations that

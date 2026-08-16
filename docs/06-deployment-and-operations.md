@@ -338,7 +338,7 @@ pre-launch schema hardening. Before promoting this release:
 5. never reuse this reset approach after external access starts.
 
 The migration comment refers to a guarded provider-resource reset script. No
-such script exists in the current working tree. Provider cleanup is therefore
+such script exists in the repository. Provider cleanup is therefore
 a separate operator action.
 
 Current query, cache, and pagination checks are in

@@ -136,15 +136,15 @@ against the hosted project.
 
 | Variable | Purpose |
 | --- | --- |
-| `FATHOM_TEST_DATABASE_URL` | Opt-in direct database integration tests |
-| `FATHOM_RUN_GATE_C=1` | Enable the authenticated disposable Gate C journey |
-| `FATHOM_GATE_C_SUPABASE_URL` | Isolated Gate C Supabase URL |
-| `FATHOM_GATE_C_PUBLISHABLE_KEY` | Isolated Gate C publishable key |
-| `FATHOM_GATE_C_SECRET_KEY` | Isolated Gate C secret key |
-| `FATHOM_GATE_C_DATABASE_URL` | Isolated Gate C direct database URL |
+| `FATHOM_TEST_DATABASE_URL` | Direct URL for Python database integration tests |
+| `FATHOM_RUN_E2E=1` | Enable the authenticated E2E product journey |
+| `FATHOM_E2E_SUPABASE_URL` | Isolated E2E Supabase URL |
+| `FATHOM_E2E_PUBLISHABLE_KEY` | Isolated E2E publishable key |
+| `FATHOM_E2E_SECRET_KEY` | Isolated E2E secret key |
+| `FATHOM_E2E_DATABASE_URL` | Isolated E2E direct database URL |
 
-Gate C must use an isolated disposable environment. It creates and deletes
-test identities and data.
+These variables are test-only. Integration and E2E tests must use disposable
+local services because they create and delete test identities and data.
 
 ## API generation variables
 

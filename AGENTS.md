@@ -102,7 +102,7 @@ uv sync --group dev
 uv run ruff check .
 uv run ruff format --check .
 uv run ty check apps/backend/fathom
-PYTHONPATH=apps/backend ./.venv/bin/python -m unittest discover -s apps/backend/tests
+./.venv/bin/python -m unittest discover -s apps/backend/tests/unit -t apps/backend
 ```
 
 ### Frontend

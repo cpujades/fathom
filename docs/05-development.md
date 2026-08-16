@@ -119,8 +119,18 @@ Never point a sandbox webhook at production data.
     uv run ruff check .
     uv run ruff format --check .
     uv run ty check apps/backend/fathom
-    PYTHONPATH=apps/backend ./.venv/bin/python \
-      -m unittest discover -s apps/backend/tests
+    ./.venv/bin/python -m unittest discover \
+      -s apps/backend/tests/unit -t apps/backend
+
+Backend tests are grouped by scope:
+
+- `unit/` mirrors the backend package and does not require local services.
+- `integration/database/` tests Python code against the migrated database.
+- `e2e/` tests the authenticated API-to-worker product journey.
+- `fixtures/` contains stable test input data.
+
+CI runs all three scopes on every pull request. Integration and E2E tests use
+disposable local Supabase services. They never use a hosted project.
 
 ### Frontend
 

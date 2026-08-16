@@ -35,18 +35,15 @@ basic mobile usability.
 
 ## Current position
 
-As of 2026-08-15:
-
 - the application runs locally;
 - application hosting is not selected;
 - Copy Markdown is implemented;
-- Private, Unlisted, and Listed publications are implemented in the working
-  tree;
+- Private, Unlisted, and Listed publications are implemented;
 - public briefing pages, save to library, curated Explore, and Listed source
-  matching are implemented in the working tree;
+  matching are implemented;
 - authenticated browser proof for the publication slice is still required;
-- the current branch is simplifying usage history by removing
-  `usage_ledger` and using `usage_settlements` as the immutable history;
+- `usage_settlements` provides immutable usage history, with atomic admission
+  protection for parallel jobs;
 - referrals are not implemented;
 - Ask this episode is not implemented; and
 - production SMTP, observability, backups, restore, provider rehearsals, and
@@ -71,8 +68,8 @@ There are two honest launch boundaries:
 
 ### Boundary A: invite-only product beta
 
-Freeze new feature development after the current publication and billing work
-is correct. Use the beta to prove that people:
+Freeze new feature development after the current candidate is verified. Use
+the beta to prove that people:
 
 - complete a briefing;
 - understand its evidence;
@@ -104,7 +101,7 @@ contracts and acceptance criteria are already defined in
 
 ### Stage 0: finish the local candidate
 
-1. Complete the publication and usage-history work already in progress.
+1. Verify publication, usage history, and parallel-job admission end to end.
 2. Confirm that the one-time schema reset can discard every existing app row
    in its first target environment.
 3. Run backend, frontend, generated-contract, and database checks.

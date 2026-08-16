@@ -44,13 +44,19 @@ for metadata. The source must:
 - be a supported public YouTube video;
 - have a known positive duration;
 - be no longer than 7,200 seconds; and
-- fit the user's current spendable time.
+- fit the user's current spendable time after other unsettled work.
+
+One user can have up to three billable jobs in progress. Admission and
+settlement lock the same user billing boundary. The unsettled durations of
+simultaneous requests cannot commit more source time than the current balance.
 
 Metadata has a 30-second deadline.
 
 ### 2. Download
 
-The worker selects the smallest available audio-only stream.
+The worker selects the smallest audio-only stream by advertised or estimated
+file size. Audio bitrate breaks a size tie. It does not download the highest
+quality stream by default.
 
 Current bounds:
 
@@ -62,6 +68,10 @@ Current bounds:
 
 The downloader runs in a separate process so timeout or cancellation can kill
 the work without leaving the API or main worker process stuck.
+
+The 100 MB limit is checked before download when stream metadata provides a
+size, during download, and after download. An oversized source is a permanent
+input error: Talven does not retry it and does not charge video time.
 
 ### 3. Temporary delivery
 
@@ -134,6 +144,8 @@ There are two retry layers:
 
 Retries never create a second user job or a second settlement. An expired
 worker lease cannot publish over a newer worker.
+
+Deterministic input failures, including audio above 100 MB, are not retried.
 
 The launch rehearsal must measure the combined time and cost of both layers.
 Local timeout constants are safety bounds, not proof that users will accept

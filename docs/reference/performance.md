@@ -1,6 +1,6 @@
 # Performance reference
 
-**Status:** Current assessment of the working tree on 2026-08-15.
+**Status:** Current performance design and measured-risk register.
 
 **Read this to understand:** current query paths, indexes, hydration, browser
 caches, pagination choices, and the evidence required before adding more
@@ -57,6 +57,7 @@ The hardening migration adds these main indexes:
 | --- | --- | --- |
 | Private library | `jobs_briefing_library_idx` | Matches user, active statuses, created time, and ID order |
 | Saved compatible work | `jobs_user_summary_access_idx` | Matches owner and summary lookup for reusable jobs |
+| Parallel job admission | `jobs_one_active_source_per_user_idx` plus the settlement primary key | Bounds the user-scoped active-job and unsettled-duration check |
 | Usage history | `usage_settlements_user_settled_idx` | Matches user, settlement time, and stable job-ID order |
 | Explore by topic | `briefing_publications_explore_idx` | Matches public state, topic, listing time, and ID |
 | Explore all | `briefing_publications_explore_all_idx` | Matches public state, listing time, and ID |
