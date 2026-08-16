@@ -136,9 +136,9 @@ class AuthenticatedProductJourneyE2ETests(unittest.IsolatedAsyncioTestCase):
         finally:
             self.warning_context.__exit__(None, None, None)
 
-    async def test_authenticated_product_and_recovery_journeys(self) -> None:
+    async def test_authenticated_product_and_failure_journeys(self) -> None:
         api = self._api()
-        good_video, retry_video, failed_video = self.test_video_ids
+        good_video, transient_video, failed_video = self.test_video_ids
 
         unauthenticated = await api.post(
             "/briefing-sessions",
@@ -231,29 +231,20 @@ class AuthenticatedProductJourneyE2ETests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(restored.json()["state"], "ready")
         self.assertEqual(restored.json()["resolution_type"], "reused_ready")
 
-        retry_session = await self._create_session(retry_video)
-        retry_session_id = str(retry_session["session_id"])
+        transient_session = await self._create_session(transient_video)
+        transient_session_id = str(transient_session["session_id"])
         await self._process_next_job(
             transcription=TranscriptionError(
                 "E2E transient transcription failure.",
                 kind=ProviderFailureKind.TRANSIENT,
             ),
             summary=_briefing_contract(),
-            zero_worker_backoff=True,
         )
-        retry_queued = await self._job_row(retry_session_id)
-        self.assertEqual(retry_queued["status"], "queued")
-        self.assertEqual(retry_queued["stage"], "queued")
-        self.assertEqual(retry_queued["attempt_count"], 1)
-        self.assertEqual(retry_queued["error_code"], "transcription_failed")
-
-        await self._process_next_job(
-            transcription=_successful_transcription(),
-            summary=_briefing_contract(),
-        )
-        retry_ready = await self._job_row(retry_session_id)
-        self.assertEqual(retry_ready["status"], "succeeded")
-        self.assertEqual(retry_ready["attempt_count"], 2)
+        transient_failure = await self._job_row(transient_session_id)
+        self.assertEqual(transient_failure["status"], "failed")
+        self.assertEqual(transient_failure["stage"], "failed")
+        self.assertEqual(transient_failure["attempt_count"], 1)
+        self.assertEqual(transient_failure["error_code"], "transcription_failed")
 
         failed_session = await self._create_session(failed_video)
         failed_session_id = str(failed_session["session_id"])
@@ -277,14 +268,14 @@ class AuthenticatedProductJourneyE2ETests(unittest.IsolatedAsyncioTestCase):
 
         usage = await api.get("/billing/usage")
         self.assertEqual(usage.status_code, 200, usage.text)
-        self.assertEqual(usage.json()["total_remaining_seconds"], 3360)
+        self.assertEqual(usage.json()["total_remaining_seconds"], 3480)
         plans = await api.get("/billing/plans")
         self.assertEqual(plans.status_code, 200)
         self.assertTrue(any(plan["polar_product_id"] == "internal_free" for plan in plans.json()))
         usage_history = await api.get("/billing/usage-history?limit=10&offset=0")
         self.assertEqual(usage_history.status_code, 200)
         usage_history_page = usage_history.json()
-        self.assertEqual(len(usage_history_page["items"]), 2)
+        self.assertEqual(len(usage_history_page["items"]), 1)
         self.assertEqual(usage_history_page["limit"], 10)
         self.assertEqual(usage_history_page["offset"], 0)
         self.assertFalse(usage_history_page["has_more"])
@@ -307,10 +298,10 @@ class AuthenticatedProductJourneyE2ETests(unittest.IsolatedAsyncioTestCase):
             """,
             uuid.UUID(cast(str, self.user_id)),
         )
-        self.assertEqual(len(settlement_rows), 2)
+        self.assertEqual(len(settlement_rows), 1)
         self.assertEqual(
             {str(row["job_id"]) for row in settlement_rows},
-            {good_session_id, retry_session_id},
+            {good_session_id},
         )
         self.assertTrue(all(int(row["duration_seconds"]) == 120 for row in settlement_rows))
         self.assertEqual(
@@ -322,9 +313,9 @@ class AuthenticatedProductJourneyE2ETests(unittest.IsolatedAsyncioTestCase):
                   and job_id = $2
                 """,
                 uuid.UUID(cast(str, self.user_id)),
-                uuid.UUID(retry_session_id),
+                uuid.UUID(transient_session_id),
             ),
-            1,
+            0,
         )
         self.assertEqual(
             await connection.fetchval(
@@ -364,7 +355,6 @@ class AuthenticatedProductJourneyE2ETests(unittest.IsolatedAsyncioTestCase):
         *,
         transcription: TranscriptionResult | Exception,
         summary: BriefingContract | Exception,
-        zero_worker_backoff: bool = False,
     ) -> None:
         admin_client = self._admin_client()
         claimed = await claim_next_job(admin_client, lease_seconds=120)
@@ -378,7 +368,6 @@ class AuthenticatedProductJourneyE2ETests(unittest.IsolatedAsyncioTestCase):
             side_effect=summary if isinstance(summary, Exception) else None,
             return_value=None if isinstance(summary, Exception) else summary,
         )
-        backoff = 0 if zero_worker_backoff else 5
         with (
             patch(
                 "fathom.orchestration.transcripts.download_audio_with_deadline",
@@ -391,10 +380,6 @@ class AuthenticatedProductJourneyE2ETests(unittest.IsolatedAsyncioTestCase):
             patch(
                 "fathom.orchestration.summaries.summarize_transcript_with_evidence",
                 summary_fake,
-            ),
-            patch(
-                "fathom.orchestration.runner._compute_backoff_seconds",
-                return_value=backoff,
             ),
         ):
             await _handle_claimed_job(
