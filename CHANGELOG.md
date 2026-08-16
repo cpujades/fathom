@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.24.0](https://github.com/cpujades/fathom/compare/v0.23.0...v0.24.0) (2026-08-16)
+
+_Automated release from [#181](https://github.com/cpujades/fathom/pull/181) feat: add curated briefing sharing and Explore_
+
+### Features
+
+- feat: add curated briefing publications (953b4e3)
+- feat: finalize data and billing foundation (00297d5)
+
+### Refactoring
+
+- refactor(web): remove redundant source preflight (0a2080c)
+
+### Documentation
+
+- docs: create concise owner reading path (cb777db)
+- docs: prefer Railway for application hosting (d6e0831)
+
+### Tests
+
+- test: fix publication index assertion (75c2dc1)
+- test: make storage boundary check portable (0d670dd)
+
 ## [0.23.0](https://github.com/cpujades/fathom/compare/v0.22.2...v0.23.0) (2026-08-11)
 
 _Automated release from [#180](https://github.com/cpujades/fathom/pull/180) feat(web): polish briefing workflows and pricing_
