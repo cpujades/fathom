@@ -7,6 +7,7 @@ from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from fathom.core.config import Settings
+from fathom.core.errors import ActiveJobLimitError, VideoTimeCommittedError
 from fathom.crud.supabase.jobs import (
     JobLeaseLostError,
     claim_next_job,
@@ -32,6 +33,40 @@ def _claimed_job() -> dict[str, object]:
 
 
 class JobLeaseCrudTests(unittest.IsolatedAsyncioTestCase):
+    async def test_job_admission_resolutions_raise_typed_domain_errors(self) -> None:
+        cases = (
+            (
+                "active_job_limit_reached",
+                {"active_job_count": 3, "maximum_active_jobs": 3},
+                ActiveJobLimitError,
+            ),
+            (
+                "video_time_committed",
+                {"required_seconds": 600, "available_seconds": 300, "pending_seconds": 900},
+                VideoTimeCommittedError,
+            ),
+        )
+
+        for resolution_type, details, error_type in cases:
+            with self.subTest(resolution_type=resolution_type):
+                query = MagicMock()
+                query.execute = AsyncMock(
+                    return_value=SimpleNamespace(data={"resolution_type": resolution_type, "details": details})
+                )
+                client = MagicMock()
+                client.rpc.return_value = query
+
+                with self.assertRaises(error_type) as raised:
+                    await create_or_reuse_job(
+                        cast(AsyncClient, client),
+                        user_id="22222222-2222-2222-2222-222222222222",
+                        url="https://www.youtube.com/watch?v=admission",
+                        source_key="youtube:admission",
+                        duration_seconds=600,
+                    )
+
+                self.assertEqual(raised.exception.details, details)
+
     async def test_new_worker_uses_settlement_aware_claim_command(self) -> None:
         query = MagicMock()
         query.execute = AsyncMock(return_value=SimpleNamespace(data=None))

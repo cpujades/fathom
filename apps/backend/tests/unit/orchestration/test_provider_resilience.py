@@ -20,6 +20,7 @@ from fathom.core.config import Settings
 from fathom.core.constants import GROQ_SIGNED_URL_TTL_SECONDS
 from fathom.orchestration.observability import extract_job_error
 from fathom.orchestration.runner import _handle_claimed_job
+from fathom.services.downloader import AudioTooLargeError
 from fathom.services.provider_resilience import (
     PROVIDER_MAX_ATTEMPTS,
     BackoffPolicy,
@@ -434,6 +435,27 @@ class ProviderWorkerRetryTests(unittest.IsolatedAsyncioTestCase):
         failed.assert_awaited_once()
         self.assertEqual(failed.await_args.kwargs["error_code"], "provider_capacity_reached")
         self.assertIn("Your source is fine", failed.await_args.kwargs["error_message"])
+
+    async def test_oversize_audio_is_user_safe_and_never_requeued(self) -> None:
+        settings = cast(Settings, SimpleNamespace())
+        admin_client = cast(AsyncClient, object())
+        error = AudioTooLargeError("Source audio exceeds the supported 100 MB limit.")
+
+        with (
+            patch(
+                "fathom.orchestration.runner._run_job_with_heartbeat",
+                AsyncMock(side_effect=error),
+            ),
+            patch("fathom.orchestration.runner.record_job_event_best_effort", AsyncMock()),
+            patch("fathom.orchestration.runner.mark_job_retry", AsyncMock()) as retry,
+            patch("fathom.orchestration.runner.mark_job_failed", AsyncMock()) as failed,
+        ):
+            await _handle_claimed_job(self._job(), settings, admin_client)
+
+        retry.assert_not_awaited()
+        failed.assert_awaited_once()
+        self.assertEqual(failed.await_args.kwargs["error_code"], "source_audio_too_large")
+        self.assertIn("100 MB", failed.await_args.kwargs["error_message"])
 
 
 if __name__ == "__main__":

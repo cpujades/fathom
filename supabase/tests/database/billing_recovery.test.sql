@@ -2,7 +2,7 @@ begin;
 
 set local search_path = extensions, public, pg_catalog;
 
-select plan(56);
+select plan(59);
 
 insert into auth.users (id)
 values ('12000000-0000-0000-0000-000000000001');
@@ -336,6 +336,59 @@ values (
   pg_catalog.now() + interval '30 days',
   'active'
 );
+
+insert into public.jobs (
+  id,
+  user_id,
+  status,
+  url,
+  source_key,
+  duration_seconds,
+  stage,
+  progress,
+  usage_settlement_required
+)
+values (
+  '14000000-0000-0000-0000-000000000001',
+  '12000000-0000-0000-0000-000000000001',
+  'queued',
+  'https://www.youtube.com/watch?v=refund-active-job',
+  'youtube:refund-active-job',
+  100,
+  'queued',
+  0,
+  true
+);
+
+create temporary table blocked_refund as
+select public.begin_pack_refund(
+  '12000000-0000-0000-0000-000000000001',
+  'ord_atomic_refund_001',
+  600
+) as result;
+
+select is(
+  (select result ->> 'resolution_type' from blocked_refund),
+  'active_jobs_in_progress',
+  'an active billable briefing blocks a pack refund'
+);
+select is(
+  (select status from public.billing_orders where polar_order_id = 'ord_atomic_refund_001'),
+  'paid',
+  'a blocked refund leaves the billing order paid'
+);
+select is(
+  (
+    select consumed_seconds
+    from public.credit_lots
+    where source_key = 'ord_atomic_refund_001'
+  ),
+  200,
+  'a blocked refund does not change pack consumption'
+);
+
+delete from public.jobs
+where id = '14000000-0000-0000-0000-000000000001';
 
 create temporary table first_refund as
 select public.begin_pack_refund(

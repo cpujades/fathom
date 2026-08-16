@@ -52,6 +52,28 @@ test("an over-limit source states the supported maximum", () => {
   );
 
   assert.equal(presentation.title, "Video is too long");
-  assert.match(presentation.description, /2h 00m 00s/);
+  assert.equal(presentation.description, "Talven supports videos up to 2 hours.");
   assert.equal(presentation.billingAction, null);
+});
+
+test("concurrent admission errors explain job and committed-time limits", () => {
+  const activeLimit = getAdmissionFailurePresentation(
+    "active_job_limit_reached",
+    "Too many jobs.",
+    { active_job_count: 3, maximum_active_jobs: 3 },
+    true
+  );
+  const committed = getAdmissionFailurePresentation(
+    "video_time_committed",
+    "Time is committed.",
+    { required_seconds: 3_600, available_seconds: 1_800, pending_seconds: 5_400 },
+    true
+  );
+
+  assert.match(activeLimit.description, /up to 3 briefings/i);
+  assert.equal(activeLimit.billingAction, null);
+  assert.match(committed.description, /1h 00m 00s/);
+  assert.match(committed.description, /30m 00s/);
+  assert.match(committed.detail, /1h 30m 00s/);
+  assert.equal(committed.billingAction?.href, "/app/billing?view=packs#billing-offers");
 });

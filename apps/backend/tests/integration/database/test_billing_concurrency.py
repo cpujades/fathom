@@ -112,8 +112,11 @@ class BillingConcurrencyIntegrationTests(unittest.IsolatedAsyncioTestCase):
             f"""
             delete from public.billing_maintenance_leases
             where lease_name = 'billing-concurrency-test';
-            delete from public.usage_settlements where job_id = '{JOB_ID}';
-            delete from public.jobs where id = '{JOB_ID}';
+            delete from public.usage_settlements
+            where job_id in (
+              select id from public.jobs where user_id = '{USER_ID}'
+            );
+            delete from public.jobs where user_id = '{USER_ID}';
             delete from public.credit_lots where id = '{LOT_ID}';
             delete from public.billing_orders where polar_order_id = '{POLAR_ORDER_ID}';
             delete from public.entitlements where user_id = '{USER_ID}';
@@ -123,89 +126,84 @@ class BillingConcurrencyIntegrationTests(unittest.IsolatedAsyncioTestCase):
             """
         )
 
-    async def test_settlement_commits_before_refund_recomputes_authoritative_amount(self) -> None:
-        settler = await asyncpg.connect(DATABASE_URL)
-        refunder = await asyncpg.connect(DATABASE_URL)
-        settler_transaction = settler.transaction()
-        committed = False
-        try:
-            await settler_transaction.start()
-            settlement = await settler.fetchval(
-                f"""
-                select public.settle_job_usage('{JOB_ID}', '{LEASE_TOKEN}', 600)
-                """
+    async def test_refund_waits_for_active_job_to_settle_and_finish(self) -> None:
+        blocked_before_settlement = _decode_json(
+            await self.connection.fetchval(f"select public.begin_pack_refund('{USER_ID}', '{POLAR_ORDER_ID}', 600)")
+        )
+        settlement = _decode_json(
+            await self.connection.fetchval(f"select public.settle_job_usage('{JOB_ID}', '{LEASE_TOKEN}', 600)")
+        )
+        blocked_before_completion = _decode_json(
+            await self.connection.fetchval(f"select public.begin_pack_refund('{USER_ID}', '{POLAR_ORDER_ID}', 600)")
+        )
+        completed = await self.connection.fetchval(
+            f"""
+            select public.complete_job_after_settlement(
+              '{JOB_ID}', '{SUMMARY_ID}', '{LEASE_TOKEN}'
             )
-            refund_task = asyncio.create_task(
-                refunder.fetchval(
-                    f"""
-                    select public.begin_pack_refund('{USER_ID}', '{POLAR_ORDER_ID}', 600)
-                    """
-                )
-            )
-            await asyncio.sleep(0.05)
-            self.assertFalse(refund_task.done(), "refund must wait for the locked billing order")
+            """
+        )
+        refund = _decode_json(
+            await self.connection.fetchval(f"select public.begin_pack_refund('{USER_ID}', '{POLAR_ORDER_ID}', 600)")
+        )
 
-            await settler_transaction.commit()
-            committed = True
-            refund = await asyncio.wait_for(refund_task, timeout=2)
-        finally:
-            if not committed:
-                await settler_transaction.rollback()
-            await settler.close()
-            await refunder.close()
-
-        settlement_payload = _decode_json(settlement)
-        refund_payload = _decode_json(refund)
-        self.assertEqual(settlement_payload["resolution_type"], "settled")
-        self.assertEqual(settlement_payload["settlement"]["pack_seconds"], 200)
-        self.assertEqual(refund_payload["resolution_type"], "started")
-        self.assertEqual(refund_payload["remaining_seconds_before_refund"], 400)
-        self.assertEqual(refund_payload["refundable_amount_cents"], 2000)
+        self.assertEqual(blocked_before_settlement["resolution_type"], "active_jobs_in_progress")
+        self.assertEqual(settlement["resolution_type"], "settled")
+        self.assertEqual(settlement["settlement"]["pack_seconds"], 200)
+        self.assertEqual(blocked_before_completion["resolution_type"], "active_jobs_in_progress")
+        self.assertTrue(completed)
+        self.assertEqual(refund["resolution_type"], "started")
+        self.assertEqual(refund["remaining_seconds_before_refund"], 400)
+        self.assertEqual(refund["refundable_amount_cents"], 2000)
         self.assertEqual(await self._order_status(), "refund_pending")
         self.assertEqual(await self._lot_consumed_seconds(), 200)
         self.assertEqual(await self._pack_available_seconds(), 0)
 
-    async def test_refund_commits_before_settlement_excludes_pack_credit(self) -> None:
+    async def test_job_admission_and_refund_serialize_for_one_user(self) -> None:
+        await self.connection.execute("delete from public.jobs where id = $1", JOB_ID)
+        admitter = await asyncpg.connect(DATABASE_URL)
         refunder = await asyncpg.connect(DATABASE_URL)
-        settler = await asyncpg.connect(DATABASE_URL)
-        refunder_transaction = refunder.transaction()
+        admission_transaction = admitter.transaction()
         committed = False
         try:
-            await refunder_transaction.start()
-            refund = await refunder.fetchval(
-                f"""
-                select public.begin_pack_refund('{USER_ID}', '{POLAR_ORDER_ID}', 600)
-                """
-            )
-            settlement_task = asyncio.create_task(
-                settler.fetchval(
-                    f"""
-                    select public.settle_job_usage('{JOB_ID}', '{LEASE_TOKEN}', 600)
+            await admission_transaction.start()
+            admission = _decode_json(
+                await admitter.fetchval(
                     """
+                    select public.create_or_reuse_settled_job(
+                      $1::uuid,
+                      'https://www.youtube.com/watch?v=refund-admission-race',
+                      'youtube:refund-admission-race',
+                      200,
+                      null
+                    )
+                    """,
+                    USER_ID,
+                )
+            )
+            refund_task = asyncio.create_task(
+                refunder.fetchval(
+                    "select public.begin_pack_refund($1::uuid, $2, 600)",
+                    USER_ID,
+                    POLAR_ORDER_ID,
                 )
             )
             await asyncio.sleep(0.05)
-            self.assertFalse(settlement_task.done(), "settlement must wait for the locked billing order")
+            self.assertFalse(refund_task.done(), "refund must wait for the user's admission lock")
 
-            await refunder_transaction.commit()
+            await admission_transaction.commit()
             committed = True
-            settlement = await asyncio.wait_for(settlement_task, timeout=2)
+            refund = _decode_json(await asyncio.wait_for(refund_task, timeout=2))
         finally:
             if not committed:
-                await refunder_transaction.rollback()
+                await admission_transaction.rollback()
+            await admitter.close()
             await refunder.close()
-            await settler.close()
 
-        refund_payload = _decode_json(refund)
-        settlement_payload = _decode_json(settlement)
-        self.assertEqual(refund_payload["resolution_type"], "started")
-        self.assertEqual(refund_payload["refundable_amount_cents"], 3000)
-        self.assertEqual(settlement_payload["resolution_type"], "settled")
-        self.assertEqual(settlement_payload["settlement"]["pack_seconds"], 0)
-        self.assertEqual(settlement_payload["settlement"]["debt_incurred_seconds"], 200)
-        self.assertEqual(await self._order_status(), "refund_pending")
+        self.assertEqual(admission["resolution_type"], "new")
+        self.assertEqual(refund["resolution_type"], "active_jobs_in_progress")
+        self.assertEqual(await self._order_status(), "paid")
         self.assertEqual(await self._lot_consumed_seconds(), 0)
-        self.assertEqual(await self._pack_available_seconds(), 0)
 
     async def test_only_one_concurrent_maintenance_worker_claims_the_lease(self) -> None:
         first = await asyncpg.connect(DATABASE_URL)

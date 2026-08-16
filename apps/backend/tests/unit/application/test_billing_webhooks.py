@@ -9,7 +9,7 @@ from unittest.mock import ANY, AsyncMock, patch
 from fathom.application.billing.webhooks import handle_polar_webhook
 from fathom.core.errors import ExternalServiceError
 
-FIXTURE_PATH = Path(__file__).parent / "fixtures" / "polar_webhook_replay.json"
+FIXTURE_PATH = Path(__file__).parents[2] / "fixtures" / "polar_webhook_replay.json"
 
 
 class BillingWebhookTests(unittest.IsolatedAsyncioTestCase):

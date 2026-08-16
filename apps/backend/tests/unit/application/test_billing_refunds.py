@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, patch
 from fathom.application.billing.refunds import request_pack_refund
 from fathom.application.identity import AuthenticatedUser
 from fathom.core.config import Settings
-from fathom.core.errors import ExternalServiceError, InvalidRequestError
+from fathom.core.errors import ActiveBriefingsRefundError, ExternalServiceError, InvalidRequestError
 from fathom.services.polar import PolarInvalidRequestError
 
 
@@ -189,6 +189,44 @@ class BillingRefundTests(unittest.IsolatedAsyncioTestCase):
                             settings=self.settings,
                         )
                 create_refund.assert_not_awaited()
+
+    async def test_active_briefings_block_refund_with_user_facing_conflict(self) -> None:
+        with (
+            patch(
+                "fathom.application.billing.refunds.create_supabase_admin_client",
+                AsyncMock(return_value=self.admin_client),
+            ),
+            patch(
+                "fathom.application.billing.refunds.begin_pack_refund",
+                AsyncMock(return_value={"resolution_type": "active_jobs_in_progress"}),
+            ),
+            patch(
+                "fathom.application.billing.refunds.polar.create_order_refund",
+                AsyncMock(),
+            ) as create_refund,
+        ):
+            with self.assertRaisesRegex(
+                ActiveBriefingsRefundError,
+                r"Wait for your active briefings to finish before requesting this refund\.",
+            ) as raised:
+                await request_pack_refund(
+                    polar_order_id="ord_123",
+                    auth=self.auth,
+                    settings=self.settings,
+                )
+
+        self.assertEqual(raised.exception.code, "active_briefings_refund_blocked")
+        self.assertEqual(raised.exception.status_code, 409)
+        self.resolve_operation.assert_awaited_once_with(
+            self.admin_client,
+            operation_id=self.operation_id,
+            user_id="user_123",
+            operation_type="refund",
+            polar_order_id="ord_123",
+            status="failed",
+            failure_code="refund_not_started",
+        )
+        create_refund.assert_not_awaited()
 
     async def test_invalid_authoritative_amount_fails_closed(self) -> None:
         invalid_started = {
