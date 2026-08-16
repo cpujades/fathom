@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.24.1](https://github.com/cpujades/fathom/compare/v0.24.0...v0.24.1) (2026-08-16)
+
+_Automated release from [#182](https://github.com/cpujades/fathom/pull/182) Bump the "weekly-maintenance" group with 2 updates across multiple ecosystems_
+
+### Chores
+
+- chore(deps): bump the weekly-maintenance group with 4 updates (a8283b4)
+
 ## [0.24.0](https://github.com/cpujades/fathom/compare/v0.23.0...v0.24.0) (2026-08-16)
 
 _Automated release from [#181](https://github.com/cpujades/fathom/pull/181) feat: add curated briefing sharing and Explore_
