@@ -244,7 +244,7 @@ class AuthenticatedProductJourneyE2ETests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(transient_failure["status"], "failed")
         self.assertEqual(transient_failure["stage"], "failed")
         self.assertEqual(transient_failure["attempt_count"], 1)
-        self.assertEqual(transient_failure["error_code"], "transcription_failed")
+        self.assertEqual(transient_failure["error_code"], "provider_temporarily_unavailable")
 
         failed_session = await self._create_session(failed_video)
         failed_session_id = str(failed_session["session_id"])
