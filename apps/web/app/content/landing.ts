@@ -100,6 +100,7 @@ type LandingContent = {
 
 const landingContent: LandingContent = {
   nav: [
+    { label: "Explore", href: "/explore" },
     { label: "Method", href: "#how-it-works" },
     { label: "Sample brief", href: "#proof" },
     { label: "Pricing", href: "#pricing" },
@@ -250,6 +251,7 @@ const landingContent: LandingContent = {
   footer: {
     copyright: "Copyright 2026 Talven",
     links: [
+      { label: "Explore", href: "/explore" },
       { label: "Pricing", href: "#pricing" },
       { label: "Sign in", href: "/signin" },
       { label: "Privacy", href: "/privacy" },

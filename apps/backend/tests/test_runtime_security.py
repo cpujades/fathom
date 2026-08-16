@@ -129,6 +129,14 @@ class RuntimeSecuritySettingsTests(unittest.TestCase):
             ["10.0.0.4/32", "2001:db8::/32"],
         )
 
+    def test_explore_operator_ids_are_validated_and_deduplicated(self) -> None:
+        operator_id = "11111111-1111-1111-1111-111111111111"
+        settings = Settings.model_validate(_settings_values(EXPLORE_OPERATOR_USER_IDS=f"{operator_id}, {operator_id}"))
+
+        self.assertEqual(settings.explore_operator_user_ids, [operator_id])
+        with self.assertRaisesRegex(ValidationError, "must be UUIDs"):
+            Settings.model_validate(_settings_values(EXPLORE_OPERATOR_USER_IDS="not-a-user-id"))
+
     def test_comma_separated_lists_load_from_real_environment_sources(self) -> None:
         environment = {
             key: str(value)

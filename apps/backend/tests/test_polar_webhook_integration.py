@@ -18,6 +18,9 @@ class PolarWebhookConcurrencyTests(unittest.IsolatedAsyncioTestCase):
         await self._cleanup()
         await self.connection.execute(
             """
+            insert into auth.users (id)
+            values ('97000000-0000-0000-0000-000000000002');
+
             insert into public.plans (
               id, name, plan_type, polar_product_id, plan_code, currency,
               amount_cents, billing_interval, version, quota_seconds,
@@ -34,7 +37,7 @@ class PolarWebhookConcurrencyTests(unittest.IsolatedAsyncioTestCase):
               null,
               1,
               300,
-              0,
+              null,
               30
             );
 
@@ -67,6 +70,8 @@ class PolarWebhookConcurrencyTests(unittest.IsolatedAsyncioTestCase):
             where user_id = '97000000-0000-0000-0000-000000000002';
             delete from public.plans
             where id = '97000000-0000-0000-0000-000000000001';
+            delete from auth.users
+            where id = '97000000-0000-0000-0000-000000000002';
             """
         )
 

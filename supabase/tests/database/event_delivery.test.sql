@@ -4,6 +4,11 @@ set local search_path = extensions, public, pg_catalog;
 
 select plan(25);
 
+insert into auth.users (id)
+values
+  ('a2000000-0000-0000-0000-000000000001'),
+  ('a2000000-0000-0000-0000-000000000002');
+
 select col_not_null(
   'public',
   'job_events',

@@ -36,7 +36,6 @@ class TimelineJob(DiagnosticModel):
 
 class TimelineSummary(DiagnosticModel):
     id: str
-    user_id: str | None = None
     transcript_id: str | None = None
     prompt_key: str | None = None
     summary_model: str | None = None
@@ -48,7 +47,6 @@ class TimelineSummary(DiagnosticModel):
     failed_at: datetime | None = None
     generation_job_id: str | None = None
     created_at: datetime | None = None
-    ttl_expires_at: datetime | None = None
 
     @property
     def markdown_chars(self) -> int:
@@ -64,7 +62,6 @@ class TimelineTranscript(DiagnosticModel):
     source_author: str | None = None
     source_length_seconds: int | None = None
     created_at: datetime | None = None
-    ttl_expires_at: datetime | None = None
 
 
 class TimelineEvent(DiagnosticModel):

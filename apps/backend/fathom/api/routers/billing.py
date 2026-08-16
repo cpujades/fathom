@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Path, Request
+from fastapi import APIRouter, Depends, Path, Query, Request
 from pydantic import TypeAdapter
 
 from fathom.api.deps.auth import get_auth_context
@@ -27,6 +27,7 @@ from fathom.schemas.billing import (
     PackRefundResponse,
     PlanResponse,
     UsageHistoryEntry,
+    UsageHistoryResponse,
     UsageOverviewResponse,
 )
 from fathom.schemas.errors import ErrorResponse
@@ -160,29 +161,39 @@ async def get_usage(
 
 
 @router.get(
-    "/briefings",
-    response_model=list[UsageHistoryEntry],
+    "/usage-history",
+    response_model=UsageHistoryResponse,
     responses={
         401: {"model": ErrorResponse, "description": "Missing or invalid auth token."},
+        422: {"model": ErrorResponse, "description": "Invalid query parameters."},
         500: {"model": ErrorResponse, "description": "Unexpected server error."},
     },
 )
-async def get_briefings(
+async def get_usage_history_entries(
     auth: Annotated[AuthenticatedUser, Depends(get_auth_context)],
     settings: Annotated[Settings, Depends(get_settings)],
-) -> list[UsageHistoryEntry]:
-    entries = await get_usage_history(auth.user_id, settings, limit=50)
-    return [
-        UsageHistoryEntry(
-            job_id=entry.get("job_id"),
-            title=entry.get("title"),
-            seconds_used=int(entry.get("seconds_used") or 0),
-            source=str(entry.get("source") or ""),
-            created_at=DATETIME_ADAPTER.validate_python(entry.get("created_at")),
-            session_path=f"/app/briefings/sessions/{entry.get('job_id')}" if entry.get("job_id") else None,
-        )
-        for entry in entries
-    ]
+    limit: Annotated[int, Query(ge=1, le=10)] = 10,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> UsageHistoryResponse:
+    page = await get_usage_history(auth.user_id, settings, limit=limit, offset=offset)
+    return UsageHistoryResponse(
+        items=[
+            UsageHistoryEntry(
+                job_id=entry["job_id"],
+                title=entry.get("title"),
+                duration_seconds=int(entry.get("duration_seconds") or 0),
+                subscription_seconds=int(entry.get("subscription_seconds") or 0),
+                pack_seconds=int(entry.get("pack_seconds") or 0),
+                debt_incurred_seconds=int(entry.get("debt_incurred_seconds") or 0),
+                settled_at=DATETIME_ADAPTER.validate_python(entry.get("settled_at")),
+                session_path=entry.get("session_path"),
+            )
+            for entry in page.entries
+        ],
+        limit=page.limit,
+        offset=page.offset,
+        has_more=page.has_more,
+    )
 
 
 @router.get(

@@ -13,9 +13,19 @@ type BriefingListItem = components["schemas"]["BriefingListItem"];
 type BriefingListResponse = components["schemas"]["BriefingListResponse"];
 type BriefingListSort = BriefingListResponse["sort"];
 type BriefingSourceFilter = BriefingListResponse["source_type"];
+type PublicationStateResponse = components["schemas"]["PublicationStateResponse"];
+type PublicBriefingResponse = components["schemas"]["PublicBriefingResponse"];
+type ExploreBriefingItem = components["schemas"]["ExploreBriefingItem"];
+type ExploreBriefingResponse = components["schemas"]["ExploreBriefingResponse"];
+type ExploreTopic = components["schemas"]["ExploreTopic"];
+type PublicationSourceMatchResponse = components["schemas"]["PublicationSourceMatchResponse"];
+type PublicationLibraryEntriesRequest = components["schemas"]["PublicationLibraryEntriesRequest"];
+type PublicationLibraryEntriesResponse = components["schemas"]["PublicationLibraryEntriesResponse"];
+type PublicationLibraryEntryResponse = components["schemas"]["PublicationLibraryEntryResponse"];
 type PlanResponse = components["schemas"]["PlanResponse"];
 type UsageOverviewResponse = components["schemas"]["UsageOverviewResponse"];
 type UsageHistoryEntry = components["schemas"]["UsageHistoryEntry"];
+type UsageHistoryResponse = components["schemas"]["UsageHistoryResponse"];
 type BillingAccountResponse = components["schemas"]["BillingAccountResponse"];
 type BillingOrderHistoryEntry = components["schemas"]["BillingOrderHistoryEntry"];
 type PackBillingState = components["schemas"]["PackBillingState"];
@@ -43,6 +53,15 @@ export type {
   BriefingSessionResolution,
   BriefingSessionResponse,
   BriefingSessionState,
+  PublicationStateResponse,
+  PublicBriefingResponse,
+  ExploreBriefingItem,
+  ExploreBriefingResponse,
+  ExploreTopic,
+  PublicationSourceMatchResponse,
+  PublicationLibraryEntriesRequest,
+  PublicationLibraryEntriesResponse,
+  PublicationLibraryEntryResponse,
   HealthResponse,
   ReadyResponse,
   StatusResponse,
@@ -57,5 +76,6 @@ export type {
   PackBillingState,
   SubscriptionBillingState,
   UsageOverviewResponse,
-  UsageHistoryEntry
+  UsageHistoryEntry,
+  UsageHistoryResponse
 };

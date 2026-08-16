@@ -4,6 +4,12 @@ set local search_path = extensions, public, pg_catalog;
 
 select plan(26);
 
+insert into auth.users (id)
+values
+  ('20000000-0000-0000-0000-000000000001'),
+  ('20000000-0000-0000-0000-000000000002'),
+  ('20000000-0000-0000-0000-000000000003');
+
 select ok(
   not has_function_privilege('authenticated', 'public.renew_job_lease(uuid,uuid,interval)', 'execute'),
   'authenticated users cannot renew worker leases'

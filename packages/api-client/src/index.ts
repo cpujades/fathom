@@ -13,6 +13,15 @@ export type {
   BriefingSessionResolution,
   BriefingSessionResponse,
   BriefingSessionState,
+  PublicationStateResponse,
+  PublicBriefingResponse,
+  ExploreBriefingItem,
+  ExploreBriefingResponse,
+  ExploreTopic,
+  PublicationSourceMatchResponse,
+  PublicationLibraryEntriesRequest,
+  PublicationLibraryEntriesResponse,
+  PublicationLibraryEntryResponse,
   HealthResponse,
   ReadyResponse,
   StatusResponse,
@@ -27,5 +36,6 @@ export type {
   PackBillingState,
   SubscriptionBillingState,
   UsageOverviewResponse,
-  UsageHistoryEntry
+  UsageHistoryEntry,
+  UsageHistoryResponse
 } from "./types";

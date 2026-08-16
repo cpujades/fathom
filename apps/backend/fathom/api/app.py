@@ -14,6 +14,7 @@ from fathom.api.routers import (
     briefing_sessions_router,
     briefings_router,
     meta_router,
+    publications_router,
     webhooks_router,
 )
 from fathom.core.config import Settings, get_settings
@@ -69,6 +70,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(meta_router)
     app.include_router(briefing_sessions_router)
     app.include_router(briefings_router)
+    app.include_router(publications_router)
     app.include_router(billing_router)
     app.include_router(webhooks_router)
     app.state.settings = settings

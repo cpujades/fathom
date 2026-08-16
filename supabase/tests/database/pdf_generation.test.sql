@@ -94,7 +94,6 @@ values (
 
 insert into public.summaries (
   id,
-  user_id,
   transcript_id,
   prompt_key,
   summary_model,
@@ -106,7 +105,6 @@ insert into public.summaries (
 )
 values (
   '82000000-0000-0000-0000-000000000001',
-  '83000000-0000-0000-0000-000000000001',
   '81000000-0000-0000-0000-000000000001',
   'default',
   'test-model',

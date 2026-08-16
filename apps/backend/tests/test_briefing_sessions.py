@@ -25,13 +25,67 @@ from fathom.application.briefings.sessions.queries import (
 )
 from fathom.application.identity import AuthenticatedUser
 from fathom.core.config import Settings
-from fathom.core.errors import InsufficientVideoTimeError, NotFoundError, UsageSettlementError
+from fathom.core.errors import (
+    InsufficientVideoTimeError,
+    NotFoundError,
+    PublicBriefingAvailableError,
+    UsageSettlementError,
+)
 from fathom.crud.supabase.jobs import JobCreateResolution
 from fathom.schemas.briefing_sessions import BriefingSessionCreateRequest
 from fathom.schemas.transcripts import TranscriptSegment
 
 
 class CreateBriefingSessionTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self) -> None:
+        publication_match = patch(
+            "fathom.application.briefings.sessions.commands.find_listed_publication_for_source",
+            AsyncMock(return_value=None),
+        )
+        publication_match.start()
+        self.addCleanup(publication_match.stop)
+
+    async def test_listed_source_is_offered_before_provider_or_usage_work(self) -> None:
+        auth = AuthenticatedUser(access_token="access-token", user_id="user-123")
+        settings = cast(Settings, SimpleNamespace())
+        request = BriefingSessionCreateRequest(url="https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+
+        with (
+            patch(
+                "fathom.application.briefings.sessions.commands.create_supabase_user_client",
+                AsyncMock(return_value=object()),
+            ),
+            patch(
+                "fathom.application.briefings.sessions.commands.create_supabase_admin_client",
+                AsyncMock(return_value=object()),
+            ),
+            patch(
+                "fathom.application.briefings.sessions.commands.fetch_active_job_for_source",
+                AsyncMock(return_value=None),
+            ),
+            patch(
+                "fathom.application.briefings.sessions.commands.fetch_reusable_job_for_source",
+                AsyncMock(return_value=None),
+            ),
+            patch(
+                "fathom.application.briefings.sessions.commands.find_listed_publication_for_source",
+                AsyncMock(return_value={"public_slug": "a" * 32}),
+            ),
+            patch(
+                "fathom.application.briefings.sessions.commands.fetch_video_metadata_with_deadline",
+                AsyncMock(),
+            ) as fetch_metadata,
+            patch(
+                "fathom.application.briefings.sessions.commands.ensure_usage_allowed",
+                AsyncMock(),
+            ) as ensure_usage,
+        ):
+            with self.assertRaises(PublicBriefingAvailableError):
+                await create_briefing_session(request, auth, settings)
+
+        fetch_metadata.assert_not_awaited()
+        ensure_usage.assert_not_awaited()
+
     async def test_admission_rejection_happens_before_cache_or_job_creation(self) -> None:
         auth = AuthenticatedUser(access_token="access-token", user_id="user-123")
         settings = cast(Settings, SimpleNamespace())

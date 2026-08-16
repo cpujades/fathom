@@ -18,6 +18,9 @@ class UsageSettlementConcurrencyTests(unittest.IsolatedAsyncioTestCase):
         await self._cleanup()
         await self.connection.execute(
             """
+            insert into auth.users (id)
+            values ('93000000-0000-0000-0000-000000000001');
+
             insert into public.transcripts (
               id, url_hash, video_id, transcript_text, provider_model
             )
@@ -30,12 +33,11 @@ class UsageSettlementConcurrencyTests(unittest.IsolatedAsyncioTestCase):
             );
 
             insert into public.summaries (
-              id, user_id, transcript_id, prompt_key, summary_model,
+              id, transcript_id, prompt_key, summary_model,
               summary_markdown, status, status_updated_at, ready_at
             )
             values (
               '92000000-0000-0000-0000-000000000001',
-              '93000000-0000-0000-0000-000000000001',
               '91000000-0000-0000-0000-000000000001',
               'usage-concurrency',
               'test-model',
@@ -59,7 +61,7 @@ class UsageSettlementConcurrencyTests(unittest.IsolatedAsyncioTestCase):
 
             insert into public.credit_lots (
               id, user_id, lot_type, source_key, granted_seconds,
-              pack_expires_at, status
+              expires_at, status
             )
             values (
               '94000000-0000-0000-0000-000000000001',
@@ -102,8 +104,6 @@ class UsageSettlementConcurrencyTests(unittest.IsolatedAsyncioTestCase):
     async def _cleanup(self) -> None:
         await self.connection.execute(
             """
-            delete from public.usage_ledger
-            where job_id = '95000000-0000-0000-0000-000000000001';
             delete from public.usage_settlements
             where job_id = '95000000-0000-0000-0000-000000000001';
             delete from public.jobs
@@ -116,6 +116,8 @@ class UsageSettlementConcurrencyTests(unittest.IsolatedAsyncioTestCase):
             where id = '92000000-0000-0000-0000-000000000001';
             delete from public.transcripts
             where id = '91000000-0000-0000-0000-000000000001';
+            delete from auth.users
+            where id = '93000000-0000-0000-0000-000000000001';
             """
         )
 

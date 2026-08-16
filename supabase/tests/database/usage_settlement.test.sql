@@ -2,7 +2,12 @@ begin;
 
 set local search_path = extensions, public, pg_catalog;
 
-select plan(57);
+select plan(51);
+
+insert into auth.users (id)
+values
+  ('83000000-0000-0000-0000-000000000001'),
+  ('83000000-0000-0000-0000-000000000002');
 
 select col_not_null(
   'public',
@@ -15,23 +20,19 @@ select has_table(
   'usage_settlements',
   'immutable job settlement records exist'
 );
-select has_column(
-  'public',
-  'usage_ledger',
-  'settlement_id',
-  'new ledger rows link to their settlement'
+select ok(
+  pg_catalog.to_regclass('public.usage_ledger') is null,
+  'the duplicate usage ledger table is removed'
 );
-select has_index(
+select ok(
+  pg_catalog.to_regprocedure('public.prune_usage_ledger(integer)') is null,
+  'the obsolete usage ledger maintenance function is removed'
+);
+select col_is_pk(
   'public',
   'usage_settlements',
-  'usage_settlements_job_id_key',
-  'one settlement per job is enforced'
-);
-select has_index(
-  'public',
-  'usage_ledger',
-  'usage_ledger_one_source_per_settlement_idx',
-  'one ledger row per settlement source is enforced'
+  'job_id',
+  'each job has at most one settlement'
 );
 select ok(
   not has_table_privilege('authenticated', 'public.usage_settlements', 'select'),
@@ -130,7 +131,6 @@ values (
 
 insert into public.summaries (
   id,
-  user_id,
   transcript_id,
   prompt_key,
   summary_model,
@@ -141,7 +141,6 @@ insert into public.summaries (
 )
 values (
   '82000000-0000-0000-0000-000000000001',
-  '83000000-0000-0000-0000-000000000001',
   '81000000-0000-0000-0000-000000000001',
   'usage-settlement',
   'test-model',
@@ -172,7 +171,7 @@ insert into public.credit_lots (
   lot_type,
   source_key,
   granted_seconds,
-  pack_expires_at,
+  expires_at,
   status
 )
 values
@@ -303,24 +302,6 @@ select is(
 );
 select is(
   (
-    select pg_catalog.count(*)
-    from public.usage_ledger
-    where job_id = '85000000-0000-0000-0000-000000000001'
-  ),
-  2::bigint,
-  'one aggregate ledger row exists for each consumed source'
-);
-select is(
-  (
-    select pg_catalog.sum(seconds_used)::integer
-    from public.usage_ledger
-    where job_id = '85000000-0000-0000-0000-000000000001'
-  ),
-  180,
-  'ledger total matches actual credit consumption'
-);
-select is(
-  (
     select consumed_seconds
     from public.credit_lots
     where id = '84000000-0000-0000-0000-000000000001'
@@ -393,15 +374,6 @@ select is(
   ),
   1::bigint,
   'duplicate settlement cannot create another record'
-);
-select is(
-  (
-    select pg_catalog.count(*)
-    from public.usage_ledger
-    where job_id = '85000000-0000-0000-0000-000000000001'
-  ),
-  2::bigint,
-  'duplicate settlement cannot duplicate ledger rows'
 );
 select ok(
   public.complete_job_after_settlement(
@@ -604,7 +576,7 @@ insert into public.credit_lots (
   lot_type,
   source_key,
   granted_seconds,
-  pack_expires_at,
+  expires_at,
   status
 )
 values (
@@ -679,15 +651,6 @@ select is(
   ),
   0::bigint,
   'failed settlement leaves no idempotency record'
-);
-select is(
-  (
-    select pg_catalog.count(*)
-    from public.usage_ledger
-    where job_id = '85000000-0000-0000-0000-000000000006'
-  ),
-  0::bigint,
-  'failed settlement leaves no ledger residue'
 );
 
 insert into public.jobs (
@@ -803,38 +766,6 @@ select throws_ok(
   null,
   'settlement balance constraint rejects incomplete accounting'
 );
-select throws_ok(
-  $$
-    insert into public.usage_ledger (
-      user_id,
-      job_id,
-      settlement_id,
-      seconds_used,
-      source
-    )
-    select
-      user_id,
-      job_id,
-      id,
-      1,
-      'subscription'
-    from public.usage_settlements
-    where job_id = '85000000-0000-0000-0000-000000000001'
-  $$,
-  '23505',
-  null,
-  'ledger uniqueness rejects a duplicate settlement source'
-);
-select ok(
-  (
-    select not usage_settlement_required
-    from public.jobs
-    where user_id = '00000000-0000-0000-0000-000000000001'
-      and status = 'succeeded'
-  ),
-  'seeded historical terminal job is explicitly settlement-exempt'
-);
-
 select * from finish();
 
 rollback;

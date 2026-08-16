@@ -3,7 +3,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import * as Dialog from "@radix-ui/react-dialog";
-import type { BillingOrderHistoryEntry, PackBillingState } from "@fathom/api-client";
+import type { BillingOrderHistoryEntry, PackBillingState, UsageHistoryEntry } from "@fathom/api-client";
 
 import { AppShellHeader } from "../../components/AppShellHeader";
 import { PricingCurrencySelect } from "../../components/PricingCurrencySelect";
@@ -12,12 +12,13 @@ import chrome from "../../components/app-chrome";
 import { resolvePricingPrices } from "../../content/pricing";
 import dialogStyles from "./billing-dialog.module.css";
 import pageStyles from "./billing-page.module.css";
-import { formatDate, formatDuration } from "../../lib/format";
+import { formatDate, formatDuration, formatExactDuration } from "../../lib/format";
 import { getAccountLabel } from "../../lib/accountLabel";
 import { formatPricingPlanPrice } from "../../lib/pricingCurrency";
 import { usePricingCurrency } from "../../lib/usePricingCurrency";
 import { BillingSyncNotice } from "./BillingSyncNotice";
 import { formatPrice, getPlanBadge, getStatusTone } from "./billingFormatters";
+import { getUsageBreakdown } from "./billingPresentation";
 import { useBillingController } from "./useBillingController";
 
 const styles = { ...pageStyles, ...dialogStyles };
@@ -26,10 +27,12 @@ function BillingPageContent() {
   const { currency, selectCurrency } = usePricingCurrency();
   const {
     accessNote, account, activePackCount, canManageBilling, checkoutLoading, closeRefundDialog, displayedPacks,
-    error, handleCheckout, handleConfirmRefund, handlePortal, handleRefreshSyncStatus, loading, offerMode,
+    error, handleCheckout, handleConfirmRefund, handleLoadMoreUsageHistory, handlePortal, handleRefreshSyncStatus,
+    loading, offerMode,
     portalLoading, purchaseSync, quotaAvailablePercent, quotaCapacitySeconds, refundLoading, refundSync,
     refundTarget, remainingSeconds, requestedPlan, selectRefundTarget, setOfferMode, shellLoading, signOut,
-    subscriptionStatusText, syncRefreshLoading, usage, user, visiblePlanGroup
+    subscriptionStatusText, syncRefreshLoading, usage, usageHistory, usageHistoryError, usageHistoryHasMore,
+    usageHistoryLoadingMore, user, visiblePlanGroup
   } = useBillingController();
 
   if (loading) {
@@ -289,7 +292,7 @@ function BillingPageContent() {
           <div className={chrome.surfaceHeader}>
             <div>
               <h2 className={chrome.surfaceTitle}>Details</h2>
-              <p className={chrome.surfaceText}>Only the payment details worth keeping close.</p>
+              <p className={chrome.surfaceText}>Your purchases, payments, and briefing usage.</p>
             </div>
           </div>
 
@@ -362,6 +365,62 @@ function BillingPageContent() {
                   ))}
                 </div>
               )}
+            </details>
+
+            <details className={styles.detailDisclosure}>
+              <summary className={styles.detailSummary}>
+                <span>Usage history</span>
+                <span className={styles.detailCount}>
+                  {usageHistory.length}{usageHistoryHasMore ? "+" : ""}
+                </span>
+              </summary>
+
+              {usageHistory.length === 0 && !usageHistoryError ? (
+                <p className={chrome.emptyState}>No completed briefing usage yet.</p>
+              ) : usageHistory.length > 0 ? (
+                <>
+                  <div className={chrome.list}>
+                    {usageHistory.map((entry: UsageHistoryEntry) => {
+                      const title = entry.title ?? "Briefing";
+                      const breakdown = getUsageBreakdown(entry)
+                        .map((part) => `${part.label} ${formatExactDuration(part.seconds)}`)
+                        .join(" · ");
+
+                      return (
+                        <article className={`${chrome.listRow} ${styles.historyRow}`} key={entry.job_id}>
+                          <div className={chrome.listPrimary}>
+                            <p className={chrome.listTitle}>
+                              {entry.session_path ? <Link href={entry.session_path}>{title}</Link> : title}
+                            </p>
+                            <p className={chrome.listMeta}>{formatDate(entry.settled_at)}</p>
+                            <p className={chrome.listMeta}>{breakdown || "No video time charged"}</p>
+                          </div>
+                          <div className={`${chrome.listAside} ${styles.historyAside}`}>
+                            <span>{formatExactDuration(entry.duration_seconds)}</span>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                  {usageHistoryHasMore ? (
+                    <div className={styles.historyPagination}>
+                      <button
+                        className={chrome.secondaryButton}
+                        type="button"
+                        onClick={() => void handleLoadMoreUsageHistory()}
+                        disabled={usageHistoryLoadingMore}
+                      >
+                        {usageHistoryLoadingMore ? "Loading…" : "Load 10 more"}
+                      </button>
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
+              {usageHistoryError ? (
+                <p className={`${chrome.inlineStatus} ${chrome.inlineStatusError}`} role="alert">
+                  {usageHistoryError}
+                </p>
+              ) : null}
             </details>
           </div>
         </section>

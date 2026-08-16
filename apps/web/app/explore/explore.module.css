@@ -1,0 +1,267 @@
+.page {
+  min-height: 100svh;
+  color: #18211d;
+  background:
+    radial-gradient(900px 520px at 78% -12%, rgba(58, 118, 89, 0.18), transparent 64%),
+    linear-gradient(180deg, #ede9de 0%, #f7f3e9 55%, #ebe5d9 100%);
+}
+
+.main {
+  width: min(1120px, 92vw);
+  margin: 0 auto;
+  padding: 4rem 0 5rem;
+}
+
+.hero {
+  border-bottom: 1px solid rgba(36, 58, 47, 0.16);
+  padding: 1rem 0 2.8rem;
+}
+
+.hero > p {
+  margin: 0;
+  color: #285b45;
+  font-size: 0.74rem;
+  font-weight: 820;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.hero h1 {
+  max-width: 12ch;
+  margin: 0.75rem 0 0;
+  font-size: clamp(2.7rem, 8vw, 6rem);
+  font-weight: 720;
+  letter-spacing: -0.045em;
+  line-height: 0.92;
+}
+
+.heroBottom {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-top: 1.6rem;
+  color: #526158;
+  font-size: 0.95rem;
+}
+
+.heroBottom span {
+  max-width: 60ch;
+}
+
+.heroBottom a,
+.emptyState a {
+  color: #285b45;
+  font-weight: 760;
+  text-decoration: underline;
+  text-underline-offset: 0.2rem;
+}
+
+.topicFilters {
+  display: flex;
+  overflow-x: auto;
+  gap: 0.5rem;
+  padding: 1.5rem 0 0.25rem;
+  scrollbar-width: thin;
+}
+
+.topicFilters a {
+  flex: 0 0 auto;
+  border: 1px solid rgba(40, 92, 70, 0.16);
+  border-radius: 999px;
+  padding: 0.5rem 0.72rem;
+  color: #285b45;
+  background: rgba(249, 247, 240, 0.62);
+  font-size: 0.76rem;
+  font-weight: 760;
+}
+
+.topicFilters a[aria-current="page"] {
+  border-color: #17382b;
+  color: #f7f4eb;
+  background: #17382b;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  padding-top: 1.25rem;
+}
+
+.loadError {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #8d312f;
+  font-size: 0.82rem;
+}
+
+.card {
+  overflow: hidden;
+  border: 1px solid rgba(36, 58, 47, 0.13);
+  border-radius: 24px;
+  background: rgba(249, 247, 240, 0.74);
+  box-shadow: 0 18px 44px rgba(18, 28, 23, 0.08);
+}
+
+.mediaLink,
+.mediaFrame {
+  display: block;
+}
+
+.mediaFrame {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  background: #d9ddd4;
+}
+
+.thumbnail {
+  object-fit: cover;
+  transition: transform 260ms ease;
+}
+
+.mediaLink:hover .thumbnail {
+  transform: scale(1.025);
+}
+
+.mediaFallback {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: #526158;
+  font-size: 0.78rem;
+  font-weight: 760;
+}
+
+.cardBody {
+  display: grid;
+  gap: 0.62rem;
+  padding: 1rem;
+}
+
+.cardMeta,
+.cardActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.cardMeta {
+  color: #667267;
+  font-size: 0.72rem;
+  font-weight: 720;
+}
+
+.cardMeta a {
+  border-radius: 999px;
+  padding: 0.25rem 0.48rem;
+  color: #285b45;
+  background: rgba(40, 92, 70, 0.08);
+}
+
+.card h2 {
+  margin: 0;
+  font-size: 1.35rem;
+  line-height: 1.12;
+}
+
+.card h2 a:hover {
+  color: #285b45;
+}
+
+.cardBody > p {
+  margin: 0;
+  color: #526158;
+  font-size: 0.82rem;
+}
+
+.cardActions {
+  margin-top: 0.3rem;
+}
+
+.cardActions > a:not(.saveAction) {
+  color: #285b45;
+  font-size: 0.8rem;
+  font-weight: 760;
+  text-decoration: underline;
+  text-underline-offset: 0.18rem;
+}
+
+.saveAction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  border: 1px solid #17382b;
+  border-radius: 999px;
+  padding: 0.54rem 0.78rem;
+  color: #f7f4eb;
+  background: #17382b;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 760;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.saveAction:hover {
+  color: #fff;
+  background: #285b45;
+}
+
+.saveAction:disabled {
+  cursor: wait;
+  opacity: 0.64;
+}
+
+.cardBody .cardError {
+  color: #8d312f;
+  font-size: 0.76rem;
+}
+
+.emptyState {
+  margin-top: 2rem;
+  border: 1px solid rgba(36, 58, 47, 0.12);
+  border-radius: 24px;
+  padding: 2rem;
+  background: rgba(249, 247, 240, 0.7);
+}
+
+.emptyState h2,
+.emptyState p {
+  margin: 0;
+}
+
+.emptyState p {
+  margin-top: 0.5rem;
+  color: #526158;
+}
+
+.emptyState a {
+  display: inline-block;
+  margin-top: 1rem;
+}
+
+@media (max-width: 900px) {
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .main {
+    padding-top: 2.5rem;
+  }
+
+  .hero h1 {
+    font-size: clamp(2.55rem, 16vw, 4rem);
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}

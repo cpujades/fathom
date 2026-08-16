@@ -25,7 +25,7 @@ from fathom.crud.supabase.billing import (
     fetch_plan_by_id,
     fetch_plan_by_product_id,
     fetch_polar_order_ids_refund_pending,
-    fetch_usage_history,
+    fetch_usage_settlements,
     settle_job_usage,
     summarize_credit_lots,
     update_entitlement_snapshot,
@@ -75,6 +75,14 @@ class UsageOverview:
     pack_expires_at: datetime | None
     debt_seconds: int
     is_blocked: bool
+
+
+@dataclass(frozen=True)
+class UsageHistoryPage:
+    entries: list[dict[str, Any]]
+    limit: int
+    offset: int
+    has_more: bool
 
 
 async def _sync_entitlement_snapshot(
@@ -193,7 +201,7 @@ async def _refresh_free_entitlement_if_needed(
         lot_type="subscription_cycle",
         source_key=source_key,
         granted_seconds=int(free_plan.get("quota_seconds") or 0),
-        pack_expires_at=period_end,
+        expires_at=period_end,
         status="active",
     )
 
@@ -242,7 +250,7 @@ async def _ensure_free_entitlement(admin_client: Any, user_id: str, settings: Se
         lot_type="subscription_cycle",
         source_key=source_key,
         granted_seconds=int(free_plan.get("quota_seconds") or 0),
-        pack_expires_at=period_end,
+        expires_at=period_end,
         status="active",
     )
 
@@ -370,26 +378,37 @@ async def _get_usage_overview(user_id: str, settings: Settings, admin_client: An
     )
 
 
-async def get_usage_history(user_id: str, settings: Settings, limit: int = 50) -> list[dict[str, Any]]:
+async def get_usage_history(
+    user_id: str,
+    settings: Settings,
+    *,
+    limit: int = 10,
+    offset: int = 0,
+) -> UsageHistoryPage:
     async with managed_supabase_client(await create_supabase_admin_client(settings)) as admin_client:
-        return await _get_usage_history(user_id, admin_client, limit=limit)
+        return await _get_usage_history(user_id, admin_client, limit=limit, offset=offset)
 
 
-async def _get_usage_history(user_id: str, admin_client: Any, *, limit: int) -> list[dict[str, Any]]:
-    raw_entries = await fetch_usage_history(admin_client, user_id=user_id, limit=max(limit * 3, limit))
-    entries = _collapse_usage_entries(raw_entries, limit=limit)
+async def _get_usage_history(
+    user_id: str,
+    admin_client: Any,
+    *,
+    limit: int,
+    offset: int,
+) -> UsageHistoryPage:
+    entries = await fetch_usage_settlements(
+        admin_client,
+        user_id=user_id,
+        limit=limit + 1,
+        offset=offset,
+    )
+    has_more = len(entries) > limit
+    entries = entries[:limit]
     job_ids = [str(entry.get("job_id")) for entry in entries if entry.get("job_id")]
     if not job_ids:
-        return entries
+        return UsageHistoryPage(entries=entries, limit=limit, offset=offset, has_more=has_more)
 
     jobs = await fetch_jobs_by_ids(admin_client, job_ids)
-    deleted_job_ids = {
-        str(job.get("id")) for job in jobs if str(job.get("status") or "") == "deleted" and job.get("id")
-    }
-    if deleted_job_ids:
-        entries = [entry for entry in entries if str(entry.get("job_id") or "") not in deleted_job_ids]
-        jobs = [job for job in jobs if str(job.get("id") or "") not in deleted_job_ids]
-
     summary_ids = [str(job.get("summary_id")) for job in jobs if job.get("summary_id")]
     summaries = await fetch_summaries_by_ids(admin_client, summary_ids)
     transcript_ids = [str(summary.get("transcript_id")) for summary in summaries if summary.get("transcript_id")]
@@ -403,6 +422,7 @@ async def _get_usage_history(user_id: str, admin_client: Any, *, limit: int) -> 
         job_id = entry.get("job_id")
         if not job_id:
             entry["title"] = None
+            entry["session_path"] = None
             continue
 
         job = job_by_id.get(str(job_id))
@@ -412,40 +432,13 @@ async def _get_usage_history(user_id: str, admin_client: Any, *, limit: int) -> 
         transcript = transcript_by_id.get(str(transcript_id)) if transcript_id else None
         source_title = transcript.get("source_title") if isinstance(transcript, dict) else None
         entry["title"] = str(source_title).strip() if isinstance(source_title, str) and source_title.strip() else None
+        entry["session_path"] = (
+            f"/app/briefings/sessions/{job_id}"
+            if isinstance(job, dict) and str(job.get("status") or "") != "deleted"
+            else None
+        )
 
-    return entries
-
-
-def _collapse_usage_entries(entries: list[dict[str, Any]], *, limit: int) -> list[dict[str, Any]]:
-    grouped: dict[str, dict[str, Any]] = {}
-    passthrough: list[dict[str, Any]] = []
-
-    for entry in entries:
-        job_id = entry.get("job_id")
-        if not job_id:
-            passthrough.append(dict(entry))
-            continue
-
-        key = str(job_id)
-        created_at = entry.get("created_at")
-        if key not in grouped:
-            grouped[key] = {
-                **entry,
-                "job_id": job_id,
-                "seconds_used": int(entry.get("seconds_used") or 0),
-                "created_at": created_at,
-            }
-            continue
-
-        current = grouped[key]
-        current["seconds_used"] = int(current.get("seconds_used") or 0) + int(entry.get("seconds_used") or 0)
-        current_created_at = current.get("created_at")
-        if created_at and (not current_created_at or created_at > current_created_at):
-            current["created_at"] = created_at
-
-    collapsed = [*grouped.values(), *passthrough]
-    collapsed.sort(key=lambda entry: str(entry.get("created_at") or ""), reverse=True)
-    return collapsed[:limit]
+    return UsageHistoryPage(entries=entries, limit=limit, offset=offset, has_more=has_more)
 
 
 async def record_usage_for_job(
