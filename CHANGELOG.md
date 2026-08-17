@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.25.0](https://github.com/cpujades/fathom/compare/v0.24.1...v0.25.0) (2026-08-17)
+
+_Automated release from [#184](https://github.com/cpujades/fathom/pull/184) feat: guard concurrent briefing usage and strengthen CI_
+
+### Features
+
+- feat: guard concurrent briefing usage (4ec4a5b)
+
+### Documentation
+
+- docs: refresh product and launch guidance (5f76285)
+
+### Tests
+
+- test: run complete backend suites in CI (9bd921e)
+- test: align E2E provider failure expectations (0f09572)
+- test: expect safe transient provider error (0063538)
+
 ## [0.24.1](https://github.com/cpujades/fathom/compare/v0.24.0...v0.24.1) (2026-08-16)
 
 _Automated release from [#182](https://github.com/cpujades/fathom/pull/182) Bump the "weekly-maintenance" group with 2 updates across multiple ecosystems_
