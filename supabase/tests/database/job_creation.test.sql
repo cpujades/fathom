@@ -2,14 +2,38 @@ begin;
 
 set local search_path = extensions, public, pg_catalog;
 
-select plan(48);
+select plan(62);
 
 insert into auth.users (id)
 values
   ('40000000-0000-0000-0000-000000000001'),
   ('40000000-0000-0000-0000-000000000002'),
   ('40000000-0000-0000-0000-000000000003'),
-  ('40000000-0000-0000-0000-000000000004');
+  ('40000000-0000-0000-0000-000000000004'),
+  ('40000000-0000-0000-0000-000000000005'),
+  ('40000000-0000-0000-0000-000000000006');
+
+insert into public.entitlements (
+  user_id,
+  subscription_available_seconds,
+  pack_available_seconds,
+  debt_seconds,
+  is_blocked
+)
+select
+  id,
+  case
+    when id = '40000000-0000-0000-0000-000000000005' then 600
+    when id = '40000000-0000-0000-0000-000000000006' then 0
+    else 10000
+  end,
+  0,
+  0,
+  false
+from auth.users
+where id between
+  '40000000-0000-0000-0000-000000000001'
+  and '40000000-0000-0000-0000-000000000006';
 
 select col_not_null(
   'public',
@@ -330,6 +354,166 @@ select throws_ok(
   '22023',
   'source key does not match the canonical url',
   'source key must match the canonical URL'
+);
+
+create temporary table first_pending_job as
+select public.create_or_reuse_settled_job(
+  '40000000-0000-0000-0000-000000000005',
+  'https://www.youtube.com/watch?v=pending-a',
+  'youtube:pending-a',
+  200,
+  null
+) as result;
+
+select is(
+  (select result ->> 'resolution_type' from first_pending_job),
+  'new',
+  'the first pending job fits the spendable balance'
+);
+select is(
+  public.create_or_reuse_settled_job(
+    '40000000-0000-0000-0000-000000000005',
+    'https://www.youtube.com/watch?v=pending-b',
+    'youtube:pending-b',
+    250,
+    null
+  ) ->> 'resolution_type',
+  'new',
+  'a second pending job can run within the same balance'
+);
+
+create temporary table committed_time_rejection as
+select public.create_or_reuse_settled_job(
+  '40000000-0000-0000-0000-000000000005',
+  'https://www.youtube.com/watch?v=pending-too-large',
+  'youtube:pending-too-large',
+  200,
+  null
+) as result;
+
+select is(
+  (select result ->> 'resolution_type' from committed_time_rejection),
+  'video_time_committed',
+  'pending durations protect the uncommitted balance'
+);
+select is(
+  (select (result -> 'details' ->> 'available_seconds')::integer from committed_time_rejection),
+  150,
+  'the rejection returns the time still available'
+);
+select is(
+  (select (result -> 'details' ->> 'pending_seconds')::integer from committed_time_rejection),
+  450,
+  'the rejection returns the time committed to active jobs'
+);
+select is(
+  (
+    select pg_catalog.count(*)
+    from public.jobs
+    where user_id = '40000000-0000-0000-0000-000000000005'
+      and status in ('queued', 'running')
+  ),
+  2::bigint,
+  'a rejected admission creates no job'
+);
+
+update public.jobs
+set status = 'failed',
+    stage = 'failed'
+where id = (select (result -> 'job' ->> 'id')::uuid from first_pending_job);
+
+select is(
+  public.create_or_reuse_settled_job(
+    '40000000-0000-0000-0000-000000000005',
+    'https://www.youtube.com/watch?v=pending-c',
+    'youtube:pending-c',
+    200,
+    null
+  ) ->> 'resolution_type',
+  'new',
+  'a failed job releases its pending duration'
+);
+select is(
+  public.create_or_reuse_settled_job(
+    '40000000-0000-0000-0000-000000000005',
+    'https://www.youtube.com/watch?v=pending-d',
+    'youtube:pending-d',
+    100,
+    null
+  ) ->> 'resolution_type',
+  'new',
+  'three jobs can run when their combined duration fits'
+);
+
+create temporary table active_limit_rejection as
+select public.create_or_reuse_settled_job(
+  '40000000-0000-0000-0000-000000000005',
+  'https://www.youtube.com/watch?v=pending-fourth',
+  'youtube:pending-fourth',
+  10,
+  null
+) as result;
+
+select is(
+  (select result ->> 'resolution_type' from active_limit_rejection),
+  'active_job_limit_reached',
+  'a fourth billable job in progress is rejected'
+);
+select is(
+  (select (result -> 'details' ->> 'maximum_active_jobs')::integer from active_limit_rejection),
+  3,
+  'the active-job rejection returns the account limit'
+);
+select is(
+  (
+    select pg_catalog.count(*)
+    from public.jobs
+    where user_id = '40000000-0000-0000-0000-000000000005'
+      and status in ('queued', 'running')
+  ),
+  3::bigint,
+  'the fourth-job rejection creates no job'
+);
+select is(
+  public.create_or_reuse_settled_job(
+    '40000000-0000-0000-0000-000000000005',
+    'https://www.youtube.com/watch?v=pending-d',
+    'youtube:pending-d',
+    100,
+    null
+  ) ->> 'resolution_type',
+  'joined_existing',
+  'same-source reuse bypasses the new-job limit'
+);
+
+select is(
+  public.create_or_reuse_settled_job(
+    '40000000-0000-0000-0000-000000000006',
+    'https://www.youtube.com/watch?v=no-time',
+    'youtube:no-time',
+    60,
+    null
+  ) ->> 'resolution_type',
+  'no_video_time',
+  'the database rejects admission with no spendable time'
+);
+
+update public.entitlements
+set subscription_available_seconds = 600,
+    debt_seconds = 600,
+    is_blocked = true
+where user_id = '40000000-0000-0000-0000-000000000006';
+
+select is(
+  public.create_or_reuse_settled_job(
+    '40000000-0000-0000-0000-000000000006',
+    'https://www.youtube.com/watch?v=blocked',
+    'youtube:blocked',
+    60,
+    null
+  ) ->> 'resolution_type',
+  'balance_blocked',
+  'the database keeps the debt block authoritative'
 );
 
 insert into public.summaries (

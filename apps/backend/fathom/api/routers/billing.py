@@ -82,6 +82,7 @@ async def create_portal(
     responses={
         401: {"model": ErrorResponse, "description": "Missing or invalid auth token."},
         400: {"model": ErrorResponse, "description": "Invalid request payload."},
+        409: {"model": ErrorResponse, "description": "Active briefings block the refund."},
         500: {"model": ErrorResponse, "description": "Unexpected server error."},
         502: {"model": ErrorResponse, "description": "Upstream provider failed."},
     },

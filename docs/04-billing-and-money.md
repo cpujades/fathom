@@ -120,11 +120,18 @@ Admission and charging are separate:
 Before queueing, Talven checks:
 
 - positive spendable balance;
-- current block/debt state; and
-- known source duration against available subscription and pack time.
+- current block/debt state;
+- no more than three billable jobs in progress; and
+- the combined known duration of unsettled work against available
+  subscription and pack time.
 
-There is no upfront reservation. Two concurrent jobs can both pass the same
-balance snapshot.
+The database serializes admission and settlement for each user. Two
+simultaneous requests cannot both pass a stale balance or pending-work
+snapshot.
+
+There is no upfront credit-lot reservation. Admission derives the committed
+duration from queued and running jobs that have not settled. Credit remains
+visible until successful settlement.
 
 ### Settlement
 
@@ -136,9 +143,8 @@ After a valid briefing exists, one atomic command:
 4. updates the fast entitlement snapshot; and
 5. creates the unique `usage_settlements` record.
 
-The current branch removes the separate `usage_ledger` table.
-`usage_settlements` becomes both the unique charge and the immutable
-per-briefing usage-history source.
+`usage_settlements` is both the unique charge and the immutable per-briefing
+usage-history source. There is no separate `usage_ledger` table.
 
 Replaying settlement returns the existing row. It cannot charge the same job
 twice.
@@ -151,16 +157,18 @@ keep their settlement entry but no longer link to a session.
 
 The default 600-second debt threshold is a settlement safety buffer for:
 
-- concurrent jobs that passed an earlier balance snapshot;
-- small differences between source metadata and final duration; or
-- credit removed by a concurrent refund.
+- credit that expires or is removed after job admission;
+- a refund or reconciliation that changes available credit while work is in
+  progress; or
+- exceptional recovery when successful work must be finalized safely.
 
 It is not extra advertised usage. A known source must fit the positive balance
 at admission. New credit pays debt before it becomes spendable. Reaching the
 threshold blocks new work.
 
-Upfront reservations remain deferred until real concurrency shows that the
-current debt behavior is unacceptable.
+Per-credit-lot reservations remain deferred. The current atomic pending-work
+guard protects normal parallel submissions without moving credit before a job
+succeeds.
 
 ## Refunds
 
@@ -168,9 +176,10 @@ Only purchased packs are refundable through the current product.
 
 Starting a refund:
 
-1. marks the pack `refund_pending`;
-2. removes its remaining seconds from spendable balance; and
-3. creates a bounded user-scoped operation for status.
+1. waits until the user has no active billable briefings;
+2. marks the pack `refund_pending`;
+3. removes its remaining seconds from spendable balance; and
+4. creates a bounded user-scoped operation for status.
 
 If Polar confirms the refund, the pack becomes `refunded`. If Polar
 definitively rejects it, Talven reopens the pack. A timeout remains pending and

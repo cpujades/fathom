@@ -107,8 +107,8 @@ Backend:
     uv run ruff check .
     uv run ruff format --check .
     uv run ty check apps/backend/fathom
-    PYTHONPATH=apps/backend ./.venv/bin/python \
-      -m unittest discover -s apps/backend/tests
+    ./.venv/bin/python -m unittest discover \
+      -s apps/backend/tests/unit -t apps/backend
 
 Frontend:
 
@@ -126,6 +126,9 @@ Database:
     supabase db reset
     supabase test db supabase/tests/database
     supabase db lint --local --fail-on warning
+
+CI also runs the Python database integration tests and authenticated E2E journey
+against disposable local Supabase services on every pull request.
 
 ## Production state
 

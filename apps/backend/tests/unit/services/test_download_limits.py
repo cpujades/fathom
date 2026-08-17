@@ -16,8 +16,10 @@ from fathom.crud.supabase.storage_objects import delete_object_with_retry, uploa
 from fathom.services.downloader import (
     SOURCE_DOWNLOAD_TIMEOUT_SECONDS,
     SOURCE_METADATA_TIMEOUT_SECONDS,
+    AudioTooLargeError,
     DownloadError,
     download_audio,
+    download_audio_with_deadline,
     fetch_video_metadata_with_deadline,
 )
 from supabase import AsyncClient
@@ -95,7 +97,7 @@ class DownloadLimitTests(unittest.TestCase):
         with (
             tempfile.TemporaryDirectory() as temp_dir,
             patch("fathom.services.downloader.YouTube", _youtube_factory(stream)),
-            self.assertRaisesRegex(DownloadError, "100 MB"),
+            self.assertRaisesRegex(AudioTooLargeError, "100 MB"),
         ):
             download_audio("https://www.youtube.com/watch?v=test", temp_dir, max_bytes=100)
 
@@ -109,7 +111,7 @@ class DownloadLimitTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             with (
                 patch("fathom.services.downloader.YouTube", _youtube_factory(stream)),
-                self.assertRaisesRegex(DownloadError, "100 MB"),
+                self.assertRaisesRegex(AudioTooLargeError, "100 MB"),
             ):
                 download_audio(
                     "https://www.youtube.com/watch?v=test",
@@ -208,6 +210,37 @@ class DownloadTimeoutConstantTests(unittest.TestCase):
 
 
 class YouTubeWorkerDeadlineTests(unittest.IsolatedAsyncioTestCase):
+    async def test_worker_preserves_the_deterministic_audio_size_error(self) -> None:
+        process = SimpleNamespace(
+            returncode=1,
+            communicate=AsyncMock(
+                return_value=(
+                    json.dumps(
+                        {
+                            "ok": False,
+                            "code": "source_audio_too_large",
+                            "detail": "Source audio exceeds the supported 100 MB limit.",
+                        }
+                    ).encode(),
+                    b"",
+                )
+            ),
+            kill=Mock(),
+            wait=AsyncMock(),
+        )
+        with (
+            patch(
+                "fathom.services.downloader.asyncio.create_subprocess_exec",
+                AsyncMock(return_value=process),
+            ),
+            self.assertRaisesRegex(AudioTooLargeError, "100 MB"),
+        ):
+            await download_audio_with_deadline(
+                "https://www.youtube.com/watch?v=test",
+                "/tmp",
+                deadline_seconds=1,
+            )
+
     async def test_metadata_worker_returns_validated_result(self) -> None:
         process = SimpleNamespace(
             returncode=0,

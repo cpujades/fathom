@@ -36,7 +36,8 @@ decision. This page owns future product and technical work.
 
 ## Status meanings
 
-- **In progress:** already changing in the current branch.
+- **In progress:** being built or verified, but not yet accepted as current
+  product behavior.
 - **Next candidate:** near-term work, but still subject to the paid-launch scope
   decision.
 - **After launch:** useful only after the core product has real users.
@@ -52,17 +53,17 @@ decision. This page owns future product and technical work.
 | Copy Markdown | Current | Authenticated release-candidate proof |
 | Private library and archive | Current | Retention and permanent-erasure policy |
 | Private PDF | Current | Hosted capacity proof |
-| Unlisted sharing | In progress in current launch branch | Authenticated browser and staging proof |
-| Save public briefing | In progress in current launch branch | Authenticated browser and staging proof |
-| Curated Explore | In progress in current launch branch | Initial catalogue and staging proof |
-| Listed source matching | In progress in current launch branch | Candidate proof |
-| Usage-history simplification | In progress | Complete migration and all billing/database checks |
+| Unlisted sharing | Current | Authenticated browser and staging proof |
+| Save public briefing | Current | Authenticated browser and staging proof |
+| Curated Explore | Current | Initial catalogue and staging proof |
+| Listed source matching | Current | Candidate proof |
+| Usage history and parallel-job admission | Current | Hosted migration and candidate proof |
 | Referrals | Next candidate | Owner scope decision and implementation |
 | Ask this episode | Next candidate | Owner scope decision and implementation |
 
 ## Immediate order
 
-1. Finish and verify the current publication and billing work.
+1. Verify the accepted publication, billing, and admission behavior.
 2. Freeze the invite-only beta scope.
 3. Select hosting and launch providers.
 4. Run the staging beta.
@@ -360,7 +361,7 @@ retention, or revenue.
 | Cancel a running job | Do not offer cancellation | Users abandon long jobs or provider cost becomes material |
 | Content-suitability rejection | Accept supported sources | Abuse or low-value inputs become material in labeled evidence |
 | Permanent self-service erasure | Handle verified requests manually under an approved policy | Request volume or policy requires automation |
-| Upfront credit reservations | Admit from current balance; settle after success | Concurrent jobs create unacceptable debt |
+| Per-credit-lot reservations | Use the atomic pending-work guard; settle after success | Exceptional settlement debt remains material or the product requires guaranteed reserved balances |
 | Additional source types | YouTube first | Target users repeatedly need RSS or upload |
 | Paid question packs | Included limits only | Ask usage proves demand |
 | Comments and likes | Do not build | Explore has real repeat community behavior that needs them |

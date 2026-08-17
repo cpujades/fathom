@@ -219,7 +219,7 @@ const landingContent: LandingContent = {
     items: [
       {
         question: "What sources are supported right now?",
-        answer: "Talven currently supports public YouTube URLs."
+        answer: "Talven currently supports public YouTube videos up to two hours long."
       },
       {
         question: "How long does a briefing take?",

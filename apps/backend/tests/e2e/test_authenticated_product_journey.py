@@ -38,21 +38,21 @@ from fathom.services.supabase import close_supabase_client, create_supabase_admi
 from fathom.services.transcriber import TranscriptionError
 from supabase import AsyncClient as SupabaseAsyncClient
 
-REQUIRED_GATE_C_ENV = (
-    "FATHOM_GATE_C_SUPABASE_URL",
-    "FATHOM_GATE_C_PUBLISHABLE_KEY",
-    "FATHOM_GATE_C_SECRET_KEY",
-    "FATHOM_GATE_C_DATABASE_URL",
+REQUIRED_E2E_ENV = (
+    "FATHOM_E2E_SUPABASE_URL",
+    "FATHOM_E2E_PUBLISHABLE_KEY",
+    "FATHOM_E2E_SECRET_KEY",
+    "FATHOM_E2E_DATABASE_URL",
 )
-GATE_C_ENABLED = os.getenv("FATHOM_RUN_GATE_C") == "1" and all(os.getenv(name) for name in REQUIRED_GATE_C_ENV)
+E2E_ENABLED = os.getenv("FATHOM_RUN_E2E") == "1" and all(os.getenv(name) for name in REQUIRED_E2E_ENV)
 SSE_ID_PATTERN = re.compile(r"^id: (\d+)$", re.MULTILINE)
 
 
 @unittest.skipUnless(
-    GATE_C_ENABLED,
-    "FATHOM_RUN_GATE_C and isolated local Supabase settings are required",
+    E2E_ENABLED,
+    "FATHOM_RUN_E2E and isolated local Supabase settings are required",
 )
-class AuthenticatedGateCE2ETests(unittest.IsolatedAsyncioTestCase):
+class AuthenticatedProductJourneyE2ETests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         self.warning_context = warnings.catch_warnings(record=True)
         self.caught_warnings = self.warning_context.__enter__()
@@ -69,14 +69,14 @@ class AuthenticatedGateCE2ETests(unittest.IsolatedAsyncioTestCase):
             f"r{self.run_id[:10]}",
             f"f{self.run_id[:10]}",
         )
-        database_url = urlsplit(os.environ["FATHOM_GATE_C_DATABASE_URL"])
+        database_url = urlsplit(os.environ["FATHOM_E2E_DATABASE_URL"])
         self.settings = Settings.model_validate(
             {
-                "OPENROUTER_API_KEY": "gate-c-fake-openrouter",
-                "GROQ_API_KEY": "gate-c-fake-groq",
-                "SUPABASE_URL": os.environ["FATHOM_GATE_C_SUPABASE_URL"],
-                "SUPABASE_PUBLISHABLE_KEY": os.environ["FATHOM_GATE_C_PUBLISHABLE_KEY"],
-                "SUPABASE_SECRET_KEY": os.environ["FATHOM_GATE_C_SECRET_KEY"],
+                "OPENROUTER_API_KEY": "e2e-fake-openrouter",
+                "GROQ_API_KEY": "e2e-fake-groq",
+                "SUPABASE_URL": os.environ["FATHOM_E2E_SUPABASE_URL"],
+                "SUPABASE_PUBLISHABLE_KEY": os.environ["FATHOM_E2E_PUBLISHABLE_KEY"],
+                "SUPABASE_SECRET_KEY": os.environ["FATHOM_E2E_SECRET_KEY"],
                 "SUPABASE_DB_PASSWORD": database_url.password or "postgres",
                 "SUPABASE_DB_USER": database_url.username or "postgres",
                 "SUPABASE_DB_NAME": database_url.path.lstrip("/") or "postgres",
@@ -88,7 +88,7 @@ class AuthenticatedGateCE2ETests(unittest.IsolatedAsyncioTestCase):
         )
 
         try:
-            self.connection = await asyncpg.connect(os.environ["FATHOM_GATE_C_DATABASE_URL"])
+            self.connection = await asyncpg.connect(os.environ["FATHOM_E2E_DATABASE_URL"])
             await self._insert_free_plan()
             self.admin_client = await create_supabase_admin_client(self.settings)
             self.event_coordinator = JobEventCoordinator(self.settings, self.admin_client)
@@ -112,7 +112,7 @@ class AuthenticatedGateCE2ETests(unittest.IsolatedAsyncioTestCase):
             app.dependency_overrides[get_settings] = lambda: self.settings
             self.http = httpx.AsyncClient(
                 transport=httpx.ASGITransport(app=app),
-                base_url="http://gate-c.local",
+                base_url="http://e2e.local",
                 headers={"Authorization": f"Bearer {access_token}"},
                 timeout=20,
             )
@@ -136,9 +136,9 @@ class AuthenticatedGateCE2ETests(unittest.IsolatedAsyncioTestCase):
         finally:
             self.warning_context.__exit__(None, None, None)
 
-    async def test_authenticated_product_and_recovery_journeys(self) -> None:
+    async def test_authenticated_product_and_failure_journeys(self) -> None:
         api = self._api()
-        good_video, retry_video, failed_video = self.test_video_ids
+        good_video, transient_video, failed_video = self.test_video_ids
 
         unauthenticated = await api.post(
             "/briefing-sessions",
@@ -179,7 +179,7 @@ class AuthenticatedGateCE2ETests(unittest.IsolatedAsyncioTestCase):
         reconnect_cursor = _event_id(first_live_event)
         self.assertGreater(reconnect_cursor, initial_cursor)
         await stream.aclose()
-        print(f"GATE_C_EVENT_METRIC delivery_seconds={delivery_elapsed:.3f} transport=listen_notify")
+        print(f"E2E_EVENT_METRIC delivery_seconds={delivery_elapsed:.3f} transport=listen_notify")
 
         reconnect_request = _StreamRequest(last_event_id=str(reconnect_cursor))
         reconnect_chunks = [
@@ -198,7 +198,7 @@ class AuthenticatedGateCE2ETests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(replayed_ids)
         self.assertEqual(replayed_ids, sorted(replayed_ids))
         self.assertIn("event: session.snapshot", reconnect_body)
-        self.assertIn("Gate C briefing", reconnect_body)
+        self.assertIn("E2E briefing", reconnect_body)
 
         ready_snapshot = await api.get(f"/briefing-sessions/{good_session_id}")
         self.assertEqual(ready_snapshot.status_code, 200)
@@ -207,7 +207,7 @@ class AuthenticatedGateCE2ETests(unittest.IsolatedAsyncioTestCase):
 
         briefing = await api.get(f"/briefings/{briefing_id}")
         self.assertEqual(briefing.status_code, 200)
-        self.assertIn("Gate C briefing", briefing.json()["markdown"])
+        self.assertIn("E2E briefing", briefing.json()["markdown"])
 
         pdf = await api.post(f"/briefings/{briefing_id}/pdf")
         self.assertEqual(pdf.status_code, 200, pdf.text)
@@ -231,36 +231,27 @@ class AuthenticatedGateCE2ETests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(restored.json()["state"], "ready")
         self.assertEqual(restored.json()["resolution_type"], "reused_ready")
 
-        retry_session = await self._create_session(retry_video)
-        retry_session_id = str(retry_session["session_id"])
+        transient_session = await self._create_session(transient_video)
+        transient_session_id = str(transient_session["session_id"])
         await self._process_next_job(
             transcription=TranscriptionError(
-                "Gate C transient transcription failure.",
+                "E2E transient transcription failure.",
                 kind=ProviderFailureKind.TRANSIENT,
             ),
             summary=_briefing_contract(),
-            zero_worker_backoff=True,
         )
-        retry_queued = await self._job_row(retry_session_id)
-        self.assertEqual(retry_queued["status"], "queued")
-        self.assertEqual(retry_queued["stage"], "queued")
-        self.assertEqual(retry_queued["attempt_count"], 1)
-        self.assertEqual(retry_queued["error_code"], "transcription_failed")
-
-        await self._process_next_job(
-            transcription=_successful_transcription(),
-            summary=_briefing_contract(),
-        )
-        retry_ready = await self._job_row(retry_session_id)
-        self.assertEqual(retry_ready["status"], "succeeded")
-        self.assertEqual(retry_ready["attempt_count"], 2)
+        transient_failure = await self._job_row(transient_session_id)
+        self.assertEqual(transient_failure["status"], "failed")
+        self.assertEqual(transient_failure["stage"], "failed")
+        self.assertEqual(transient_failure["attempt_count"], 1)
+        self.assertEqual(transient_failure["error_code"], "provider_temporarily_unavailable")
 
         failed_session = await self._create_session(failed_video)
         failed_session_id = str(failed_session["session_id"])
         await self._process_next_job(
             transcription=_successful_transcription(),
             summary=SummarizationError(
-                "Gate C permanent summary failure.",
+                "E2E permanent summary failure.",
                 kind=ProviderFailureKind.PERMANENT,
             ),
         )
@@ -277,14 +268,14 @@ class AuthenticatedGateCE2ETests(unittest.IsolatedAsyncioTestCase):
 
         usage = await api.get("/billing/usage")
         self.assertEqual(usage.status_code, 200, usage.text)
-        self.assertEqual(usage.json()["total_remaining_seconds"], 3360)
+        self.assertEqual(usage.json()["total_remaining_seconds"], 3480)
         plans = await api.get("/billing/plans")
         self.assertEqual(plans.status_code, 200)
         self.assertTrue(any(plan["polar_product_id"] == "internal_free" for plan in plans.json()))
         usage_history = await api.get("/billing/usage-history?limit=10&offset=0")
         self.assertEqual(usage_history.status_code, 200)
         usage_history_page = usage_history.json()
-        self.assertEqual(len(usage_history_page["items"]), 2)
+        self.assertEqual(len(usage_history_page["items"]), 1)
         self.assertEqual(usage_history_page["limit"], 10)
         self.assertEqual(usage_history_page["offset"], 0)
         self.assertFalse(usage_history_page["has_more"])
@@ -307,10 +298,10 @@ class AuthenticatedGateCE2ETests(unittest.IsolatedAsyncioTestCase):
             """,
             uuid.UUID(cast(str, self.user_id)),
         )
-        self.assertEqual(len(settlement_rows), 2)
+        self.assertEqual(len(settlement_rows), 1)
         self.assertEqual(
             {str(row["job_id"]) for row in settlement_rows},
-            {good_session_id, retry_session_id},
+            {good_session_id},
         )
         self.assertTrue(all(int(row["duration_seconds"]) == 120 for row in settlement_rows))
         self.assertEqual(
@@ -322,9 +313,9 @@ class AuthenticatedGateCE2ETests(unittest.IsolatedAsyncioTestCase):
                   and job_id = $2
                 """,
                 uuid.UUID(cast(str, self.user_id)),
-                uuid.UUID(retry_session_id),
+                uuid.UUID(transient_session_id),
             ),
-            1,
+            0,
         )
         self.assertEqual(
             await connection.fetchval(
@@ -348,7 +339,7 @@ class AuthenticatedGateCE2ETests(unittest.IsolatedAsyncioTestCase):
                 return_value=VideoMetadata(
                     video_id=video_id,
                     duration_seconds=120,
-                    title=f"Gate C {video_id}",
+                    title=f"E2E {video_id}",
                 )
             ),
         ):
@@ -364,7 +355,6 @@ class AuthenticatedGateCE2ETests(unittest.IsolatedAsyncioTestCase):
         *,
         transcription: TranscriptionResult | Exception,
         summary: BriefingContract | Exception,
-        zero_worker_backoff: bool = False,
     ) -> None:
         admin_client = self._admin_client()
         claimed = await claim_next_job(admin_client, lease_seconds=120)
@@ -378,7 +368,6 @@ class AuthenticatedGateCE2ETests(unittest.IsolatedAsyncioTestCase):
             side_effect=summary if isinstance(summary, Exception) else None,
             return_value=None if isinstance(summary, Exception) else summary,
         )
-        backoff = 0 if zero_worker_backoff else 5
         with (
             patch(
                 "fathom.orchestration.transcripts.download_audio_with_deadline",
@@ -391,10 +380,6 @@ class AuthenticatedGateCE2ETests(unittest.IsolatedAsyncioTestCase):
             patch(
                 "fathom.orchestration.summaries.summarize_transcript_with_evidence",
                 summary_fake,
-            ),
-            patch(
-                "fathom.orchestration.runner._compute_backoff_seconds",
-                return_value=backoff,
             ),
         ):
             await _handle_claimed_job(
@@ -424,17 +409,17 @@ class AuthenticatedGateCE2ETests(unittest.IsolatedAsyncioTestCase):
               rollover_cap_seconds, is_active
             )
             values (
-              $1, 'Gate C Free', 'subscription', 'internal_free',
+              $1, 'E2E Free', 'subscription', 'internal_free',
               $2, 'usd', 0, 'month', 1, 3600, 0, true
             )
             """,
             uuid.UUID(self.plan_id),
-            f"gate_c_free_{self.run_id}",
+            f"e2e_free_{self.run_id}",
         )
 
     async def _create_ephemeral_auth_session(self) -> str:
         admin_client = self._admin_client()
-        email = f"gate-c-{self.run_id}@example.test"
+        email = f"e2e-{self.run_id}@example.test"
         password = secrets.token_urlsafe(24)
         created = await admin_client.auth.admin.create_user(
             {
@@ -553,22 +538,22 @@ class AuthenticatedGateCE2ETests(unittest.IsolatedAsyncioTestCase):
 
     def _api(self) -> httpx.AsyncClient:
         if self.http is None:
-            raise AssertionError("Gate C API client is not initialized.")
+            raise AssertionError("E2E API client is not initialized.")
         return self.http
 
     def _admin_client(self) -> SupabaseAsyncClient:
         if self.admin_client is None:
-            raise AssertionError("Gate C admin client is not initialized.")
+            raise AssertionError("E2E admin client is not initialized.")
         return self.admin_client
 
     def _event_coordinator(self) -> JobEventCoordinator:
         if self.event_coordinator is None:
-            raise AssertionError("Gate C event coordinator is not initialized.")
+            raise AssertionError("E2E event coordinator is not initialized.")
         return self.event_coordinator
 
     def _connection(self) -> asyncpg.Connection:
         if self.connection is None:
-            raise AssertionError("Gate C database connection is not initialized.")
+            raise AssertionError("E2E database connection is not initialized.")
         return self.connection
 
     @staticmethod
@@ -591,17 +576,17 @@ def _fake_download_audio(
 ) -> DownloadResult:
     video_id = url.rsplit("v=", maxsplit=1)[-1]
     path = pathlib.Path(output_dir) / f"{video_id}.mp3"
-    path.write_bytes(b"gate-c-fake-audio")
+    path.write_bytes(b"e2e-fake-audio")
     return DownloadResult(
         path=path,
         video_id=video_id,
         mime_type="audio/mpeg",
         subtype="mp3",
         filesize_bytes=path.stat().st_size,
-        title=f"Gate C source {video_id}",
+        title=f"E2E source {video_id}",
         author="Talven Test",
-        description="Ephemeral Gate C fixture.",
-        keywords=["gate-c"],
+        description="Ephemeral E2E fixture.",
+        keywords=["e2e"],
         views=1,
         likes=1,
         length_seconds=120,
@@ -614,7 +599,7 @@ def _successful_transcription() -> TranscriptionResult:
             segment_index=0,
             start_seconds=0,
             end_seconds=30,
-            text="The source explains the first verified Gate C point.",
+            text="The source explains the first verified E2E point.",
         ),
         TranscriptSegment(
             segment_index=1,
@@ -643,7 +628,7 @@ def _successful_transcription() -> TranscriptionResult:
 
 def _briefing_contract() -> BriefingContract:
     return BriefingContract(
-        title="Gate C briefing",
+        title="E2E briefing",
         brief=EvidencePoint(
             text="A verified briefing produced through the fake provider boundary.",
             segment_indexes=(0, 1),
@@ -675,7 +660,7 @@ def _briefing_contract() -> BriefingContract:
                 heading="What the source establishes",
                 paragraphs=(
                     EvidencePoint(
-                        text="The source supports the Gate C success path.",
+                        text="The source supports the E2E success path.",
                         segment_indexes=(0, 1),
                     ),
                 ),

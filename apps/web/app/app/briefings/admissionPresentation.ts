@@ -10,6 +10,14 @@ export type AdmissionFailurePresentation = {
   title: string;
 };
 
+function formatDurationLimit(seconds: number): string {
+  if (seconds > 0 && seconds % 3_600 === 0) {
+    const hours = seconds / 3_600;
+    return `${hours} ${hours === 1 ? "hour" : "hours"}`;
+  }
+  return formatExactDuration(seconds);
+}
+
 export function getAdmissionFailurePresentation(
   code: string | null,
   message: string,
@@ -56,6 +64,40 @@ export function getAdmissionFailurePresentation(
     };
   }
 
+  if (code === "active_job_limit_reached") {
+    const maximum = details?.maximum_active_jobs;
+    return {
+      billingAction: null,
+      title: "Briefings already in progress",
+      description:
+        maximum !== undefined
+          ? `Talven can process up to ${maximum} briefings for one account at a time.`
+          : "This account already has the maximum number of briefings in progress.",
+      detail: "Wait for one briefing to finish, then try this source again.",
+      retryLabel: "Check again"
+    };
+  }
+
+  if (code === "video_time_committed") {
+    const required = details?.required_seconds;
+    const available = details?.available_seconds;
+    const pending = details?.pending_seconds;
+    const comparison =
+      required !== undefined && available !== undefined
+        ? `This video needs ${formatExactDuration(required)}, but ${formatExactDuration(available)} remain after current jobs.`
+        : "Briefings in progress have committed part of the available video time.";
+    return {
+      billingAction: getBillingOffersAction(hasActivePaidSubscription),
+      title: "Video time is already committed",
+      description: comparison,
+      detail:
+        pending !== undefined
+          ? `${formatExactDuration(pending)} are committed to briefings in progress. Wait for one to finish, add video time, or choose a shorter source.`
+          : "Wait for one briefing to finish, add video time, or choose a shorter source.",
+      retryLabel: "Check again"
+    };
+  }
+
   if (code === "source_duration_unknown") {
     return {
       billingAction: null,
@@ -72,7 +114,7 @@ export function getAdmissionFailurePresentation(
       billingAction: null,
       title: "Video is too long",
       description: maximum !== undefined
-        ? `Talven supports videos up to ${formatExactDuration(maximum)}.`
+        ? `Talven supports videos up to ${formatDurationLimit(maximum)}.`
         : "This video is longer than Talven's supported limit.",
       detail: "Choose a shorter public YouTube video to start a briefing.",
       retryLabel: "Try another source"

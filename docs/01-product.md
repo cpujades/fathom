@@ -61,10 +61,16 @@ API:
 2. rejects playlists and unsupported URL shapes;
 3. reads the source duration;
 4. rejects unknown, non-positive, or over-two-hour sources; and
-5. checks that the current spendable balance can cover the known duration.
+5. atomically checks the user's current spendable balance and active work
+   before queueing a billable job.
 
 Example: a user with eight minutes remaining may submit a seven-minute source,
 but cannot submit a nine-minute source.
+
+Talven allows up to three billable jobs in progress per user. The combined
+duration of work that has not settled must fit the current spendable balance.
+Joining the same active source does not create another job or consume another
+concurrency slot.
 
 ### 3. Process the briefing
 
@@ -146,9 +152,10 @@ The normal order is:
 2. eligible pack credit; and
 3. debt only as a finalization safety buffer.
 
-A known source must fit the positive balance at admission. The default
-600-second debt threshold handles races or small duration differences; it is
-not intentionally spendable extra credit.
+A known source and the user's other unsettled work must fit the positive
+balance at admission. The default 600-second debt threshold is a finalization
+safety boundary for exceptional credit changes or recovery. It is not
+intentionally spendable extra credit.
 
 ## Reuse and duplicate submissions
 
@@ -174,6 +181,8 @@ only one compatible summary becomes authoritative.
 - Transient provider failures use bounded retries. The user keeps the same job.
 - A finalization failure leaves the job retryable and hides the briefing until
   settlement succeeds.
+- Audio above 100 MB fails without retry or charge and asks the user for a
+  shorter source.
 - A failed clipboard operation points the user to Markdown download.
 - A PDF capacity limit returns a stable retryable error.
 - A refund remains pending while Polar confirmation is uncertain. Talven does
@@ -186,6 +195,7 @@ only one compatible summary becomes authoritative.
 | Source type | Public YouTube video |
 | Source duration | Two hours |
 | Downloaded audio | 100,000,000 bytes |
+| Concurrent billable jobs per user | Three; unsettled durations must fit the current balance |
 | Active worker jobs | Configurable; default 10, allowed 1–64 |
 | Provider attempts | Up to three per provider operation |
 | Event stream | Renewable lease, bounded replay, one-hour connection lifetime |

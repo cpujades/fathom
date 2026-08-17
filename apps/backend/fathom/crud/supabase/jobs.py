@@ -10,7 +10,15 @@ from typing import Any, Literal
 from postgrest import APIError
 from postgrest.types import CountMethod
 
-from fathom.core.errors import ExternalServiceError, UsageSettlementError
+from fathom.core.errors import (
+    ActiveJobLimitError,
+    BalanceBlockedError,
+    ExternalServiceError,
+    InsufficientVideoTimeError,
+    NoVideoTimeError,
+    UsageSettlementError,
+    VideoTimeCommittedError,
+)
 from fathom.services.supabase.helpers import first_row, raise_for_postgrest_error, response_records
 from supabase import AsyncClient
 
@@ -62,11 +70,46 @@ async def create_or_reuse_job(
         result = first_row(data, error_message="Supabase returned an unexpected job resolution shape.")
 
     resolution_type = result.get("resolution_type")
+    details = _job_admission_details(result.get("details"))
+    if resolution_type == "active_job_limit_reached":
+        raise ActiveJobLimitError(
+            "The maximum number of briefings is already in progress.",
+            details=details,
+        )
+    if resolution_type == "video_time_committed":
+        raise VideoTimeCommittedError(
+            "Briefings in progress have committed part of the available video time.",
+            details=details,
+        )
+    if resolution_type == "balance_blocked":
+        raise BalanceBlockedError(
+            "Briefing creation is paused while outstanding video time is repaid.",
+            details=details,
+        )
+    if resolution_type == "no_video_time":
+        raise NoVideoTimeError("No video time remains on this account.", details=details)
+    if resolution_type == "insufficient_video_time":
+        raise InsufficientVideoTimeError(
+            "This video needs more time than is currently available.",
+            details=details,
+        )
+
     job = result.get("job")
     if resolution_type not in {"new", "joined_existing", "reused_ready"} or not isinstance(job, Mapping):
         raise ExternalServiceError("Supabase returned an unexpected job resolution shape.")
 
     return JobCreateResolution(job=dict(job), resolution_type=resolution_type)
+
+
+def _job_admission_details(value: object) -> dict[str, int] | None:
+    if not isinstance(value, Mapping):
+        return None
+    details = {
+        str(key): item
+        for key, item in value.items()
+        if isinstance(key, str) and isinstance(item, int) and not isinstance(item, bool) and item >= 0
+    }
+    return details or None
 
 
 async def fetch_job(client: AsyncClient, job_id: str) -> dict[str, Any]:

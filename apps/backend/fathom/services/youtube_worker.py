@@ -69,7 +69,7 @@ def main() -> NoReturn:
 
         _finish({"ok": True, "result": result}, exit_code=0)
     except DownloadError as exc:
-        _finish({"ok": False, "detail": exc.detail}, exit_code=1)
+        _finish({"ok": False, "code": exc.code, "detail": exc.detail}, exit_code=1)
     except Exception:
         _finish({"ok": False, "detail": "YouTube source request failed."}, exit_code=1)
 

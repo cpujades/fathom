@@ -11,6 +11,7 @@ from supabase import AsyncClient
 
 PACK_REFUND_RESOLUTIONS = {
     "started",
+    "active_jobs_in_progress",
     "not_found",
     "not_pack",
     "already_pending",

@@ -9,7 +9,7 @@ from fathom.evaluation.briefing_quality import evaluate_briefing_quality
 from fathom.schemas.briefing_contract import BriefingContract, EvidencePoint
 from fathom.schemas.transcripts import TranscriptSegment
 
-FIXTURE_PATH = Path(__file__).parents[1] / "fathom" / "evaluation" / "fixtures" / "briefing_quality_cases.json"
+FIXTURE_PATH = Path(__file__).parents[3] / "fathom" / "evaluation" / "fixtures" / "briefing_quality_cases.json"
 
 
 class DeterministicBriefingQualityEvaluationTests(unittest.TestCase):

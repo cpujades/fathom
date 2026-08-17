@@ -38,6 +38,10 @@ class DownloadError(ExternalServiceError):
     pass
 
 
+class AudioTooLargeError(DownloadError):
+    code = "source_audio_too_large"
+
+
 class AudioStream(Protocol):
     type: str | None
     subtype: str | None
@@ -167,7 +171,10 @@ async def _run_youtube_worker(request: dict[str, object], *, deadline_seconds: f
         raise DownloadError("YouTube source request failed.")
     if response.get("ok") is not True:
         detail = response.get("detail")
-        raise DownloadError(str(detail) if isinstance(detail, str) else "YouTube source request failed.")
+        error_message = str(detail) if isinstance(detail, str) else "YouTube source request failed."
+        if response.get("code") == AudioTooLargeError.code:
+            raise AudioTooLargeError(error_message)
+        raise DownloadError(error_message)
     result = response.get("result")
     if not isinstance(result, dict):
         raise DownloadError("YouTube source returned an invalid response.")
@@ -236,7 +243,7 @@ def _audio_stream_sort_key(item: tuple[int | None, int | None, AudioStream]) -> 
     return (filesize or 2**31 - 1, abr_kbps or 2**31 - 1)
 
 
-def _pick_fastest_audio_stream(streams: Iterable[AudioStream]) -> AudioStream:
+def _pick_smallest_audio_stream(streams: Iterable[AudioStream]) -> AudioStream:
     candidates: list[tuple[int | None, int | None, AudioStream]] = []
     for stream in streams:
         if getattr(stream, "type", None) != "audio":
@@ -293,10 +300,10 @@ def download_audio(
         raise DownloadError("Failed to initialize YouTube downloader.") from exc
 
     streams = cast(Iterable[AudioStream], yt.streams.filter(only_audio=True))
-    stream = _pick_fastest_audio_stream(streams)
+    stream = _pick_smallest_audio_stream(streams)
     advertised_size = getattr(stream, "filesize", None) or getattr(stream, "filesize_approx", None)
     if advertised_size is not None and advertised_size > max_bytes:
-        raise DownloadError("Source audio exceeds the supported 100 MB limit.")
+        raise AudioTooLargeError("Source audio exceeds the supported 100 MB limit.")
 
     file_id = uuid.uuid4().hex
     filename = f"{file_id}.{stream.subtype or 'bin'}"
@@ -316,7 +323,7 @@ def download_audio(
         )
     except _DownloadLimitExceeded as exc:
         target_path.unlink(missing_ok=True)
-        raise DownloadError("Source audio exceeds the supported 100 MB limit.") from exc
+        raise AudioTooLargeError("Source audio exceeds the supported 100 MB limit.") from exc
     except Exception as exc:  # pragma: no cover - external failure
         target_path.unlink(missing_ok=True)
         raise DownloadError("Failed to download audio stream.") from exc
@@ -338,7 +345,7 @@ def download_audio(
         filesize_bytes = None
     if filesize_bytes is not None and filesize_bytes > max_bytes:
         path.unlink(missing_ok=True)
-        raise DownloadError("Source audio exceeds the supported 100 MB limit.")
+        raise AudioTooLargeError("Source audio exceeds the supported 100 MB limit.")
 
     title, author, keywords, views, likes, length_seconds = _read_yt_metadata(yt)
 

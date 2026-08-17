@@ -5,7 +5,7 @@ import time
 from typing import Any
 
 from fathom.core.errors import AppError
-from fathom.services.downloader import DownloadError
+from fathom.services.downloader import AudioTooLargeError, DownloadError
 from fathom.services.provider_resilience import ProviderFailureKind, ProviderOperationError
 from fathom.services.summarizer import SummarizationError
 from fathom.services.transcriber import TranscriptionError
@@ -50,6 +50,8 @@ def extract_job_error(exc: Exception) -> tuple[str, str]:
         return "provider_capacity_reached", PROVIDER_CAPACITY_REACHED_MESSAGE
     if isinstance(exc, ProviderOperationError) and exc.kind == ProviderFailureKind.TRANSIENT:
         return "provider_temporarily_unavailable", PROVIDER_TEMPORARILY_UNAVAILABLE_MESSAGE
+    if isinstance(exc, AudioTooLargeError):
+        return "source_audio_too_large", "This video's audio is larger than Talven's 100 MB limit."
     if isinstance(exc, DownloadError):
         return "source_download_failed", exc.detail
     if isinstance(exc, TranscriptionError):

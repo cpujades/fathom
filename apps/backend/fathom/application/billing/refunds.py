@@ -6,7 +6,7 @@ from fathom.application.billing.parsing import as_str, is_definitive_duplicate_r
 from fathom.application.identity import AuthenticatedUser
 from fathom.core.config import Settings
 from fathom.core.constants import BILLING_DEBT_CAP_SECONDS
-from fathom.core.errors import ExternalServiceError, InvalidRequestError
+from fathom.core.errors import ActiveBriefingsRefundError, ExternalServiceError, InvalidRequestError
 from fathom.crud.supabase.billing import (
     begin_pack_refund,
     create_billing_sync_operation,
@@ -78,6 +78,8 @@ async def _request_pack_refund(
         raise InvalidRequestError("Order is not refundable.")
     if resolution_type == "nothing_remaining":
         raise InvalidRequestError("No refundable amount remaining for this pack order.")
+    if resolution_type == "active_jobs_in_progress":
+        raise ActiveBriefingsRefundError("Wait for your active briefings to finish before requesting this refund.")
     if resolution_type != "started":
         raise ExternalServiceError("Pack refund could not be started.")
 

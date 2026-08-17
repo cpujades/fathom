@@ -3,7 +3,7 @@
 **Purpose:** Give the owner and developers one short, ordered path through the
 product, system, launch, and roadmap.
 
-**Verified against:** the working tree on 2026-08-15.
+**Authority:** current accepted product and repository behavior.
 
 ## Contents
 
@@ -67,9 +67,9 @@ pagination, cache, performance, or migration rules.
 
 ## How to interpret status
 
-- **Current:** implemented in the working tree.
-- **In progress:** present in the current branch but not yet accepted as a
-  release candidate.
+- **Current:** implemented and part of the accepted product behavior.
+- **In progress:** being built or verified, but not part of the accepted
+  product behavior yet.
 - **Required before beta:** must be complete before external invite-only use.
 - **Required before public launch:** may wait during private testing, but must
   be resolved before public signup or payment.

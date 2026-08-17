@@ -100,6 +100,18 @@ test("missing and unreadable sessions offer deliberate route recovery", () => {
   assert.match(unavailable.detail, /try opening it again/i);
 });
 
+test("oversize audio explains the limit and confirms that usage was not charged", () => {
+  const failure = getFailurePresentation(
+    { error_code: "source_audio_too_large", error_message: "Source audio exceeds 100 MB." },
+    null
+  );
+
+  assert.equal(failure.title, "Audio is too large");
+  assert.match(failure.description, /100 MB/);
+  assert.match(failure.detail, /No video time was charged/);
+  assert.equal(failure.actionHref, "/app");
+});
+
 test("ready delivery recovery explains that retrying is safe", () => {
   const deliveryFailure = getDeliveryFailurePresentation();
 
