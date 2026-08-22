@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.25.1](https://github.com/cpujades/fathom/compare/v0.25.0...v0.25.1) (2026-08-22)
+
+_Automated release from [#185](https://github.com/cpujades/fathom/pull/185) perf: debounce private library search_
+
+### Performance
+
+- perf: debounce private library search (50da32e)
+
 ## [0.25.0](https://github.com/cpujades/fathom/compare/v0.24.1...v0.25.0) (2026-08-17)
 
 _Automated release from [#184](https://github.com/cpujades/fathom/pull/184) feat: guard concurrent briefing usage and strengthen CI_
