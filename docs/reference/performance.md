@@ -157,22 +157,22 @@ and account change.
 - Explore and public briefing content render on the server. Authentication and
   save controls hydrate in the browser.
 - Explore loads save state for visible slugs in one request.
-- The private library uses `useDeferredValue` for search. This can still send
-  several requests while a user types; it is not a time-based debounce.
+- The private library waits 300 ms after the latest search input before it
+  requests results. This reduces requests while a user types.
 - The Explore grid is one client component with a current maximum of 48 cards.
   Split or virtualize it only after browser metrics show a problem.
 - Authenticated application pages load through the browser because they use the
   Supabase session. The short client cache avoids immediate repeat requests.
 
-For private-library search, the next safe step is a short input debounce. The
-durable scale fix is database-side normalized search or full-text search with a
-matching index. Keep authorization and stable ordering inside that query.
+The debounce reduces request frequency. The durable scale fix is database-side
+normalized search or full-text search with a matching index. Keep authorization
+and stable ordering inside that query.
 
 ## Search design
 
-**Current:** private-library search loads bounded database pages and filters
-hydrated titles and briefing text in Python. It is correct for a small beta but
-does not scale with a large library.
+**Current:** private-library search loads database pages in bounded batches and
+filters hydrated title, author, source URL, and source host values in Python. It
+is correct for a small beta but does not scale with a large library.
 
 **Proposed trigger:** move search into Postgres when a representative hosted
 test reaches either condition:
@@ -215,8 +215,8 @@ and [preferred indexes](https://www.postgresql.org/docs/current/textsearch-index
 2. Remove Explore exact count if the UI still shows only the first page.
 3. Add an Explore next-page control when the catalogue exceeds 48 useful
    entries.
-4. Add a real input debounce and move private search into Postgres when library
-   size or p95 latency reaches the trigger.
+4. Move private search into Postgres when library size or p95 latency reaches
+   the trigger.
 
 ### After measured scale
 

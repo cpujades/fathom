@@ -1,6 +1,6 @@
 "use client";
 
-import { type MouseEvent, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { type MouseEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createApiClient } from "@fathom/api-client";
 
@@ -42,6 +42,7 @@ const SORT_OPTIONS: Array<{ value: BriefingListSort; label: string }> = [
   { value: "newest", label: "Newest" },
   { value: "oldest", label: "Oldest" }
 ];
+const LIBRARY_SEARCH_DEBOUNCE_MS = 300;
 
 function formatBriefingCount(count: number): string {
   return `${count} ${count === 1 ? "briefing" : "briefings"}`;
@@ -86,11 +87,20 @@ export default function BriefingsPage() {
   const libraryNoticeRef = useRef<HTMLParagraphElement | null>(null);
   const removeButtonRefs = useRef(new Map<string, HTMLButtonElement>());
 
-  const deferredSearch = useDeferredValue(searchInput.trim());
+  const normalizedSearch = searchInput.trim();
+  const [debouncedSearch, setDebouncedSearch] = useState(normalizedSearch);
   const activeBriefingCount = useMemo(
     () => briefings.items.filter((entry) => isBriefingProcessing(entry)).length,
     [briefings.items]
   );
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedSearch(normalizedSearch);
+    }, LIBRARY_SEARCH_DEBOUNCE_MS);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [normalizedSearch]);
 
   useEffect(() => {
     if (!accessToken || !userId) {
@@ -98,7 +108,7 @@ export default function BriefingsPage() {
     }
 
     let active = true;
-    const usingDefaultQuery = !deferredSearch && sort === "newest";
+    const usingDefaultQuery = !debouncedSearch && sort === "newest";
     if (usingDefaultQuery && hasFreshBriefingsCache(userId)) {
       const nextCachedBriefings = getCachedBriefings(userId);
       if (nextCachedBriefings) {
@@ -117,7 +127,7 @@ export default function BriefingsPage() {
         const response = await loadBriefings(userId, accessToken, {
           limit: DEFAULT_BRIEFINGS_LIMIT,
           offset: 0,
-          query: deferredSearch,
+          query: debouncedSearch,
           sort
         });
 
@@ -141,7 +151,7 @@ export default function BriefingsPage() {
     return () => {
       active = false;
     };
-  }, [accessToken, deferredSearch, sort, userId]);
+  }, [accessToken, debouncedSearch, sort, userId]);
 
   useEffect(() => {
     if (!accessToken || !userId || activeBriefingCount === 0) {
@@ -159,7 +169,7 @@ export default function BriefingsPage() {
       void loadBriefings(userId, accessToken, {
         limit: Math.max(DEFAULT_BRIEFINGS_LIMIT, briefings.items.length),
         offset: 0,
-        query: deferredSearch,
+        query: debouncedSearch,
         sort
       })
         .then((response) => {
@@ -180,9 +190,9 @@ export default function BriefingsPage() {
       active = false;
       window.clearInterval(intervalId);
     };
-  }, [accessToken, activeBriefingCount, briefings.items.length, deferredSearch, sort, userId]);
+  }, [accessToken, activeBriefingCount, briefings.items.length, debouncedSearch, sort, userId]);
 
-  const hasFilters = deferredSearch.length > 0 || sort !== "newest";
+  const hasFilters = debouncedSearch.length > 0 || sort !== "newest";
   const helperText = useMemo(() => {
     if (briefings.total_count === 0 && hasFilters) {
       return "No briefings match the current filters.";
@@ -239,7 +249,7 @@ export default function BriefingsPage() {
       const response = await loadBriefings(userId, accessToken, {
         limit: DEFAULT_BRIEFINGS_LIMIT,
         offset: briefings.items.length,
-        query: deferredSearch,
+        query: debouncedSearch,
         sort
       });
 
