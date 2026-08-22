@@ -8,8 +8,8 @@ readme = "README.md"
 requires-python = ">=3.11,<3.14"
 dependencies = [
   "fastapi==0.141.1",
-  "uvicorn==0.52.1",
-  "python-dotenv==1.2.2",
+  "uvicorn==0.52.4",
+  "python-dotenv==1.2.3",
   "openai==2.54.0",
   "markdown==3.10.3",
   "weasyprint==69.0",
@@ -28,7 +28,7 @@ dev = [
   # Local debugging
   "debugpy==1.8.21",
   # Lint/format
-  "ruff==0.16.2",
+  "ruff==0.16.3",
   # Type-checking
   "ty==0.0.63",
   # Git hooks runner
